@@ -1,0 +1,17 @@
+:root { color-scheme: dark; --as-ink: #e4eee4; --as-muted: #91a49b; --as-bg: #101b1a; --as-panel: rgba(16,27,26,.94); --as-line: #33463d; --as-accent: #cbd9a5; --as-danger: #df7c69; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #121e1a; color: var(--as-ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button,input,select { font: inherit; }
+button { cursor:pointer; }
+button:disabled { cursor: not-allowed; }
+button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px solid #d5dfa5; outline-offset: 4px; }
+[hidden] { display: none !important; }
+#world { display: block; width: 100vw; height: 100dvh; touch-action: none; cursor: crosshair; }
+#ui { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#ui button,#ui input,#ui select { pointer-events: auto; }
+#map-shell { position:fixed; right:22px; top:22px; z-index:3; width:154px; border:1px solid #526252; padding:3px; background:rgba(12,23,19,.85); box-shadow:0 8px 32px #0004; pointer-events:none; }
+#minimap { display:block; width:146px; height:146px; image-rendering:pixelated; }
+.as-map-label { padding:6px 4px 3px; font-size:9px; letter-spacing:.17em; text-align:center; color:#b7c59e; }
+#debug { position:fixed; left:22px; bottom:98px; z-index:7; margin:0; padding:10px 12px; background:rgba(4,12,9,.88); border:1px solid #456748; color:#b8e6b5; font:11px/1.6 ui-monospace,monospace; pointer-events:none; }
+@media (max-width:700px) { #map-shell { width:104px; right:12px; top:12px; } #minimap { width:96px; height:96px; } .as-map-label { font-size:7px; } }
+@media (max-height:550px) { #map-shell { top:12px; right:12px; width:104px; } #minimap { width:96px; height:96px; } }

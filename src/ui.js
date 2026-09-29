@@ -1,0 +1,590 @@
+(function () {
+  'use strict';
+  const Sirens = window.Sirens = window.Sirens || {};
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+  const number = (value) => Math.max(0, Number(value) || 0);
+  const label = (value) => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const icon = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 26V44M17 44h14M24 26l-7 18M24 26l7 18M15 17a13 13 0 0 1 18 0M9 11a22 22 0 0 1 30 0"/><circle cx="24" cy="22" r="4"/></svg>';
+
+  class UI {
+    constructor(rootElement, callbacks) {
+      if (!rootElement) throw new Error('The game UI needs a root element.');
+      this.root = rootElement;
+      this.callbacks = callbacks || {};
+      this.screen = 'title';
+      this.inventoryOpen = false;
+      this.state = null;
+      this.lastUpdate = 0;
+      this.lastInventorySignature = '';
+      this.lastLogSignature = '';
+      this.lastFocus = null;
+      this.sort = 'name';
+      this.itemQuery = '';
+      this.category = 'all';
+      this.itemView = 'owned';
+      this.recipeQuery = '';
+      this.readyOnly = false;
+      this.sound = true;
+      this.debug = false;
+      this.toastTimer = null;
+      this.destroyed = false;
+      this.root.classList.add('as-ui');
+      this.root.innerHTML = `
+        <div class="as-hud" data-ui="hud" hidden>
+          <section class="as-status" aria-label="Survivor status">
+            <div class="as-status-top"><span class="as-kicker">SURVIVOR</span><button class="as-small-button" data-command="pause" title="Pause (Escape)" aria-label="Pause game">II</button></div>
+            <div class="as-meters">
+              ${this.meterMarkup('health', 'Health', 'as-health')}
+              ${this.meterMarkup('stamina', 'Stamina', 'as-stamina')}
+              ${this.meterMarkup('hunger', 'Hunger', 'as-need')}
+              ${this.meterMarkup('thirst', 'Thirst', 'as-thirst')}
+              ${this.meterMarkup('infection', 'Infection', 'as-infection')}
+            </div>
+            <div class="as-injury" data-ui="injury" hidden>BLEEDING <span>Use a bandage [3]</span></div>
+          </section>
+          <section class="as-objective" aria-label="Current objective">
+            <div class="as-kicker" data-ui="objective-kicker">GET A SIGNAL OUT</div>
+            <p data-ui="objective">Find 5 radio parts, then repair the relay.</p>
+            <div class="as-parts"><span data-ui="parts">0 / 5 PARTS</span><span data-ui="direction">FOLLOW THE GOLD MARKER</span></div>
+          </section>
+          <div class="as-time" data-ui="time">DAY 01 · 08:00</div>
+          <div class="as-world-info" data-ui="world-info" hidden><span data-ui="region">MORROW</span><b data-ui="coordinates">0, 0</b><small data-ui="exploration">1 sector explored</small></div>
+          <div class="as-floor-info" data-ui="floor-info" hidden><span data-ui="floor-label">GROUND LEVEL</span><div data-ui="stairs-actions" hidden><button data-action="stairsUp" title="Go upstairs (Page Up)">↑ Upstairs</button><button data-action="stairsDown" title="Go downstairs (Page Down)">↓ Downstairs</button></div></div>
+          <div class="as-vehicle-info" data-ui="vehicle-info" hidden><span class="as-kicker">DRIVING</span><strong data-ui="vehicle-name">Vehicle</strong><div data-ui="vehicle-speed">0% speed</div><div data-ui="vehicle-fuel">Fuel</div><div data-ui="vehicle-condition">Condition</div><div class="as-vehicle-actions"><button data-action="vehicle" title="Leave the vehicle (V)">V Exit</button><button data-action="refuel" title="Refuel from your pack (G)">G Refuel</button></div></div>
+          <div class="as-live-log" data-ui="logs" aria-live="polite" aria-atomic="false"></div>
+          <div class="as-interact" data-ui="interact" hidden><kbd>E</kbd><span data-ui="interact-text">Interact</span></div>
+          <div class="as-bottom">
+            <div class="as-weapon"><span class="as-kicker">IN HAND</span><strong data-ui="weapon">BASEBALL BAT</strong><span data-ui="ammo">F to switch weapon</span></div>
+            <div class="as-hotbar" aria-label="Quick actions">
+              <button data-action="eat" title="Eat one food item (1)"><kbd>1</kbd><span>Eat</span><b data-count="food">0</b></button>
+              <button data-action="drink" title="Drink one drink item (2)"><kbd>2</kbd><span>Drink</span><b data-count="water">0</b></button>
+              <button data-action="bandage" title="Bandage your wounds (3)"><kbd>3</kbd><span>Bandage</span><b data-count="bandage">0</b></button>
+              <button data-action="reload" title="Reload your pistol (4 or R)"><kbd>4</kbd><span>Reload</span><b data-count="ammo">0</b></button>
+              <button class="as-pack-button" data-command="inventory" title="Inventory and crafting (I)"><kbd>I</kbd><span>Pack</span><b data-ui="pack-weight">0 kg</b></button>
+            </div>
+            <div class="as-controls-hint">WASD move <span>·</span> SPACE attack <span>·</span> SHIFT sprint</div>
+          </div>
+        </div>
+
+        <div class="as-overlay as-title-overlay" data-screen="title">
+          <section class="as-title-card" aria-labelledby="as-title">
+            <div class="as-title-mark">${icon}<span>AN ORIGINAL SURVIVAL GAME</span></div>
+            <p class="as-eyebrow">MORROW IS NOT YOUR HOME ANYMORE.</p>
+            <h1 id="as-title">AFTER<br>THE <span>SIRENS</span></h1>
+            <p class="as-title-copy" data-ui="title-copy">Leave your safe cabin. Follow the roads beyond Morrow.<br>Scavenge, craft, and make a place to survive.</p>
+            <div class="as-title-rules" data-ui="title-rules"><span><b>6</b> regions</span><span><b data-ui="catalogue-count">160+</b> original items</span><span><b data-ui="recipe-count">30+</b> recipes</span></div>
+            <div class="as-start-options">
+              <label class="as-mode-field">Game mode<select data-ui="mode"><option value="openworld" selected>Open world: explore and settle</option><option value="rescue">Rescue: get a signal out</option></select></label>
+              <label>Survival pressure<select data-ui="difficulty"><option value="calm">Calm: more breathing room</option><option value="standard" selected>Standard: stay alert</option><option value="hard">Hard: every mistake matters</option></select></label>
+              <label>World seed<input data-ui="seed" type="number" value="20260929" min="0" max="2147483647" step="1" inputmode="numeric"></label>
+            </div>
+            <div class="as-menu-actions"><button class="as-primary" data-command="start">ENTER THE TOWN <span>→</span></button><button class="as-secondary" data-command="continue">CONTINUE SAVED RUN</button></div>
+            <p class="as-start-note" data-ui="start-note">Your safe cabin has supplies. Roads connect the regions.<br>I opens your pack, item catalogue, and crafting.</p>
+            <div class="as-prototype">Original early build · Open world and rescue modes · Procedural artwork</div>
+          </section>
+          <aside class="as-title-scene" aria-hidden="true"><div class="as-scene-coordinate">SECTOR 07 / RELAY 04</div><div class="as-scene-line"></div><p>KEEP THE LIGHT ON.<br>KEEP THE NOISE DOWN.</p><span class="as-scene-status">SIGNAL LOST</span></aside>
+        </div>
+
+        <div class="as-overlay" data-screen="paused" hidden>
+          <section class="as-modal as-pause" role="dialog" aria-modal="true" aria-labelledby="as-pause-title">
+            <div class="as-kicker">TAKE A BREATH</div><h2 id="as-pause-title">Run paused</h2><p class="as-muted">The town waits while you plan your next move.</p>
+            <div class="as-pause-actions"><button class="as-primary" data-command="resume">BACK TO THE TOWN <span>→</span></button><button class="as-secondary" data-command="save">SAVE RUN</button></div>
+            <div class="as-save-actions"><button data-command="exportSave">Export save</button><label class="as-file-label">Import save<input type="file" data-ui="import" accept=".json,application/json"></label><button data-command="restart">New run</button></div>
+            <div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Procedural sound</label><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
+            ${this.controlsMarkup()}
+            <p class="as-save-note">Saves stay in this browser. Export a file to keep a copy.</p>
+          </section>
+        </div>
+
+        <div class="as-overlay" data-ui="inventory-overlay" hidden>
+          <section class="as-modal as-inventory" role="dialog" aria-modal="true" aria-labelledby="as-inventory-title">
+            <header class="as-modal-header"><div><div class="as-kicker">PLAN BEFORE YOU MOVE</div><h2 id="as-inventory-title">Your pack</h2></div><button class="as-close" data-command="inventory" aria-label="Close inventory" title="Close inventory (I)">×</button></header>
+            <div class="as-pack-summary"><span data-ui="inventory-weight">0 / 24 kg</span><span class="as-paused-note">SIMULATION PAUSED</span><label>Sort<select data-ui="sort"><option value="name">Name</option><option value="weight">Weight</option><option value="quantity">Quantity</option></select></label></div>
+            <div class="as-equipment-summary" data-ui="equipment">Bat equipped</div>
+            <div class="as-inventory-grid"><section aria-label="Items in your pack or catalogue">
+              <div class="as-inventory-tabs" role="group" aria-label="Item view"><button data-command="owned" aria-pressed="true">Your pack</button><button data-command="catalogue" aria-pressed="false">Item catalogue</button></div>
+              <div class="as-filter-row"><input type="search" data-ui="item-search" placeholder="Search items" aria-label="Search items"><select data-ui="category" aria-label="Filter items by category"><option value="all">All categories</option></select></div>
+              <div class="as-section-heading as-result-count" data-ui="items-count">SUPPLIES</div>
+              <p class="as-catalogue-note" data-ui="catalogue-note" hidden>Original item reference. Browse definitions here; find or craft supplies in the world.</p>
+              <div class="as-item-list" data-ui="items"></div><div class="as-inventory-actions"><button data-action="eat">Eat</button><button data-action="drink">Drink</button><button data-action="bandage">Bandage</button><button data-action="rest">Rest</button></div></section>
+              <section aria-label="Crafting and building"><div class="as-section-heading">MAKE SOMETHING USEFUL</div>
+              <div class="as-recipe-filters"><input type="search" data-ui="recipe-search" placeholder="Search recipes" aria-label="Search recipes"><label><input type="checkbox" data-ui="recipe-ready"> Ready to craft</label></div>
+              <div class="as-result-count" data-ui="recipes-count"></div>
+              <div data-ui="recipes" class="as-recipe-list"></div><div class="as-section-heading as-build-heading">PLACE BESIDE YOU</div><div class="as-recipe-list">
+              <article class="as-recipe"><div><h3>Barricade</h3><p>Block a route and buy time. Place it near you with room to stand.</p><span class="as-cost">3 wood + 1 scrap</span></div><button data-build="barricade">Build</button></article>
+              <article class="as-recipe"><div><h3>Campfire</h3><p>A little light in the dark. The town can see it too.</p><span class="as-cost">4 wood + 1 scrap</span></div><button data-build="campfire">Build</button></article>
+            </div></section></div>
+            <p class="as-inventory-tip">Equip a backpack to carry more. Recipe tools stay in your pack. Campfire recipes need a fire nearby. Materials and reference items have no use action.</p>
+          </section>
+        </div>
+
+        <div class="as-overlay" data-screen="dead" hidden>
+          <section class="as-modal as-end" role="dialog" aria-modal="true" aria-labelledby="as-dead-title"><div class="as-kicker">THE TOWN KEEPS ITS SECRETS</div><h2 id="as-dead-title">Your signal faded.</h2><p class="as-muted">One survivor gone. One more story left in the streets.</p><div class="as-end-stats" data-ui="dead-stats"></div><button class="as-primary" data-command="restart">TRY AGAIN <span>→</span></button><button class="as-secondary" data-command="title">BACK TO TITLE</button></section>
+        </div>
+        <div class="as-overlay" data-screen="won" hidden>
+          <section class="as-modal as-end" role="dialog" aria-modal="true" aria-labelledby="as-won-title"><div class="as-title-mark">${icon}<span>TRANSMISSION RECEIVED</span></div><h2 id="as-won-title">Someone heard you.</h2><p class="as-muted">Through the static, a voice answers. For tonight, that is enough.</p><div class="as-end-stats" data-ui="won-stats"></div><button class="as-primary" data-command="restart">ONE MORE RUN <span>→</span></button><button class="as-secondary" data-command="title">BACK TO TITLE</button></section>
+        </div>
+        <div class="as-overlay as-conversation-overlay" data-ui="conversation-overlay" hidden><section class="as-modal as-conversation" role="dialog" aria-modal="true" aria-labelledby="as-conversation-name"><header class="as-modal-header"><div><div class="as-kicker" data-ui="conversation-role">SURVIVOR</div><h2 id="as-conversation-name" data-ui="conversation-name">A familiar voice</h2></div><button class="as-close" data-action="closeConversation" aria-label="Close conversation" title="Close conversation (Escape)">×</button></header><p class="as-conversation-text" data-ui="conversation-text"></p><div class="as-conversation-actions"><button data-action="trade" data-ui="conversation-trade">Trade supplies</button><button data-action="recruit" data-ui="conversation-recruit">Travel together</button><button data-action="dismiss" data-ui="conversation-dismiss">Part ways</button></div><p class="as-conversation-note">The simulation pauses while you talk.</p></section></div>
+        <div class="as-toast" data-ui="toast" role="status" aria-live="polite" hidden></div>`;
+      this.nodes = {};
+      this.root.querySelectorAll('[data-ui]').forEach((el) => { this.nodes[el.dataset.ui] = el; });
+      this.handleClick = this.onClick.bind(this);
+      this.handleChange = this.onChange.bind(this);
+      this.handleInput = this.onInput.bind(this);
+      this.handleKeydown = this.onKeydown.bind(this);
+      this.root.addEventListener('click', this.handleClick);
+      this.root.addEventListener('change', this.handleChange);
+      this.root.addEventListener('input', this.handleInput);
+      this.root.addEventListener('keydown', this.handleKeydown);
+      this.refreshContinue();
+      this.refreshCategories();
+      this.refreshMode();
+    }
+
+    meterMarkup(id, label, cls) {
+      return `<div class="as-meter ${cls}"><div class="as-meter-label"><span>${label}</span><b data-meter-value="${id}">100</b></div><div class="as-meter-track" role="meter" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-meter="${id}"><span></span></div></div>`;
+    }
+
+    controlsMarkup() {
+      return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause / close conversation</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay.</p></details>`;
+    }
+
+    refreshCategories() {
+      const items = Sirens.Engine && Sirens.Engine.items || Sirens.Catalog && Sirens.Catalog.items || {};
+      const categories = Array.from(new Set(Object.values(items).map((item) => item.category || 'materials'))).sort();
+      const select = this.nodes.category;
+      categories.forEach((category) => {
+        const option = document.createElement('option'); option.value = category; option.textContent = label(category); select.append(option);
+      });
+      this.nodes['catalogue-count'].textContent = String(Object.keys(items).length);
+      this.nodes['recipe-count'].textContent = String((Sirens.Engine && Sirens.Engine.recipes || []).length);
+    }
+
+    refreshMode() {
+      const open = this.nodes.mode.value === 'openworld';
+      this.nodes['title-copy'].textContent = open ? 'Leave your safe cabin. Follow the roads beyond Morrow. Scavenge, craft, and make a place to survive.' : 'The town went quiet. It did not stay empty. Find five radio parts and get a signal out before the dead find you.';
+      this.nodes['start-note'].textContent = open ? 'Your safe cabin has supplies. Roads connect the regions. I opens your pack, original item catalogue, and crafting.' : 'Your safe cabin has supplies. Find five radio parts and repair the relay. I opens crafting. Escape opens controls and saves.';
+    }
+
+    refreshContinue() {
+      const button = this.root.querySelector('[data-command="continue"]');
+      if (typeof this.callbacks.hasSave === 'function') {
+        try { button.disabled = !this.callbacks.hasSave(); } catch (_) { button.disabled = true; }
+      }
+    }
+
+    invoke(name, ...args) {
+      const callback = this.callbacks[name];
+      if (typeof callback !== 'function') return;
+      try {
+        const result = callback(...args);
+        if (result && typeof result.then === 'function') result.catch((error) => { this.toast(error && error.message || 'That action could not be completed.', 'danger'); });
+      } catch (error) {
+        this.toast(error && error.message || 'That action could not be completed.', 'danger');
+      }
+    }
+
+    onClick(event) {
+      const button = event.target.closest('button');
+      if (!button || !this.root.contains(button) || button.disabled) return;
+      if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.inventoryOpen) button.blur(); return; }
+      if (button.dataset.use) { this.invoke('useItem', button.dataset.use); this.refreshInventory(true); return; }
+      if (button.dataset.equip) { this.invoke('equipItem', button.dataset.equip); this.refreshInventory(true); return; }
+      if (button.dataset.drop) { this.invoke('dropItem', button.dataset.drop); this.refreshInventory(true); return; }
+      if (button.dataset.craft) { this.invoke('craft', button.dataset.craft); this.refreshInventory(true); return; }
+      if (button.dataset.build) { this.invoke('build', button.dataset.build); this.refreshInventory(true); return; }
+      const command = button.dataset.command;
+      if (command === 'start') {
+        const seed = Math.floor(clamp(this.nodes.seed.value, 0, 2147483647));
+        this.nodes.seed.value = seed;
+        this.invoke('start', seed, this.nodes.difficulty.value, this.nodes.mode.value);
+      } else if (command === 'owned' || command === 'catalogue') {
+        this.itemView = command; this.refreshInventory(true);
+      } else if (command === 'inventory') {
+        this.toggleInventory();
+        if (event.detail > 0 && this.inventoryOpen) this.lastFocus = null;
+      } else if (command === 'title') {
+        if (typeof this.callbacks.title === 'function') this.invoke('title');
+        else this.showScreen('title');
+      } else if (command) {
+        this.invoke(command);
+      }
+    }
+
+    onChange(event) {
+      const target = event.target;
+      if (target.dataset.setting === 'sound') { this.sound = target.checked; this.invoke('setSound', this.sound); }
+      if (target.dataset.setting === 'debug') { this.debug = target.checked; this.invoke('setDebug', this.debug); }
+      if (target === this.nodes.sort) { this.sort = target.value; this.refreshInventory(true); }
+      if (target === this.nodes.mode) this.refreshMode();
+      if (target === this.nodes.category) { this.category = target.value; this.refreshInventory(true); }
+      if (target === this.nodes['recipe-ready']) { this.readyOnly = target.checked; this.refreshInventory(true); }
+      if (target === this.nodes.import && target.files && target.files[0]) {
+        this.invoke('importSave', target.files[0]);
+        target.value = '';
+      }
+    }
+
+    onInput(event) {
+      if (event.target === this.nodes['item-search']) { this.itemQuery = event.target.value.trim().toLowerCase(); this.refreshInventory(true); }
+      if (event.target === this.nodes['recipe-search']) { this.recipeQuery = event.target.value.trim().toLowerCase(); this.refreshInventory(true); }
+    }
+
+    onKeydown(event) {
+      // The game owns shortcuts. This listener only keeps keyboard focus within an open dialog.
+      if (event.key !== 'Tab' || !this.isBlocking()) return;
+      const panel = this.state && this.state.conversation && this.screen === 'playing' ? this.nodes['conversation-overlay'] : this.inventoryOpen ? this.nodes['inventory-overlay'] : this.root.querySelector(`[data-screen="${this.screen}"]`);
+      if (!panel || panel.hidden) return;
+      const focusable = Array.from(panel.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary')).filter((el) => !el.hidden && el.getClientRects().length > 0);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+    }
+
+    showScreen(name) {
+      if (!['title', 'playing', 'paused', 'dead', 'won'].includes(name)) return;
+      this.screen = name;
+      this.inventoryOpen = false;
+      this.nodes['inventory-overlay'].hidden = true;
+      this.nodes['conversation-overlay'].hidden = true;
+      this.root.querySelectorAll('[data-screen]').forEach((panel) => { panel.hidden = panel.dataset.screen !== name; });
+      this.nodes.hud.hidden = name === 'title';
+      this.root.dataset.screen = name;
+      if (name === 'title') this.refreshContinue();
+      if (name === 'dead' || name === 'won') this.renderEndStats();
+      const panel = this.root.querySelector(`[data-screen="${name}"]`);
+      if (panel && !panel.hidden) {
+        const focus = panel.querySelector('button:not(:disabled)');
+        if (focus) focus.focus({ preventScroll: true });
+      } else {
+        const active = document.activeElement;
+        if (active && this.root.contains(active) && typeof active.blur === 'function') active.blur();
+      }
+    }
+
+    toggleInventory() {
+      if (this.screen !== 'playing' || this.state && this.state.conversation) return;
+      this.inventoryOpen = !this.inventoryOpen;
+      this.nodes['inventory-overlay'].hidden = !this.inventoryOpen;
+      if (this.inventoryOpen) {
+        this.lastFocus = document.activeElement;
+        this.refreshInventory(true);
+        this.nodes['inventory-overlay'].querySelector('.as-close').focus({ preventScroll: true });
+      } else if (this.lastFocus && this.lastFocus.isConnected && typeof this.lastFocus.focus === 'function' && this.lastFocus !== document.body) {
+        this.lastFocus.focus({ preventScroll: true });
+      } else if (document.activeElement && this.root.contains(document.activeElement)) {
+        document.activeElement.blur();
+      }
+    }
+
+    isBlocking() { return this.screen !== 'playing' || this.inventoryOpen || !!(this.state && this.state.conversation); }
+
+    update(state, frameInfo) {
+      if (this.destroyed || !state || !state.player) return;
+      this.state = state;
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - this.lastUpdate < 100) return;
+      this.lastUpdate = now;
+      const player = state.player;
+      for (const field of ['health', 'stamina', 'hunger', 'thirst', 'infection']) {
+        const value = clamp(player[field], 0, 100);
+        const meter = this.root.querySelector(`[data-meter="${field}"]`);
+        const valueNode = this.root.querySelector(`[data-meter-value="${field}"]`);
+        meter.setAttribute('aria-valuenow', String(Math.round(value)));
+        meter.firstElementChild.style.width = `${value}%`;
+        valueNode.textContent = `${Math.round(value)}`;
+        meter.parentElement.classList.toggle('as-critical', field === 'health' || field === 'stamina' ? value < 25 : value > 60);
+      }
+      this.nodes.injury.hidden = !player.bleeding;
+      const hour = Math.floor(number(state.time)) % 24;
+      const minute = Math.floor((number(state.time) % 1) * 60);
+      this.nodes.time.textContent = `DAY ${String(Math.max(1, Math.floor(number(state.day)))).padStart(2, '0')} · ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      const inventory = player.inventory || {};
+      this.root.querySelectorAll('[data-count]').forEach((el) => { el.textContent = String(Math.floor(number(inventory[el.dataset.count]))); });
+      for (const [id, field] of [['food', 'hunger'], ['water', 'thirst'], ['bandage', 'bleeding']]) this.root.querySelector(`[data-count="${id}"]`).textContent = String(this.quickCount(field, inventory));
+      this.root.querySelectorAll('[data-action]').forEach((button) => {
+        const field = { eat: 'hunger', drink: 'thirst', bandage: 'bleeding' }[button.dataset.action];
+        button.disabled = !!field && this.quickCount(field, inventory) < 1;
+      });
+      const weight = this.inventoryWeight(inventory);
+      this.nodes['pack-weight'].textContent = `${weight.toFixed(1)} kg`;
+      const weapon = this.itemMetadata(player.weapon || 'bat');
+      const firearm = weapon.weapon && weapon.weapon.kind === 'firearm' || player.weapon === 'pistol';
+      const ammoId = weapon.weapon && weapon.weapon.ammoId || 'ammo';
+      this.nodes.weapon.textContent = String(weapon.name || player.weapon || 'Bat').toUpperCase();
+      this.nodes.ammo.textContent = firearm ? `${Math.floor(number(player.ammo))} loaded · ${Math.floor(number(inventory[ammoId]))} spare` : 'F to switch weapon · I to equip';
+      this.root.querySelector('[data-count="ammo"]').textContent = String(Math.floor(number(inventory[ammoId])));
+      this.root.querySelector('[data-action="reload"]').disabled = !firearm || number(inventory[ammoId]) < 1;
+      const goal = state.goal || {};
+      const required = Math.max(1, number(goal.required) || 5);
+      const installed = number(goal.parts);
+      const carried = number(inventory.parts);
+      const openWorld = !!state.world || state.mode === 'openworld';
+      this.nodes['objective-kicker'].textContent = openWorld ? 'MAKE IT THROUGH TOMORROW' : 'GET A SIGNAL OUT';
+      this.nodes.parts.textContent = openWorld ? goal.complete ? 'RELAY RESTORED' : `${Math.min(required, installed + carried)} / ${required} RELAY PARTS` : `${Math.min(required, installed + carried)} / ${required} PARTS`;
+      this.nodes.objective.textContent = openWorld ? goal.complete ? 'Free survival: build shelter, find supplies, and explore the regions.' : 'Explore connected roads. Gather supplies, craft equipment, and establish a shelter.' : goal.complete ? 'Signal sent. Stay alive while help answers.' : installed + carried >= required ? 'You have the parts. Use E at the relay.' : `Find ${Math.max(0, required - installed - carried)} more radio parts. Repair the relay with E.`;
+      if (goal.active && number(goal.countdown) > 0) this.nodes.objective.textContent = `Relay active. Survive ${Math.ceil(number(goal.countdown))} seconds until the answer.`;
+      this.nodes['world-info'].hidden = !openWorld;
+      if (openWorld) {
+        const world = state.world || {};
+        const gx = (Number(world.originX) || 0) + player.x / (state.tileSize || 32);
+        const gy = (Number(world.originY) || 0) + player.y / (state.tileSize || 32);
+        this.nodes.region.textContent = label(world.biome || 'Morrow');
+        this.nodes.coordinates.textContent = `${Math.floor(gx)}, ${Math.floor(gy)}`;
+        this.nodes.exploration.textContent = `${Math.max(1, Math.floor(number(world.visitedCount)))} sectors explored`;
+      }
+      this.nodes['floor-info'].hidden = !state.stories;
+      if (state.stories) {
+        const floor = Math.max(0, Math.floor(number(state.stories.floor)));
+        this.nodes['floor-label'].textContent = floor ? `FLOOR ${floor + 1}` : 'GROUND LEVEL';
+        let stairs = '';
+        try { if (Sirens.Stories && typeof Sirens.Stories.nearby === 'function') stairs = Sirens.Stories.nearby(state); } catch (_) {}
+        this.nodes['stairs-actions'].hidden = !stairs;
+        this.root.querySelector('[data-action="stairsDown"]').disabled = floor === 0;
+        const building = Sirens.Stories && typeof Sirens.Stories.currentBuilding === 'function' ? Sirens.Stories.currentBuilding(state) : null;
+        this.root.querySelector('[data-action="stairsUp"]').disabled = !!building && floor >= (number(building.floors) || 1) - 1;
+      }
+      const vehicle = (state.vehicles || []).find((car) => car.id === player.vehicleId);
+      this.nodes['vehicle-info'].hidden = !vehicle;
+      if (vehicle) {
+        this.nodes['vehicle-name'].textContent = vehicle.name || label(vehicle.type || 'Vehicle');
+        this.nodes['vehicle-speed'].textContent = `${Math.round(Math.min(100, Math.abs(Number(vehicle.speed) || 0) / Math.max(1, number(vehicle.maxSpeed)) * 100))}% speed`;
+        this.nodes['vehicle-fuel'].textContent = `Fuel: ${Math.max(0, Math.floor(number(vehicle.fuel)))} / ${number(vehicle.tank) || 100}`;
+        this.nodes['vehicle-condition'].textContent = `Condition: ${Math.round(clamp(vehicle.condition, 0, 100))}%`;
+      }
+      this.renderConversation(state.conversation);
+      if (Number.isFinite(goal.radioX) && Number.isFinite(goal.radioY)) {
+        const distance = Math.round(Math.hypot(player.x - goal.radioX, player.y - goal.radioY) / (state.tileSize || 32));
+        this.nodes.direction.textContent = `RELAY ${distance} TILES AWAY`;
+      }
+      let prompt = '';
+      try { if (Sirens.Engine && typeof Sirens.Engine.nearby === 'function') prompt = Sirens.Engine.nearby(state); } catch (_) { /* Optional prompt must never interrupt a run. */ }
+      this.nodes.interact.hidden = !prompt || this.isBlocking();
+      this.nodes['interact-text'].textContent = typeof prompt === 'string' ? prompt : '';
+      this.renderLogs(state.logs || []);
+      if (this.inventoryOpen) this.refreshInventory();
+      if (this.screen === 'dead' || this.screen === 'won') this.renderEndStats();
+    }
+
+    renderConversation(conversation) {
+      const wasVisible = !this.nodes['conversation-overlay'].hidden;
+      this.nodes['conversation-overlay'].hidden = !conversation || this.screen !== 'playing';
+      if (!conversation || this.screen !== 'playing') return;
+      this.nodes['conversation-role'].textContent = String(conversation.role || 'Survivor').toUpperCase();
+      this.nodes['conversation-name'].textContent = String(conversation.name || 'Survivor');
+      this.nodes['conversation-text'].textContent = String(conversation.text || 'The survivor watches the road.');
+      this.nodes['conversation-trade'].hidden = !conversation.canTrade;
+      this.nodes['conversation-trade'].textContent = String(conversation.tradeLabel || 'Trade supplies');
+      this.nodes['conversation-trade'].disabled = number(this.state.player.inventory.food) < 1;
+      this.nodes['conversation-recruit'].hidden = !conversation.canRecruit;
+      this.nodes['conversation-recruit'].textContent = 'Recruit for 1 ration';
+      this.nodes['conversation-recruit'].disabled = number(this.state.player.inventory.food) < 1 || (this.state.humans || []).filter((human) => human.following && human.health > 0).length >= 3;
+      this.nodes['conversation-dismiss'].hidden = !conversation.canDismiss;
+      if (!wasVisible) this.nodes['conversation-overlay'].querySelector('.as-close').focus({ preventScroll: true });
+    }
+
+    itemMetadata(id) {
+      return Sirens.Engine && Sirens.Engine.items && Sirens.Engine.items[id] || { name: id.charAt(0).toUpperCase() + id.slice(1), weight: 0, color: '#aeae9a', description: 'A useful supply.' };
+    }
+
+    inventoryWeight(inventory) {
+      return Object.keys(inventory).reduce((total, id) => total + number(inventory[id]) * number(this.itemMetadata(id).weight), 0);
+    }
+
+    quickCount(field, inventory) {
+      const fallback = { hunger: 'food', thirst: 'water', bleeding: 'bandage' }[field];
+      return Object.entries(inventory).reduce((total, [id, quantity]) => {
+        const item = this.itemMetadata(id);
+        return total + (id === fallback || item.effect && number(item.effect[field]) > 0 ? Math.floor(number(quantity)) : 0);
+      }, 0);
+    }
+
+    renderLogs(logs) {
+      const recent = logs.slice(-3);
+      const signature = recent.map((log) => `${log.text}|${log.tone}|${log.time}`).join(';;');
+      if (signature === this.lastLogSignature) return;
+      this.lastLogSignature = signature;
+      this.nodes.logs.replaceChildren();
+      recent.forEach((log, index) => {
+        const line = document.createElement('div');
+        line.className = `as-log as-log-${['danger', 'warning', 'success'].includes(log.tone) ? log.tone : 'normal'}`;
+        line.style.opacity = String(0.45 + (index + 1) / recent.length * 0.55);
+        line.textContent = String(log.text || '');
+        this.nodes.logs.append(line);
+      });
+    }
+
+    costText(cost) {
+      return Object.entries(cost || {}).map(([id, quantity]) => `${number(quantity)} ${this.itemMetadata(id).name.toLowerCase()}`).join(' + ') || 'No materials required';
+    }
+
+    canAfford(cost, inventory) {
+      return Object.entries(cost || {}).every(([id, quantity]) => number(inventory[id]) >= number(quantity));
+    }
+
+    equipped(id) {
+      const player = this.state && this.state.player || {};
+      const equipment = player.equipment || {};
+      return player.weapon === id || Object.values(equipment).some((value) => value === id || Array.isArray(value) && value.includes(id));
+    }
+
+    itemFacts(item) {
+      const facts = [];
+      if (item.effect) Object.entries(item.effect).forEach(([key, value]) => {
+        if (!Number(value)) return;
+        const reduction = ['hunger', 'thirst', 'infection', 'bleeding'].includes(key);
+        const actual = reduction ? -Number(value) : Number(value);
+        facts.push(`${label(key)} ${actual > 0 ? '+' : ''}${actual}`);
+      });
+      if (item.weapon) {
+        facts.push(`${item.weapon.damage} damage`, `${(number(item.weapon.range) / 32).toFixed(1)} tile reach`);
+        if (item.weapon.kind === 'firearm') facts.push(`${item.weapon.clipSize} rounds`, this.itemMetadata(item.weapon.ammoId || 'ammo').name);
+      }
+      if (item.armor) facts.push(`${Math.round(Number(item.armor) * 100)}% protection`);
+      if (item.capacity) facts.push(`+${item.capacity} kg capacity`);
+      if (item.fuel) facts.push(`+${item.fuel} vehicle fuel`);
+      if (!facts.length) facts.push(item.category === 'tools' ? 'Recipe tool, kept after crafting' : ['books', 'electronics', 'utility'].includes(item.category) ? 'Reference or crafting ingredient' : 'Crafting ingredient');
+      return facts.join(' · ');
+    }
+
+    craftReady(recipe, inventory) {
+      if (Sirens.Engine && typeof Sirens.Engine.canCraft === 'function') return Sirens.Engine.canCraft(this.state, recipe.id);
+      if (!this.canAfford(recipe.cost, inventory) || !(recipe.tools || []).every((id) => number(inventory[id]) > 0)) return false;
+      if (recipe.station === 'campfire') return (this.state.structures || []).some((structure) => structure.type === 'campfire' && Math.hypot(structure.x - this.state.player.x, structure.y - this.state.player.y) <= 100);
+      return true;
+    }
+
+    refreshInventory(force) {
+      if (!this.state || !this.state.player) return;
+      const inventory = this.state.player.inventory || {};
+      const recipes = Sirens.Engine && Array.isArray(Sirens.Engine.recipes) ? Sirens.Engine.recipes : [];
+      const equipment = this.state.player.equipment || {};
+      const signature = `${this.itemView}|${this.sort}|${this.category}|${this.itemQuery}|${this.recipeQuery}|${this.readyOnly}|${JSON.stringify(inventory)}|${JSON.stringify(equipment)}|${this.state.player.weapon}|${(this.state.structures || []).length}`;
+      if (!force && signature === this.lastInventorySignature) return;
+      this.lastInventorySignature = signature;
+      const focused = document.activeElement;
+      const focusAction = focused && focused.dataset ? ['use', 'equip', 'drop', 'craft'].map((key) => [key, focused.dataset[key]]).find((entry) => !!entry[1]) : null;
+      const weight = this.inventoryWeight(inventory);
+      const capacity = Sirens.Engine && typeof Sirens.Engine.carryCapacity === 'function' ? Sirens.Engine.carryCapacity(this.state) : 24;
+      this.nodes['inventory-weight'].textContent = `${weight.toFixed(1)} / ${capacity} kg carried`;
+      this.nodes['inventory-weight'].classList.toggle('as-weight-full', weight >= capacity - .5);
+      const equippedNames = Array.from(new Set([this.state.player.weapon, equipment.clothing, equipment.backpack].filter((id) => typeof id === 'string' && id))).map((id) => this.itemMetadata(id).name);
+      this.nodes.equipment.textContent = 'Equipped: ' + (equippedNames.join(' · ') || 'nothing');
+      this.nodes['catalogue-note'].hidden = this.itemView !== 'catalogue';
+      this.root.querySelector('[data-command="owned"]').setAttribute('aria-pressed', String(this.itemView === 'owned'));
+      this.root.querySelector('[data-command="catalogue"]').setAttribute('aria-pressed', String(this.itemView === 'catalogue'));
+      this.nodes.items.replaceChildren();
+      const catalogue = Sirens.Engine && Sirens.Engine.items || {};
+      const allEntries = this.itemView === 'catalogue' ? Object.keys(catalogue).map((id) => [id, inventory[id] || 0]) : Object.entries(inventory).filter(([, quantity]) => number(quantity) > 0);
+      const entries = allEntries.filter(([id]) => {
+        const item = this.itemMetadata(id);
+        return (this.category === 'all' || (item.category || 'materials') === this.category) && (!this.itemQuery || `${item.name} ${item.category || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase().includes(this.itemQuery));
+      });
+      this.nodes['items-count'].textContent = this.itemView === 'catalogue' ? `${entries.length} / ${Object.keys(catalogue).length} ORIGINAL ITEM DEFINITIONS` : `${entries.length} / ${allEntries.length} ITEM TYPES IN YOUR PACK`;
+      entries.sort((a, b) => {
+        if (this.sort === 'weight') return number(this.itemMetadata(b[0]).weight) * (this.itemView === 'catalogue' ? 1 : number(b[1])) - number(this.itemMetadata(a[0]).weight) * (this.itemView === 'catalogue' ? 1 : number(a[1]));
+        if (this.sort === 'quantity') return number(b[1]) - number(a[1]);
+        return this.itemMetadata(a[0]).name.localeCompare(this.itemMetadata(b[0]).name);
+      });
+      if (!entries.length) {
+        const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = allEntries.length ? 'No items match these filters.' : 'Your pack is empty. Search marked supplies.'; this.nodes.items.append(empty);
+      }
+      entries.forEach(([id, quantity]) => {
+        const metadata = this.itemMetadata(id);
+        const row = document.createElement('article'); row.className = 'as-item'; row.dataset.item = id;
+        row.classList.toggle('as-equipped-item', this.equipped(id));
+        const swatch = document.createElement('span'); swatch.className = 'as-item-icon'; swatch.textContent = ({ materials: '⬡', food: '▰', drinks: '◉', medical: '+', tools: '⚒', melee: '╱', firearms: '⊹', ammo: '⁝', clothing: '♜', containers: '▣', electronics: '⌁', books: '▤', utility: '◇' })[metadata.category] || (id === 'parts' ? '✦' : '⬡');
+        if (/^#[0-9a-f]{3,8}$/i.test(metadata.color || '')) swatch.style.color = metadata.color;
+        const detail = document.createElement('div');
+        const name = document.createElement('h3'); name.textContent = metadata.name;
+        const description = document.createElement('p'); description.textContent = metadata.description;
+        const facts = document.createElement('small'); facts.className = 'as-item-facts'; facts.textContent = this.itemFacts(metadata);
+        detail.append(name, description, facts);
+        const total = document.createElement('div'); total.className = 'as-item-count';
+        const count = document.createElement('strong'); count.textContent = this.itemView === 'catalogue' ? label(metadata.category || 'materials') : `×${Math.floor(number(quantity))}`;
+        const mass = document.createElement('small'); mass.textContent = `${((this.itemView === 'catalogue' ? 1 : number(quantity)) * number(metadata.weight)).toFixed(2)} kg`;
+        total.append(count, mass); row.append(swatch, detail, total); this.nodes.items.append(row);
+        if (this.itemView === 'owned') {
+          const actions = document.createElement('div'); actions.className = 'as-item-actions';
+          const action = document.createElement('button');
+          if (metadata.weapon || number(metadata.armor) > 0 || number(metadata.capacity) > 0) {
+            action.dataset.equip = id; action.textContent = this.equipped(id) ? 'Equipped' : 'Equip'; action.disabled = this.equipped(id); action.title = 'Equip ' + metadata.name;
+          } else if (metadata.effect) {
+            action.dataset.use = id; action.textContent = metadata.category === 'food' ? 'Eat' : metadata.category === 'drinks' ? 'Drink' : 'Use'; action.title = 'Use ' + metadata.name;
+          } else if (metadata.fuel) {
+            action.dataset.use = id; action.textContent = 'Refuel'; action.title = 'Refuel a nearby stopped vehicle with ' + metadata.name;
+          }
+          if (action.textContent) { action.className = 'as-item-action'; actions.append(action); }
+          const drop = document.createElement('button'); drop.className = 'as-item-action as-drop'; drop.dataset.drop = id; drop.textContent = 'Drop'; drop.title = 'Drop 1 ' + metadata.name + ' on the ground'; actions.append(drop);
+          row.append(actions);
+        }
+      });
+      this.nodes.recipes.replaceChildren();
+      const visibleRecipes = recipes.filter((recipe) => (!this.recipeQuery || `${recipe.name} ${recipe.description || ''} ${this.costText(recipe.cost)} ${this.costText(recipe.result)}`.toLowerCase().includes(this.recipeQuery)) && (!this.readyOnly || this.craftReady(recipe, inventory)));
+      this.nodes['recipes-count'].textContent = `${visibleRecipes.length} / ${recipes.length} RECIPES`;
+      if (!visibleRecipes.length) { const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = 'No recipes match. Check your filters or gather tools and supplies.'; this.nodes.recipes.append(empty); }
+      visibleRecipes.forEach((recipe) => {
+        const row = document.createElement('article'); row.className = 'as-recipe';
+        const detail = document.createElement('div');
+        const heading = document.createElement('h3'); heading.textContent = recipe.name;
+        const description = document.createElement('p'); description.textContent = recipe.description || '';
+        const cost = document.createElement('span'); cost.className = 'as-cost'; cost.textContent = this.costText(recipe.cost);
+        const result = document.createElement('span'); result.className = 'as-recipe-result'; result.textContent = 'Makes ' + this.costText(recipe.result);
+        detail.append(heading, description, cost, result);
+        if ((recipe.tools || []).length || recipe.station) {
+          const requirements = document.createElement('span'); requirements.className = 'as-recipe-requirements';
+          requirements.textContent = [(recipe.tools || []).length ? 'Tools: ' + recipe.tools.map((id) => this.itemMetadata(id).name).join(', ') : '', recipe.station ? 'Station: ' + label(recipe.station) + ' nearby' : ''].filter(Boolean).join(' · ');
+          detail.append(requirements);
+        }
+        const button = document.createElement('button'); button.dataset.craft = recipe.id; button.textContent = 'Craft'; button.disabled = !this.craftReady(recipe, inventory); button.title = button.disabled ? 'Needs ingredients, required tools, and any listed station.' : `${recipe.name}: ${this.costText(recipe.cost)}`;
+        row.append(detail, button); this.nodes.recipes.append(row);
+      });
+      this.root.querySelector('[data-build="barricade"]').disabled = !this.canAfford({ wood: 3, scrap: 1 }, inventory);
+      this.root.querySelector('[data-build="campfire"]').disabled = !this.canAfford({ wood: 4, scrap: 1 }, inventory);
+      this.root.querySelectorAll('.as-inventory [data-action]').forEach((button) => {
+        const field = { eat: 'hunger', drink: 'thirst', bandage: 'bleeding' }[button.dataset.action];
+        button.disabled = !!field && this.quickCount(field, inventory) < 1;
+      });
+      if (focusAction) {
+        const replacement = Array.from(this.root.querySelectorAll(`[data-${focusAction[0]}]`)).find((button) => button.dataset[focusAction[0]] === focusAction[1] && !button.disabled);
+        if (replacement) replacement.focus({ preventScroll: true });
+        else if (this.inventoryOpen) this.nodes['inventory-overlay'].querySelector('.as-close').focus({ preventScroll: true });
+      }
+    }
+
+    renderEndStats() {
+      if (!this.state || !this.state.player) return;
+      const elapsed = Math.max(0, Math.floor(number(this.state.elapsed)));
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+      ['dead-stats', 'won-stats'].forEach((id) => {
+        const node = this.nodes[id]; node.replaceChildren();
+        [['Survived', `${minutes}m ${String(seconds).padStart(2, '0')}s`], ['Zombies stopped', String(Math.floor(number(this.state.player.kills)))], ['Day reached', String(Math.max(1, Math.floor(number(this.state.day))))]].forEach(([label, value]) => {
+          const cell = document.createElement('div'); const strong = document.createElement('strong'); const span = document.createElement('span'); strong.textContent = value; span.textContent = label; cell.append(strong, span); node.append(cell);
+        });
+      });
+    }
+
+    toast(text, tone) {
+      if (this.destroyed) return;
+      clearTimeout(this.toastTimer);
+      this.nodes.toast.textContent = String(text || '');
+      this.nodes.toast.dataset.tone = ['danger', 'warning', 'success'].includes(tone) ? tone : 'normal';
+      this.nodes.toast.hidden = false;
+      this.toastTimer = setTimeout(() => { if (!this.destroyed) this.nodes.toast.hidden = true; }, 4200);
+    }
+
+    destroy() {
+      this.destroyed = true;
+      clearTimeout(this.toastTimer);
+      this.root.removeEventListener('click', this.handleClick);
+      this.root.removeEventListener('change', this.handleChange);
+      this.root.removeEventListener('input', this.handleInput);
+      this.root.removeEventListener('keydown', this.handleKeydown);
+      this.root.replaceChildren();
+    }
+  }
+  Sirens.UI = UI;
+}());
