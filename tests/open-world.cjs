@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 global.window={};
-for (const module of ['catalog','vehicles','actors','destruction','stories','world','engine']) require('../src/'+module+'.js');
+for (const module of ['catalog','progression','settlement','personal','warfare','vehicles','actors','destruction','stories','world','engine']) require('../src/'+module+'.js');
 const {Engine:E,Catalog:C,World:W}=window.Sirens;
 let checks=0;
 function check(name,fn){fn();checks++;console.log('PASS '+name);}

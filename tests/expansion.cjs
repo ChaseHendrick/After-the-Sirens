@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 global.window = {};
-for (const module of ['catalog', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + module + '.js');
+for (const module of ['catalog', 'progression', 'settlement', 'personal', 'warfare', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + module + '.js');
 const { Engine: E, Vehicles: V, Actors: A, Stories: F, World: W, Catalog: C } = window.Sirens;
 let checks = 0;
 const failures = [];

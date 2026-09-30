@@ -2,7 +2,7 @@
   'use strict';
   const Sirens = window.Sirens = window.Sirens || {};
   const N = 64, T = 32, WINDOW = 192, CHUNK_PIXELS = N * T;
-  const limits = Object.freeze({ chunkSize: N, activeChunks: 9, maxChunkCoord: 128, maxPersistentChunks: 2048, maxActiveZombies: 180, maxActiveHumans: 40 });
+  const limits = Object.freeze({ chunkSize: N, activeChunks: 9, maxChunkCoord: 128, maxPersistentChunks: 2048, maxActiveZombies: 360, maxActiveHumans: 128 });
   let townFactory = null;
   function hash(seed, cx, cy) {
     let n = (seed ^ Math.imul(cx, 374761393) ^ Math.imul(cy, 668265263)) >>> 0;
@@ -37,6 +37,7 @@
       if (catalog) {
         for (const c of chunk.containers) {
           if (c.label === 'Safe cabin supplies') for (const id of ['canvas_pack', 'machete', 'hammer', 'screwdriver']) if (catalog.items[id]) c.items[id] = 1;
+          if (c.label === 'Safe cabin supplies') { c.items.carrot_seeds = 2; c.items.stone = 3; c.items.rope = Math.max(1, c.items.rope || 0); }
           const table = c.label.includes('cabin') ? 'house' : c.label.includes('Clinic') ? 'clinic' : c.label.includes('Workshop') ? 'workshop' : c.label.includes('Grocer') ? 'market' : c.label.includes('Fuel') ? 'fuel' : c.label.includes('depot') ? 'depot' : 'ranger';
           const additional = loot(random, table, region);
           for (const id of Object.keys(additional)) if (!['food', 'water', 'parts', 'wood', 'scrap', 'ammo', 'bandage'].includes(id)) c.items[id] = additional[id];
@@ -86,7 +87,7 @@
         if ([[-1, 0], [1, 0], [0, -1], [0, 1]].some(v => chunk.tiles[(y + v[1]) * N + x + v[0]] === 1)) continue;
         if (random() < density) chunk.tiles[y * N + x] = 5;
       }
-      const count = difficulty === 'calm' ? 5 : difficulty === 'hard' ? 10 : 7, health = difficulty === 'calm' ? 52 : difficulty === 'hard' ? 74 : 64;
+      const count = difficulty === 'calm' ? 8 : difficulty === 'hard' ? 22 : 15, health = difficulty === 'calm' ? 52 : difficulty === 'hard' ? 74 : 64;
       for (let i = 0, attempts = 0; i < count && attempts < 1000; attempts++) {
         const x = (3.5 + Math.floor(random() * 57)) * T, y = (3.5 + Math.floor(random() * 57)) * T, tile = chunk.tiles[Math.floor(y / T) * N + Math.floor(x / T)];
         if (tile !== 0 && tile !== 1) continue;
@@ -212,7 +213,7 @@
       zz._path = (zz._path || []).map(p => ({ x: p.x + w.originX * T, y: p.y + w.originY * T })); return zz;
     });
     s.humans.sort((a, b) => (a.health <= 0 ? 1e9 : a.following ? -1e9 : 0) + (a.x - s.player.x) ** 2 + (a.y - s.player.y) ** 2 - ((b.health <= 0 ? 1e9 : b.following ? -1e9 : 0) + (b.x - s.player.x) ** 2 + (b.y - s.player.y) ** 2));
-    w.dormantHumans = s.humans.splice(40).map(h => Object.assign({}, h, { x: h.x + w.originX * T, y: h.y + w.originY * T, _targetX: h._targetX + w.originX * T, _targetY: h._targetY + w.originY * T,
+    w.dormantHumans = s.humans.splice(limits.maxActiveHumans).map(h => Object.assign({}, h, { x: h.x + w.originX * T, y: h.y + w.originY * T, _targetX: h._targetX + w.originX * T, _targetY: h._targetY + w.originY * T,
       _step: h._step ? { x: h._step.x + w.originX * T, y: h._step.y + w.originY * T } : null }));
     if (Sirens.Stories) Sirens.Stories.refresh(s);
     s._aiCursor = 0; s._exploreClock = 0;
@@ -310,7 +311,7 @@
           maxSpeed: number(v.maxSpeed, 1, 600, 'vehicle max speed'), tank };
         r.vehicles.push(vehicle);
       }
-      if (!Array.isArray(source.humans || []) || (source.humans || []).length > 64) bad('humans');
+      if (!Array.isArray(source.humans || []) || (source.humans || []).length > 256) bad('humans');
       for (const h of source.humans || []) {
         object(h, 'human'); if (typeof h.id !== 'string' || !/^h:-?\d{1,3},-?\d{1,3}:\d{1,4}$/.test(h.id) || humanIds.has(h.id)) bad('human identity'); humanIds.add(h.id);
         if (!['survivor', 'raider'].includes(h.faction) || typeof h.following !== 'boolean' || !['bat', 'pistol'].includes(h.weapon) || typeof h.name !== 'string' || h.name.length > 80) bad('human metadata');

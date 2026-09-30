@@ -238,14 +238,14 @@
     ['hand_radio', 'Handheld radio', 0.3, 'Can be dismantled into useful relay parts. Portable voice communication is not implemented.'],
     ['electric_motor', 'Small electric motor', 0.55, 'Can be dismantled for wire and metal.'],
     ['car_battery', 'Vehicle battery', 5.5, 'A vehicle component and battery-cell salvage source. Electrical networks are not implemented.'],
-    ['flashlight', 'Flashlight', 0.2, 'A lantern ingredient. The current renderer gives every survivor an awareness light.'],
+    ['flashlight', 'Flashlight', 0.2, 'A lantern ingredient. The whole surrounding view stays readable.'],
     ['headlamp', 'Headlamp', 0.12, 'A utility collectible. Separate lamp equipment and battery drain are not implemented.'],
     ['solar_panel', 'Portable solar panel', 2.5, 'A salvage source for cells and metal. Electrical networks are not implemented.'],
     ['power_bank', 'Power bank', 0.2, 'Can be dismantled into battery cells. Device charging is not implemented.']
   ]);
 
   plain('books', [
-    ['first_aid_manual', 'Field care manual', 0.35, 'A reusable prerequisite for assembling a first aid kit. Reading does not grant skills yet.'],
+    ['first_aid_manual', 'Field care manual', 0.35, 'Study once for field care practice and insight. Keep this reference for treatment projects and recipes.'],
     ['tailoring_manual', 'Stitching handbook', 0.3, 'A reusable prerequisite for stronger protective clothing.'],
     ['electronics_manual', 'Circuit repair handbook', 0.45, 'A reusable prerequisite for board and radio component recipes.'],
     ['cooking_manual', 'Camp kitchen notebook', 0.3, 'A reusable prerequisite for more efficient trail rations.'],
@@ -265,12 +265,22 @@
     ['flare', 'Signal flare', 0.2, 'A lantern ingredient. Dedicated flare lighting and distress signals are not implemented.'],
     ['candle', 'Candle', 0.1, 'An ingredient for a crude field lantern.'],
     ['tarp', 'Tarpaulin', 0.8, 'Useful cloth salvage and a pack ingredient. Shelter roofs are not implemented yet.'],
-    ['sleeping_bag', 'Sleeping bag', 1.5, 'A cloth salvage source. Bed and sleep systems are not implemented yet.'],
+    ['sleeping_bag', 'Sleeping bag', 1.5, 'A cloth salvage source. Use Journal sleep indoors or beside a campfire; separate bed structures are not implemented.'],
     ['blanket', 'Wool blanket', 0.7, 'A cloth salvage source and ingredient for padded clothing.'],
     ['water_filter', 'Field water filter', 0.3, 'A reusable prerequisite for turning untreated water into clean water.'],
     ['lantern', 'Field lantern', 0.45, 'An assembled utility collectible. Separate light equipment is not implemented yet.'],
     ['repair_kit', 'General repair kit', 0.6, 'A reusable prerequisite for salvaging radios. Item durability is not implemented yet.']
   ]);
+
+  plain('materials', [
+    ['stone', 'Stone chunks', .65, 'Mine surface deposits or scavenge stone to make a first pick.'],
+    ['iron_ore', 'Iron ore', .8, 'A mined resource used by the abstract campfire iron recipe.'],
+    ['copper_ore', 'Copper ore', .65, 'A mined resource used to recover wire at a campfire.'],
+    ['iron_ingot', 'Iron ingot', .6, 'Processed metal for a stronger mining pick.']
+  ]);
+  plain('utility', [['carrot_seeds', 'Carrot seeds', .02, 'Plant a garden beside your base. Water it and harvest food and seed for the next crop.']]);
+  melee('stone_pick', 'Stone mining pick', 1.3, 16, 58, .82, 14, 120, 'A first mining tool. Break stone, iron and copper surface deposits.');
+  melee('iron_pick', 'Iron mining pick', 1.6, 28, 62, .7, 15, 130, 'A stronger mining tool that breaks deposits in fewer swings.');
 
   const recipes = [];
   function recipe(id, name, cost, result, description, tools, station) {
@@ -342,11 +352,16 @@
   recipe('electric_lantern', 'Assemble electric lantern', { flashlight: 1, battery_cell: 2, aluminum_sheet: 1, screws: 1 }, { lantern: 1 }, 'A collectible electronics project, not an equipped light yet.', ['screwdriver']);
   recipe('assemble_repair_kit', 'Pack a repair kit', { duct_tape: 2, wire: 2, screws: 1, cloth: 1 }, { repair_kit: 1 }, 'A reusable prerequisite for handheld-radio salvage.');
 
+  recipe('stone_mining_pick', 'Make a stone mining pick', { stone: 3, wood: 2, rope: 1 }, { stone_pick: 1 }, 'A reusable tool for mining seeded surface deposits.');
+  recipe('smelt_iron', 'Process iron ore', { iron_ore: 2, charcoal: 1 }, { iron_ingot: 1 }, 'An abstract game processing recipe beside a campfire.', [], 'campfire');
+  recipe('draw_copper_wire', 'Recover copper wire', { copper_ore: 2, charcoal: 1 }, { wire: 2 }, 'Recover wire for electronics projects beside a campfire.', ['hammer'], 'campfire');
+  recipe('iron_mining_pick', 'Make an iron mining pick', { iron_ingot: 2, wood: 2, stone_pick: 1 }, { iron_pick: 1 }, 'Upgrade the first pick into a faster mining tool.', ['hammer']);
+
   function entries(rows) {
     return Object.freeze(rows.map((row) => Object.freeze({ id: row[0], min: row[1], max: row[2], weight: row[3] })));
   }
-  const pantry = [ ['canned_beans', 1, 3, 10], ['canned_soup', 1, 2, 8], ['canned_fish', 1, 2, 6], ['canned_peaches', 1, 2, 5], ['canned_corn', 1, 2, 6], ['canned_stew', 1, 2, 5], ['crackers', 1, 3, 8], ['oats', 1, 2, 6], ['rice', 1, 2, 6], ['pasta', 1, 2, 6], ['food', 1, 3, 9], ['water', 1, 3, 10], ['sugar', 1, 2, 4], ['salt', 1, 2, 4] ];
-  const workshop = [ ['wood', 2, 7, 12], ['scrap', 2, 6, 12], ['nails', 1, 3, 9], ['screws', 1, 3, 8], ['bolts', 1, 2, 6], ['duct_tape', 1, 2, 7], ['rope', 1, 2, 6], ['hammer', 1, 1, 5], ['saw', 1, 1, 4], ['wrench', 1, 1, 4], ['screwdriver', 1, 1, 6], ['wire_cutters', 1, 1, 3], ['pliers', 1, 1, 4], ['metal_tube', 1, 2, 6], ['rubber', 1, 3, 5], ['plastic', 1, 3, 5] ];
+  const pantry = [ ['carrot_seeds', 1, 3, 4], ['canned_beans', 1, 3, 10], ['canned_soup', 1, 2, 8], ['canned_fish', 1, 2, 6], ['canned_peaches', 1, 2, 5], ['canned_corn', 1, 2, 6], ['canned_stew', 1, 2, 5], ['crackers', 1, 3, 8], ['oats', 1, 2, 6], ['rice', 1, 2, 6], ['pasta', 1, 2, 6], ['food', 1, 3, 9], ['water', 1, 3, 10], ['sugar', 1, 2, 4], ['salt', 1, 2, 4] ];
+  const workshop = [ ['stone', 1, 4, 5], ['iron_ore', 1, 3, 4], ['copper_ore', 1, 3, 4], ['charcoal', 1, 3, 5], ['wood', 2, 7, 12], ['scrap', 2, 6, 12], ['nails', 1, 3, 9], ['screws', 1, 3, 8], ['bolts', 1, 2, 6], ['duct_tape', 1, 2, 7], ['rope', 1, 2, 6], ['hammer', 1, 1, 5], ['saw', 1, 1, 4], ['wrench', 1, 1, 4], ['screwdriver', 1, 1, 6], ['wire_cutters', 1, 1, 3], ['pliers', 1, 1, 4], ['metal_tube', 1, 2, 6], ['rubber', 1, 3, 5], ['plastic', 1, 3, 5] ];
   const household = [ ['cloth', 1, 4, 9], ['thread', 1, 3, 6], ['blanket', 1, 1, 5], ['soap', 1, 2, 6], ['empty_bottle', 1, 3, 8], ['empty_can', 1, 2, 5], ['sewing_kit', 1, 1, 3], ['kitchen_knife', 1, 1, 5], ['frying_pan', 1, 1, 4], ['cooking_pot', 1, 1, 4], ['candle', 1, 2, 4], ['lighter', 1, 1, 5], ['flashlight', 1, 1, 4], ['needle', 1, 2, 6] ];
   const clinic = [ ['bandage', 1, 4, 12], ['gauze', 1, 4, 10], ['adhesive_dressing', 1, 3, 8], ['antiseptic', 1, 2, 7], ['antiseptic_wipes', 1, 3, 9], ['antibiotics', 1, 2, 4], ['painkillers', 1, 2, 7], ['vitamins', 1, 2, 6], ['tourniquet', 1, 1, 3], ['suture_kit', 1, 1, 3], ['splint', 1, 1, 4], ['burn_gel', 1, 2, 4], ['first_aid_kit', 1, 1, 2], ['emergency_dressing', 1, 2, 4], ['first_aid_manual', 1, 1, 3] ];
   const electronics = [ ['parts', 1, 2, 9], ['wire', 1, 4, 11], ['circuit_board', 1, 2, 8], ['transistor', 1, 3, 7], ['capacitor', 1, 3, 7], ['resistor', 1, 3, 8], ['battery_cell', 1, 4, 10], ['hand_radio', 1, 1, 4], ['electric_motor', 1, 1, 5], ['car_battery', 1, 1, 2], ['power_bank', 1, 1, 4], ['solar_panel', 1, 1, 1], ['electronics_manual', 1, 1, 4], ['repair_kit', 1, 1, 4] ];

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 global.window = {};
-for (const f of ['catalog', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + f + '.js');
+for (const f of ['catalog', 'progression', 'settlement', 'personal', 'warfare', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + f + '.js');
 const { Engine: E, World: W, Catalog: C } = window.Sirens;
 const check = (name, fn) => { fn(); console.log('PASS ' + name); };
 check('full seeded worlds reproduce terrain, loot, cars, NPCs and floors', () => {
@@ -37,7 +37,7 @@ check('saved seeded simulation continues with identical random outcomes and inpu
   assert.deepEqual(restored.zombies, s.zombies); assert.deepEqual(restored.humans, s.humans);
   assert.deepEqual(restored.particles, s.particles); assert.deepEqual(restored.noises, s.noises);
 });
-check('all 212 original items are reachable from actual generated loot plus crafting', () => {
+check('all 219 original items are reachable from actual generated loot plus crafting', () => {
   const seen = new Set(['bat', 'pistol']), regions = new Set();
   for (let y = -18; y <= 18; y++) for (let x = -18; x <= 18; x++) {
     const c = W.generate(20260929, 'standard', x, y); regions.add(c.biome);
@@ -90,7 +90,7 @@ check('far-sector fixtures keep active arrays bounded and save coordinate edges'
     s.player.y = (cy * 64 + 31.5 - s.world.originY) * 32;
     W.maybeRecenter(s);
     assert.equal(s.world.centerCX, cx); assert.equal(s.world.centerCY, cy);
-    assert.equal(s.tiles.length, 192 * 192); assert(s.zombies.length <= 180); assert(s.humans.length <= 40);
+    assert.equal(s.tiles.length, 192 * 192); assert(s.zombies.length <= window.Sirens.World.limits.maxActiveZombies); assert(s.humans.length <= window.Sirens.World.limits.maxActiveHumans);
     const restored = E.deserialize(E.serialize(s)); assert.equal(restored.world.centerCX, cx); assert.equal(restored.world.centerCY, cy);
   }
 });

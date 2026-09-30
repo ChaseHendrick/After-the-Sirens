@@ -179,7 +179,7 @@
       goal: { parts: 0, required: 5, radioX: 31.5 * TILE, radioY: 25.5 * TILE, complete: false, active: false, countdown: SIGNAL_TIME },
       ended: false, won: false, stats: { ticks: 0, aiUpdates: 0, pathNodes: 0 }, discovered: new Array(SIZE * SIZE).fill(false),
       _rng: seed || 0x6d2b79f5, _doorHealth: {}, _terrainHealth: {}, _nextZombieId: 1, _aiClock: 0, _aiCursor: 0,
-      _exploreClock: 0, _noiseClock: 0, _waveClock: 0, _radioNoiseClock: 0, _nextGroundId: 1, vehicles: [], humans: []
+      _exploreClock: 0, _noiseClock: 0, _waveClock: 0, _radioNoiseClock: 0, _ecologyClock: 0, _chaosClock: 0, _nextGroundId: 1, vehicles: [], humans: []
     };
     if (Sirens.Catalog) { if (items.bat) s.player.inventory.bat = 1; if (items.pistol) s.player.inventory.pistol = 1; }
     if (Sirens.Vehicles) s.vehicles = Sirens.Vehicles.spawnForChunk(seed, 0, 0, 'town');
@@ -223,6 +223,10 @@
       log(s, 'Open world: roads connect every sector. Explore, collect original gear, and build a shelter. The radio mission is optional.', 'good');
     }
     if (Sirens.Stories) Sirens.Stories.refresh(s);
+    if (Sirens.Progression) Sirens.Progression.ensure(s);
+    if (Sirens.Settlement) Sirens.Settlement.ensure(s);
+    if (Sirens.Personal) Sirens.Personal.ensure(s);
+    if (Sirens.Warfare) Sirens.Warfare.ensure(s);
     return s;
   }
 
@@ -390,14 +394,20 @@
     }
     log(s, 'The radio is drawing another group toward the tower.', 'warn');
   }
-  function update(s, dt, input) {
-    if (!s || s.ended) return;
-    dt = clamp(finite(dt, 0), 0, 0.05);
-    if (dt === 0) return;
-    input = input && typeof input === 'object' ? input : {};
+  function spawnWanderers(s, count) {
+    if (!s || s.ended || !s.world || s.stories && s.stories.floor > 0) return 0;
+    count = Math.floor(clamp(finite(count, 0), 0, 8)); let added = 0;
+    for (let i = 0; i < 100 && added < count && s.zombies.length < 360; i++) {
+      const angle = random(s) * Math.PI * 2, r = 430 + random(s) * 130;
+      const x = s.player.x + Math.cos(angle) * r, y = s.player.y + Math.sin(angle) * r;
+      if (x < TILE || y < TILE || x >= (s.width - 1) * TILE || y >= (s.height - 1) * TILE || !clearCircle(s, x, y, 12) || s.tiles[Math.floor(y / TILE) * s.width + Math.floor(x / TILE)] === 2) continue;
+      const z = newZombie(s, x, y); z.state = 'investigate'; z._targetX = s.player.x; z._targetY = s.player.y; z._wanderClock = 12;
+      s.zombies.push(z); added++;
+    }
+    return added;
+  }
+  function updatePlayer(s, dt, input, recenter) {
     const p = s.player, d = DIFFICULTIES[s.difficulty];
-    s.stats.ticks++; s.elapsed += dt; s.time += dt / 45;
-    if (s.time >= 24) { s.time -= 24; s.day++; s.weather = ['clear', 'overcast', 'rain'][Math.floor(random(s) * 3)]; }
     p.cooldown = Math.max(0, p.cooldown - dt); p.invulnerable = Math.max(0, p.invulnerable - dt);
     let mx = clamp(finite(input.moveX, 0), -1, 1), my = clamp(finite(input.moveY, 0), -1, 1);
     const length = Math.hypot(mx, my);
@@ -409,19 +419,21 @@
     let speed = 98 * (sprint ? 1.57 : p._sneaking ? 0.59 : 1);
     if (p.health < 30) speed *= 0.87;
     if (p.resting) speed = 0;
+    const beforeX = p.x, beforeY = p.y;
     const driving = !!(Sirens.Vehicles && Sirens.Vehicles.update(s, dt, input));
     if (!driving) {
       const oldX = p.x, oldY = p.y;
       move(s, p, mx * speed * dt, my * speed * dt, 10);
       if (Sirens.Effects) Sirens.Effects.walk(s, Math.hypot(p.x - oldX, p.y - oldY), sprint, p._sneaking);
     }
-    const shift = s.world && !(s.stories && s.stories.floor > 0) ? Sirens.World.maybeRecenter(s) : { shiftX: 0, shiftY: 0 };
+    const traveled = Math.hypot(p.x - beforeX, p.y - beforeY);
+    const shift = recenter && s.world && !(s.stories && s.stories.floor > 0) ? Sirens.World.maybeRecenter(s) : { shiftX: 0, shiftY: 0 };
     if (shift.blocked) log(s, shift.blocked, 'warn');
     const ax = clamp(finite(input.aimX, p.x + Math.cos(p.angle) * 80 + shift.shiftX) - shift.shiftX, 0, s.width * TILE);
     const ay = clamp(finite(input.aimY, p.y + Math.sin(p.angle) * 80 + shift.shiftY) - shift.shiftY, 0, s.height * TILE);
     if (dist2(p.x, p.y, ax, ay) > 1) p.angle = Math.atan2(ay - p.y, ax - p.x);
     if (sprint) p.stamina = Math.max(0, p.stamina - 12.5 * dt);
-    else p.stamina = Math.min(100, p.stamina + (p.resting ? 21 : moving ? 7 : 13) * dt);
+    else p.stamina = Math.min(100, p.stamina + (p.resting ? 21 : moving ? 7 : 13) * dt * (Sirens.Progression && Sirens.Progression.ensure(s).fatigue > 70 ? .8 : 1));
     s._noiseClock = Math.max(0, s._noiseClock - dt);
     if (sprint && s._noiseClock <= 0) { noise(s, p.x, p.y, 170, 1.2); s._noiseClock = 0.55; }
     if (input.attack && !driving) attack(s, ax, ay, weaponInfo(p.weapon).kind === 'firearm' ? 'pistol' : 'melee');
@@ -434,6 +446,28 @@
       const byFire = s.structures.some(b => b.type === 'campfire' && dist2(b.x, b.y, p.x, p.y) < 100 ** 2);
       p.health = Math.min(100, p.health + dt * (byFire ? 0.8 : 0.28));
     }
+    return { traveled, driving };
+  }
+  // A server can advance another survivor without advancing the shared world clock or AI twice.
+  function stepParticipant(s, dt, input) {
+    if (!s || !s.player || s.player.health <= 0 || s.ended) return false;
+    dt = clamp(finite(dt, 0), 0, .05);
+    if (!dt) return false;
+    updatePlayer(s, dt, input && typeof input === 'object' ? input : {}, false);
+    return true;
+  }
+  function update(s, dt, input) {
+    if (!s || s.ended) return;
+    dt = clamp(finite(dt, 0), 0, 0.05);
+    if (dt === 0) return;
+    input = input && typeof input === 'object' ? input : {};
+    const p = s.player, d = DIFFICULTIES[s.difficulty];
+    s.stats.ticks++; s.elapsed += dt; s.time += dt / 45;
+    if (s.time >= 24) {
+      s.time -= 24; s.day++; s.weather = ['clear', 'overcast', 'rain'][Math.floor(random(s) * 3)];
+      if (s.progression && s.progression.event.kind === 'rain' && s.elapsed < s.progression.event.until) { s.progression.event.previousWeather = s.weather; s.weather = 'rain'; }
+    }
+    const { traveled, driving } = updatePlayer(s, dt, input, true);
     for (let i = s.noises.length - 1; i >= 0; i--) { s.noises[i].life -= dt; if (s.noises[i].life <= 0) s.noises.splice(i, 1); }
     s._aiClock += dt;
     if (s._aiClock >= 0.12) {
@@ -446,7 +480,22 @@
       }
     }
     for (const z of s.zombies) if (z.health > 0 && (!s.world || dist2(z.x, z.y, p.x, p.y) < 1100 ** 2)) updateZombie(s, z, dt);
+    if (s.world && !(s.stories && s.stories.floor > 0)) {
+      s._ecologyClock = Math.min(45, (s._ecologyClock || 0) + dt); s._chaosClock = Math.min(12, (s._chaosClock || 0) + dt);
+      const interval = s.difficulty === 'calm' ? 45 : s.difficulty === 'hard' ? 16 : 24;
+      if (s._ecologyClock >= interval) { s._ecologyClock = 0;
+        const nearbyDead = s.zombies.filter(z => z.health > 0 && dist2(z.x, z.y, p.x, p.y) < 800 ** 2).length;
+        if (nearbyDead < (s.difficulty === 'calm' ? 10 : s.difficulty === 'hard' ? 24 : 18)) spawnWanderers(s, s.difficulty === 'calm' ? 2 : 4);
+      }
+      if (s._chaosClock >= 12 && s.noises.some(n => n.radius >= 400 && !n.vehicle && dist2(n.x, n.y, p.x, p.y) < 800 ** 2)) {
+        s._chaosClock = 0; if (spawnWanderers(s, 3)) log(s, 'The fighting is drawing more dead toward this area.', 'warn');
+      }
+    }
     if (Sirens.Actors) Sirens.Actors.update(s, dt, input);
+    if (Sirens.Progression && p.health > 0) Sirens.Progression.update(s, dt, input, traveled, driving);
+    if (Sirens.Settlement && p.health > 0) Sirens.Settlement.update(s, dt);
+    if (Sirens.Personal && p.health > 0) Sirens.Personal.update(s, dt);
+    if (Sirens.Warfare && p.health > 0) Sirens.Warfare.update(s, dt);
     for (let i = s.particles.length - 1; i >= 0; i--) {
       const pt = s.particles[i]; pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vx *= 0.97; pt.vy *= 0.97;
       if (pt.life <= 0) s.particles.splice(i, 1);
@@ -498,6 +547,10 @@
       const b = Sirens.Stories.currentBuilding(s), d = dist2(s.player.x, s.player.y, (b.stairs.x + 0.5) * TILE, (b.stairs.y + 0.5) * TILE);
       if (!n || n.type !== 'window' || n.d >= d) return stairs;
     }
+    const pet = Sirens.Personal && Sirens.Personal.nearby(s);
+    if (pet && (!n || n.d > 45 ** 2)) return pet;
+    const garden = Sirens.Settlement && Sirens.Settlement.nearby(s);
+    if (garden && (!n || n.d > 45 ** 2)) return garden;
     const human = Sirens.Actors && Sirens.Actors.nearby(s), car = Sirens.Vehicles && Sirens.Vehicles.nearby(s);
     if (human && (!n || n.d > 45 ** 2)) return human;
     return car && (!n || n.d > 45 ** 2) ? car : n ? n.label : '';
@@ -509,6 +562,8 @@
       const b = Sirens.Stories.currentBuilding(s), d = dist2(s.player.x, s.player.y, (b.stairs.x + 0.5) * TILE, (b.stairs.y + 0.5) * TILE);
       if (!n || n.type !== 'window' || n.d >= d) return Sirens.Stories.go(s, s.stories.floor + 1 < b.floors ? 1 : -1);
     }
+    if (Sirens.Personal && Sirens.Personal.nearby(s) && (!n || n.d > 45 ** 2)) return Sirens.Personal.interact(s);
+    if (Sirens.Settlement && Sirens.Settlement.nearby(s) && (!n || n.d > 45 ** 2)) return Sirens.Settlement.interact(s);
     if (Sirens.Actors && Sirens.Actors.nearby(s) && (!n || n.d > 45 ** 2)) return Sirens.Actors.interact(s);
     if (Sirens.Vehicles && Sirens.Vehicles.nearby(s) && (!n || n.d > 45 ** 2)) return Sirens.Vehicles.toggle(s);
     if (!n) return false;
@@ -551,7 +606,7 @@
       if (!c.items[id]) delete c.items[id]; else skipped.push(items[id].name.toLowerCase());
     }
     c.looted = Object.keys(c.items).length === 0;
-    if (took.length) { log(s, 'Collected ' + took.join(', ') + '.', 'good'); if (Sirens.Effects) Sirens.Effects.emit(s, 'loot'); }
+    if (took.length) { log(s, 'Collected ' + took.join(', ') + '.', 'good'); if (Sirens.Effects) Sirens.Effects.emit(s, 'loot'); if (Sirens.Progression) Sirens.Progression.loot(s, c); }
     if (skipped.length) log(s, 'Pack is nearly full (' + weight(p.inventory).toFixed(1) + '/' + carryCapacity(s) + '). Left ' + skipped.join(', ') + ' here. Room for mission parts stays reserved. Use, drop, craft, or build to make space.', 'warn');
     return took.length > 0;
   }
@@ -572,8 +627,9 @@
     dx /= length; dy /= length; p.angle = Math.atan2(dy, dx); p.resting = false;
     if (mode === 'melee') {
       const weapon = weaponInfo(p.weapon), w = weapon.kind === 'melee' ? weapon : weaponInfo('bat');
-      if (p.stamina < w.staminaCost) { p.cooldown = 0.35; log(s, 'Catch your breath before swinging again.', 'warn'); return false; }
-      p.stamina = Math.max(0, p.stamina - w.staminaCost); p.cooldown = w.cooldown;
+      const staminaCost = w.staminaCost * (Sirens.Progression ? 1 - .04 * Sirens.Progression.level(s, 'combat') : 1);
+      if (p.stamina < staminaCost) { p.cooldown = 0.35; log(s, 'Catch your breath before swinging again.', 'warn'); return false; }
+      p.stamina = Math.max(0, p.stamina - staminaCost); p.cooldown = w.cooldown;
       if (Sirens.Effects) Sirens.Effects.attack(s, actualWeapon, 'melee', w.cooldown, p.angle);
       noise(s, p.x, p.y, w.noise, 1); particles(s, p.x + dx * 40, p.y + dy * 40, 5, '#dedab2');
       const targets = s.zombies.concat(Sirens.Actors ? (s.humans || []).filter(h => h.health > 0) : []).filter(z => {
@@ -588,7 +644,9 @@
         particles(s, z.x, z.y, 5, '#8da487');
       }
       if (targets.length && Sirens.Effects) Sirens.Effects.emit(s, 'impact');
-      if (Sirens.Destruction) Sirens.Destruction.hit(s, aimX, aimY, actualWeapon);
+      if (targets.length && Sirens.Progression) Sirens.Progression.gain(s, 'combat', targets.length * 4);
+      const mined = Sirens.Settlement && Sirens.Settlement.strike(s, aimX, aimY, actualWeapon);
+      if (!mined && Sirens.Destruction) Sirens.Destruction.hit(s, aimX, aimY, actualWeapon);
     } else {
       const id = weaponInfo(p.weapon).kind === 'firearm' ? p.weapon : 'pistol', w = weaponInfo(id);
       p.magazines = p.magazines || { pistol: p.ammo };
@@ -604,6 +662,7 @@
       }
       if (target) {
         if (Sirens.Effects) Sirens.Effects.emit(s, 'impact');
+        if (Sirens.Progression) Sirens.Progression.gain(s, 'combat', 4);
         if (target.faction && Sirens.Actors) Sirens.Actors.hit(s, target, w.damage, true);
         else { target.health -= w.damage; target._stun = 0.7; target.windup = 0; }
         particles(s, target.x, target.y, 9, '#a5b496');
@@ -622,9 +681,13 @@
       inv[id]--; if (!inv[id]) delete inv[id]; return true;
     }
     if (typeof name !== 'string' || name.length > 120) return false;
+    if (Sirens.Personal && name.startsWith('personal:')) return Sirens.Personal.action(s, name.slice(9));
+    if (Sirens.Warfare && name.startsWith('faction:')) return Sirens.Warfare.action(s, name.slice(8));
+    if (Sirens.Settlement && name.startsWith('base:')) return Sirens.Settlement.action(s, name.slice(5));
+    if (Sirens.Progression && /^(research:|study:|ability:|track:|mark:|clearWaypoint$|wake$)/.test(name)) return Sirens.Progression.action(s, name);
     if (name === 'climb' || name === 'window') return !!(Sirens.Destruction && Sirens.Destruction.climb(s));
     if (name === 'stairsUp' || name === 'stairsDown') return !!(Sirens.Stories && Sirens.Stories.go(s, name === 'stairsUp' ? 1 : -1));
-    if (Sirens.Actors && ['trade', 'recruit', 'dismiss', 'closeConversation'].includes(name)) return Sirens.Actors.action(s, name);
+    if (Sirens.Actors && ['trade', 'recruit', 'dismiss', 'helpSurvivor', 'robSurvivor', 'closeConversation'].includes(name)) return Sirens.Actors.action(s, name);
     if (name === 'vehicle') return !!(Sirens.Vehicles && Sirens.Vehicles.toggle(s));
     if (name === 'refuel') return !!(Sirens.Vehicles && Sirens.Vehicles.refuel(s));
     if (name.startsWith('equip:')) {
@@ -670,10 +733,14 @@
       if (fuel > 0 && Sirens.Vehicles) return Sirens.Vehicles.refuel(s, id);
       if (!item.effect) { log(s, item.name + ' is equipment or a crafting ingredient.', 'info'); return false; }
       const effect = item.effect;
+      const oldHealth = p.health, oldBleeding = p.bleeding, oldInfection = p.infection;
       for (const field of ['hunger', 'thirst', 'infection']) p[field] = clamp(p[field] - finite(effect[field], 0), 0, 100);
-      p.health = clamp(p.health + finite(effect.health, 0), 0, 100); p.stamina = clamp(p.stamina + finite(effect.stamina, 0), 0, 100);
+      const treatment = (effect.health > 0 || effect.bleeding > 0) && (p.health < 100 || p.bleeding > 0);
+      const careBonus = treatment && Sirens.Progression ? Sirens.Progression.level(s, 'care') + (Sirens.Progression.known(s, 'care') ? 4 : 0) : 0;
+      p.health = clamp(p.health + finite(effect.health, 0) + careBonus, 0, 100); p.stamina = clamp(p.stamina + finite(effect.stamina, 0), 0, 100);
       p.bleeding = clamp(p.bleeding - finite(effect.bleeding, 0) * 0.03, 0, 3);
       if (item.consume !== false) consume(id);
+      if (Sirens.Progression && (p.health > oldHealth || p.bleeding < oldBleeding || p.infection < oldInfection)) Sirens.Progression.gain(s, 'care', 4);
       log(s, 'Used ' + item.name + '.', 'good'); return true;
     }
     if (['eat', 'drink', 'bandage'].includes(name) && Sirens.Catalog) {
@@ -714,6 +781,7 @@
     }
     if (name === 'rest') {
       p.resting = !p.resting;
+      if (!p.resting && Sirens.Progression) Sirens.Progression.ensure(s).sleeping = false;
       log(s, p.resting ? 'Resting. Stamina and health recover while you stay still. A nearby campfire heals faster.' : 'You stand ready.', 'info'); return true;
     }
     if (name === 'switchWeapon') {
@@ -726,22 +794,31 @@
   function canAfford(inv, cost) { return Object.keys(cost).every(id => (inv[id] || 0) >= cost[id]); }
   function pay(inv, cost) { Object.keys(cost).forEach(id => { inv[id] -= cost[id]; if (!inv[id]) delete inv[id]; }); }
   function canCraft(s, recipeId) {
+    return craftQuote(s, recipeId).can;
+  }
+  function craftQuote(s, recipeId) {
     const r = typeof recipeId === 'object' ? recipeId : recipes.find(r => r.id === recipeId);
-    if (!r || !s || s.ended || !canAfford(s.player.inventory, r.cost)) return false;
-    if (r.tools && !r.tools.every(id => (s.player.inventory[id] || 0) > 0)) return false;
-    if ((r.station === 'campfire' || r.id === 'collect_water') && !s.structures.some(b => b.type === 'campfire' && dist2(b.x, b.y, s.player.x, s.player.y) <= 100 ** 2)) return false;
-    return true;
+    const missing = [];
+    if (!r || !s || s.ended) return { can: false, missing: ['Recipe unavailable'] };
+    const inv = s.player.inventory;
+    for (const [id, n] of Object.entries(r.cost)) if ((inv[id] || 0) < n) missing.push('Need ' + (n - (inv[id] || 0)) + ' ' + items[id].name.toLowerCase());
+    for (const id of r.tools || []) if (!(inv[id] > 0)) missing.push('Keep ' + items[id].name.toLowerCase());
+    if ((r.station === 'campfire' || r.id === 'collect_water') && !s.structures.some(b => b.type === 'campfire' && dist2(b.x, b.y, s.player.x, s.player.y) <= 100 ** 2)) missing.push('Stand beside a campfire');
+    if (canAfford(inv, r.cost)) {
+      const next = Object.assign({}, inv); pay(next, r.cost); for (const [id, n] of Object.entries(r.result)) next[id] = (next[id] || 0) + n;
+      const pack = s.player.equipment && s.player.equipment.backpack;
+      const capacity = pack && !next[pack] ? CAPACITY : carryCapacity(s);
+      if (weight(next) > capacity + .00001 || Object.values(next).some(n => n > 1000)) missing.push('Make room for the crafted supplies');
+    }
+    return { can: !missing.length, missing, recipe: r };
   }
   function craft(s, recipeId) {
     if (!s || s.ended) return false;
     const recipe = recipes.find(r => r.id === recipeId);
     if (!recipe) return false;
+    const quote = craftQuote(s, recipeId);
+    if (!quote.can) { log(s, quote.missing.join('. ') + '.', 'warn'); return false; }
     const inv = s.player.inventory;
-    if (!canAfford(inv, recipe.cost)) { log(s, 'You do not have the supplies for ' + recipe.name.toLowerCase() + '.', 'warn'); return false; }
-    if (recipe.tools && !recipe.tools.every(id => inv[id] > 0)) { log(s, 'Keep the required tools or reference books in your pack to craft this recipe.', 'warn'); return false; }
-    if ((recipe.station === 'campfire' || recipeId === 'collect_water') && !s.structures.some(b => b.type === 'campfire' && dist2(b.x, b.y, s.player.x, s.player.y) <= 100 ** 2)) {
-      log(s, 'Collect clean water beside a campfire. Build one with four wood and one salvage.', 'warn'); return false;
-    }
     const next = Object.assign({}, inv);
     pay(next, recipe.cost);
     Object.keys(recipe.result).forEach(id => { next[id] = (next[id] || 0) + recipe.result[id]; });
@@ -754,29 +831,40 @@
       if (equipment.clothing && !next[equipment.clothing]) equipment.clothing = null;
       if (equipment.backpack && !next[equipment.backpack]) equipment.backpack = null;
     }
-    log(s, 'Crafted ' + recipe.name.toLowerCase() + '.', 'good'); return true;
+    if (Sirens.Progression) { Sirens.Progression.gain(s, 'craft', 5); Sirens.Progression.ensure(s).totals.craft++; Sirens.Progression.write(s, 'craft', 'Crafted ' + recipe.name.toLowerCase() + '.'); }
+    else log(s, 'Crafted ' + recipe.name.toLowerCase() + '.', 'good'); return true;
   }
-  function build(s, type) {
-    if (!s || s.ended || (type !== 'barricade' && type !== 'campfire')) return false;
-    if (s.structures.length >= 60) { log(s, 'There are already enough structures in town.', 'warn'); return false; }
-    const p = s.player, cost = type === 'barricade' ? { wood: 3, scrap: 1 } : { wood: 4, scrap: 1 };
-    if (!canAfford(p.inventory, cost)) { log(s, 'A ' + type + ' needs ' + cost.wood + ' wood and 1 salvage.', 'warn'); return false; }
+  function buildQuote(s, type) {
+    const cost = type === 'barricade' ? { wood: 3, scrap: 1 } : { wood: 4, scrap: 1 }, missing = [];
+    if (!s || s.ended || !['barricade', 'campfire'].includes(type)) return { can: false, missing: ['Structure unavailable'], cost };
+    const p = s.player;
+    if (p.vehicleId) missing.push('Leave the car first');
+    if (s.structures.length >= 60) missing.push('Structure limit reached for this area');
+    for (const [id, n] of Object.entries(cost)) if ((p.inventory[id] || 0) < n) missing.push('Need ' + (n - (p.inventory[id] || 0)) + ' ' + items[id].name.toLowerCase());
     let dx = Math.cos(p.angle), dy = Math.sin(p.angle);
     if (Math.abs(dx) >= Math.abs(dy)) { dx = Math.sign(dx); dy = 0; } else { dx = 0; dy = Math.sign(dy); }
     const tx = Math.floor(p.x / TILE) + dx, ty = Math.floor(p.y / TILE) + dy;
     const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE, tile = s.tiles[ty * s.width + tx];
-    if (s.buildings.some(b => b.stairs && b.stairs.x === tx && b.stairs.y === ty)) { log(s, 'Keep the staircase clear so every level stays accessible.', 'warn'); return false; }
+    if (s.buildings.some(b => b.stairs && b.stairs.x === tx && b.stairs.y === ty)) missing.push('Aim away from the stairs');
+    if (Sirens.Settlement && Sirens.Settlement.occupies(s, tx, ty)) missing.push('Keep planted crops clear');
     if (isSolid(s, tx, ty) || tile === 7 || structureAt(s, tx, ty) || dist2(p.x, p.y, x, y) < 25 ** 2 ||
       s.containers.some(c => !(c._ground && c.looted && !Object.values(c.items).some(n => n > 0)) && dist2(c.x, c.y, x, y) < 24 ** 2) || dist2(s.goal.radioX, s.goal.radioY, x, y) < 45 ** 2 ||
-      s.zombies.some(z => dist2(z.x, z.y, x, y) < 26 ** 2)) {
-      log(s, 'Aim toward a clear tile beside you to build. Keep doors, supplies, and the radio clear.', 'warn'); return false;
-    }
-    pay(p.inventory, cost); s.structures.push({ x, y, type, health: type === 'barricade' ? 140 : 100 });
-    noise(s, x, y, type === 'barricade' ? 150 : 80, 1);
-    log(s, type === 'barricade' ? 'Barricade built. It slows a group but can be broken.' : 'Campfire built. Rest nearby to heal faster and collect water.', 'good'); return true;
+      s.zombies.some(z => z.health > 0 && dist2(z.x, z.y, x, y) < 26 ** 2) || (s.humans || []).some(h => h.health > 0 && dist2(h.x, h.y, x, y) < 26 ** 2) ||
+      (s.vehicles || []).some(v => dist2(v.x, v.y, x, y) < 45 ** 2)) missing.push('Aim toward a clear adjacent tile');
+    return { can: !missing.length, missing, cost, x, y };
+  }
+  function build(s, type) {
+    const q = buildQuote(s, type);
+    if (!q.can) { if (s && !s.ended) log(s, q.missing.join('. ') + '.', 'warn'); return false; }
+    const bonus = Sirens.Progression ? Math.min(60, Sirens.Progression.level(s, 'craft') * 4 + (Sirens.Progression.known(s, 'shelter') ? 40 : 0)) : 0;
+    pay(s.player.inventory, q.cost); s.structures.push({ x: q.x, y: q.y, type, health: type === 'barricade' ? 140 + bonus : 100 });
+    const text = type === 'barricade' ? 'Barricade built with ' + (140 + bonus) + ' strength. It slows a group but can be broken.' : 'Campfire built. Rest nearby to heal faster and collect water.';
+    if (Sirens.Progression) { Sirens.Progression.gain(s, 'craft', 5); Sirens.Progression.ensure(s).totals.build++; Sirens.Progression.write(s, 'build', text); }
+    else log(s, text, 'good');
+    noise(s, q.x, q.y, type === 'barricade' ? 150 : 80, 1); return true;
   }
 
-  const coreKeys = ['seed', 'difficulty', 'player', 'day', 'time', 'elapsed', 'weather', 'logs', 'goal', 'ended', 'won', 'stats', '_rng', '_nextZombieId', '_nextGroundId', '_aiClock', '_aiCursor', '_exploreClock', '_noiseClock', '_waveClock', '_radioNoiseClock', 'noises', 'particles'];
+  const coreKeys = ['seed', 'difficulty', 'player', 'day', 'time', 'elapsed', 'weather', 'logs', 'goal', 'ended', 'won', 'stats', '_rng', '_nextZombieId', '_nextGroundId', '_aiClock', '_aiCursor', '_exploreClock', '_noiseClock', '_waveClock', '_radioNoiseClock', '_ecologyClock', '_chaosClock', 'noises', 'particles', 'progression', 'settlement', 'personal', 'warfare'];
   function serialize(s) {
     const ground = Sirens.Stories && Sirens.Stories.groundView ? Sirens.Stories.groundView(s) || s : s;
     if (!s.world) {
@@ -841,7 +929,8 @@
       _nextGroundId: optionalNumber(source, '_nextGroundId', 1, 10000000, 1, true),
       _aiClock: optionalNumber(source, '_aiClock', 0, 1, 0), _aiCursor: optionalNumber(source, '_aiCursor', 0, 1000000, 0, true),
       _exploreClock: optionalNumber(source, '_exploreClock', 0, 1, 0), _noiseClock: optionalNumber(source, '_noiseClock', -10, 2, 0),
-      _waveClock: optionalNumber(source, '_waveClock', 0, 35, 0), _radioNoiseClock: optionalNumber(source, '_radioNoiseClock', 0, 4, 0)
+      _waveClock: optionalNumber(source, '_waveClock', 0, 35, 0), _radioNoiseClock: optionalNumber(source, '_radioNoiseClock', 0, 4, 0),
+      _ecologyClock: optionalNumber(source, '_ecologyClock', 0, 45, 0), _chaosClock: optionalNumber(source, '_chaosClock', 0, 12, 0)
     };
     if (openworld) s.world = validatedWorld;
     if (s.tiles.length !== W * H || s.discovered.length !== W * H) fail('world arrays must match the active window');
@@ -865,7 +954,7 @@
       if (c._ground === true) cc._ground = true; s.containers.push(cc);
     }
     const zombieIds = new Set();
-    for (const z of arr(source.zombies, openworld ? 180 : 90, 'zombies')) {
+    for (const z of arr(source.zombies, openworld ? 360 : 90, 'zombies')) {
       const p = point(z, 'zombie'), id = openworld ? str(z.id, 60, 'zombie.id') : num(z.id, 1, 1000000, 'zombie.id', true);
       if (zombieIds.has(id)) fail('duplicate zombie'); zombieIds.add(id);
       if (!['wander', 'investigate', 'chase', 'attack', 'stunned'].includes(z.state)) fail('unknown zombie state');
@@ -943,7 +1032,7 @@
     }
     if (s.player.vehicleId && !carIds.has(s.player.vehicleId)) fail('driver vehicle is missing');
     const humanIds = new Set();
-    for (const h of arr(source.humans || [], 40, 'humans')) {
+    for (const h of arr(source.humans || [], 128, 'humans')) {
       const pos = point(h, 'human'), id = str(h.id, 60, 'human.id');
       if (humanIds.has(id) || !/^h:-?\d{1,3},-?\d{1,3}:\d{1,4}$/.test(id) || !['survivor', 'raider'].includes(h.faction) || !['bat', 'pistol'].includes(h.weapon)) fail('human identity or metadata'); humanIds.add(id);
       s.humans.push({ id, x: pos.x, y: pos.y, angle: num(h.angle, -100, 100, 'human.angle'), health: num(h.health, 0, 100, 'human.health'),
@@ -980,10 +1069,20 @@
     }
     if (openworld && document.order !== undefined) {
       const order = obj(document.order, 'entity order');
-      for (const [name, max] of [['zombies', 180], ['humans', 40]]) {
-        const ids = arr(order[name], max, name + ' order'), byId = new Map(s[name].map(e => [e.id, e])), seen = new Set();
-        if (ids.length !== s[name].length) fail(name + ' order length');
+      for (const [name, max] of [['zombies', 360], ['humans', 128]]) {
+        const ids = arr(order[name], max, name + ' order'), seen = new Set();
+        const ox = s.world.originX * TILE, oy = s.world.originY * TILE;
+        const pool = name === 'humans' ? s.humans.concat((s.world.dormantHumans || []).map(h => Object.assign({}, h, {
+          x: h.x - ox, y: h.y - oy, _targetX: h._targetX - ox, _targetY: h._targetY - oy,
+          _step: h._step ? { x: h._step.x - ox, y: h._step.y - oy } : null }))) : s[name];
+        const byId = new Map(pool.map(e => [e.id, e]));
+        if (name === 'zombies' && ids.length !== s[name].length || name === 'humans' && ids.length < Math.min(max, pool.filter(h => h.health > 0).length)) fail(name + ' order length');
         s[name] = ids.map(id => { if (typeof id !== 'string' || !byId.has(id) || seen.has(id)) fail(name + ' order identity'); seen.add(id); return byId.get(id); });
+        if (name === 'humans') {
+          if (ids.length < max && pool.some(h => h.health > 0 && !seen.has(h.id))) fail('human order omits a living resident');
+          s.world.dormantHumans = pool.filter(h => !seen.has(h.id)).map(h => Object.assign({}, h, { x: h.x + ox, y: h.y + oy,
+            _targetX: h._targetX + ox, _targetY: h._targetY + oy, _step: h._step ? { x: h._step.x + ox, y: h._step.y + oy } : null }));
+        }
       }
     }
     if (document.vehicleHits !== undefined) {
@@ -994,9 +1093,13 @@
       const stories = Sirens.Stories.validate(document.stories, W, H);
       Sirens.Stories.restore(s, stories);
     } else if (Sirens.Stories) Sirens.Stories.refresh(s);
+    if (Sirens.Progression) s.progression = Sirens.Progression.validate(source.progression, s);
+    if (Sirens.Settlement) s.settlement = Sirens.Settlement.validate(source.settlement, s);
+    if (Sirens.Personal) s.personal = Sirens.Personal.validate(source.personal, s);
+    if (Sirens.Warfare) s.warfare = Sirens.Warfare.validate(source.warfare, s);
     return s;
   }
 
   if (Sirens.World) Sirens.World.setTownFactory((seed, difficulty) => create(seed, difficulty, 'rescue'));
-  Sirens.Engine = Object.freeze({ create, update, interact, attack, action, craft, canCraft, build, serialize, deserialize, isSolid, hasLOS, nearby, recipes, items, capacity: CAPACITY, inventoryWeight: weight, carryCapacity });
+  Sirens.Engine = Object.freeze({ create, update, stepParticipant, interact, attack, action, craft, canCraft, craftQuote, build, buildQuote, spawnWanderers, serialize, deserialize, isSolid, hasLOS, nearby, recipes, items, capacity: CAPACITY, inventoryWeight: weight, carryCapacity });
 }());
