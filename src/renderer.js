@@ -13,6 +13,24 @@
     n = Math.imul(n ^ (n >>> 13), 1274126177);
     return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
   }
+  function buildingTheme(b, state) {
+    const name = String(b.name || '').toLowerCase();
+    const type = /clinic|pharmacy|aid/.test(name) ? 'medical' : /grocer|market|store|restaurant|clothing/.test(name) ? 'shop' : /warehouse|depot|distribution/.test(name) ? 'warehouse' : /workshop|machine|garage|maintenance|hardware|ranger shed|tool shed/.test(name) ? 'workshop' : /fuel/.test(name) ? 'fuel' : /barn|farm/.test(name) ? 'barn' : /library|office|police|electronics/.test(name) ? 'office' : /cabin|shed|shelter|camp|ranger/.test(name) ? 'cabin' : 'home';
+    const palettes = {
+      medical: ['#bcc8bc', '#a2b4ae', '#d7dcd0', '#497b72', 'tile'],
+      shop: ['#b49478', '#827969', '#dac3a0', '#a56a4a', 'tile'],
+      warehouse: ['#82918c', '#647878', '#aab7b0', '#a29c63', 'metal'],
+      workshop: ['#82786c', '#72796a', '#b5ad91', '#9caa84', 'brick'],
+      fuel: ['#c0b399', '#777e75', '#ddd1ac', '#a55c48', 'tile'],
+      barn: ['#a3765b', '#807049', '#c5a87b', '#a88b4d', 'plank'],
+      office: ['#a6aea3', '#85938b', '#c7d0ba', '#546e80', 'brick'],
+      cabin: ['#998363', '#7b7155', '#c3b38b', '#657c5b', 'plank'],
+      home: ['#baaa94', '#8d8272', '#dfc7a8', '#8c6969', 'plank']
+    };
+    const gx = b.x + (state.world ? state.world.originX : 0), gy = b.y + (state.world ? state.world.originY : 0), variant = Math.floor(noise(gx, gy, state.seed) * 4), row = palettes[type];
+    const tint = (hex, amount) => '#' + [1, 3, 5].map(i => Math.max(0, Math.min(255, parseInt(hex.slice(i, i + 2), 16) + amount)).toString(16).padStart(2, '0')).join('');
+    return { type, wall: tint(row[0], (variant - 1) * 6), floor: tint(row[1], (variant - 1) * 4), trim: row[2], accent: row[3], material: row[4], variant };
+  }
   function surface(width, height) {
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
@@ -38,6 +56,7 @@
       this.miniCtx = this.minimap ? this.minimap.getContext('2d', { alpha: false }) : null;
       this.width = 1; this.height = 1; this.dpr = 1;
       this.camera = { x: 0, y: 0, ready: false };
+      this.zoom = 1; this.ambientMotion = true;
       this.lastOriginX = 0; this.lastOriginY = 0; this.lastRevision = 0;
       this.lastFloor = 0;
       this.clock = 0; this.lastTime = 0; this.lastMini = -1000;
@@ -135,8 +154,8 @@
       const rect = this.canvas.getBoundingClientRect();
       const camera = this.camera.ready ? this.camera : state.player;
       return {
-        x: (clientX - rect.left) * this.width / Math.max(1, rect.width) + camera.x - this.width / 2,
-        y: (clientY - rect.top) * this.height / Math.max(1, rect.height) + camera.y - this.height / 2
+        x: ((clientX - rect.left) * this.width / Math.max(1, rect.width) - this.width / 2) / this.zoom + camera.x,
+        y: ((clientY - rect.top) * this.height / Math.max(1, rect.height) - this.height / 2) / this.zoom + camera.y
       };
     }
 
@@ -189,26 +208,30 @@
       frameInfo = frameInfo || {};
       const now = performance.now();
       const delta = Math.min(.08, Math.max(.001, this.lastTime ? (now - this.lastTime) / 1000 : 1 / 60));
-      this.lastTime = now; this.clock += delta;
+      this.lastTime = now; if (this.ambientMotion) this.clock += delta;
       const p = state.player;
       this.syncOrigin(state);
       const ease = 1 - Math.exp(-12 * delta);
       this.camera.x += (p.x - this.camera.x) * ease;
       this.camera.y += (p.y - this.camera.y) * ease;
       const worldWidth = state.width * state.tileSize, worldHeight = state.height * state.tileSize;
-      this.camera.x = this.width < worldWidth ? Math.max(this.width / 2 - 24, Math.min(worldWidth - this.width / 2 + 24, this.camera.x)) : worldWidth / 2;
-      this.camera.y = this.height < worldHeight ? Math.max(this.height / 2 - 24, Math.min(worldHeight - this.height / 2 + 24, this.camera.y)) : worldHeight / 2;
-      this.left = Math.floor(this.camera.x - this.width / 2); this.top = Math.floor(this.camera.y - this.height / 2);
-      this.right = this.left + this.width; this.bottom = this.top + this.height;
+      const viewWidth = this.width / this.zoom, viewHeight = this.height / this.zoom;
+      this.camera.x = viewWidth < worldWidth ? Math.max(viewWidth / 2 - 24, Math.min(worldWidth - viewWidth / 2 + 24, this.camera.x)) : worldWidth / 2;
+      this.camera.y = viewHeight < worldHeight ? Math.max(viewHeight / 2 - 24, Math.min(worldHeight - viewHeight / 2 + 24, this.camera.y)) : worldHeight / 2;
+      this.left = Math.floor(this.camera.x - viewWidth / 2); this.top = Math.floor(this.camera.y - viewHeight / 2);
+      this.right = this.left + viewWidth; this.bottom = this.top + viewHeight;
       const ctx = this.ctx;
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = COLORS.fog; ctx.fillRect(0, 0, this.width, this.height);
-      ctx.save(); ctx.translate(-this.left, -this.top);
+      ctx.save(); ctx.scale(this.zoom, this.zoom); ctx.translate(-this.left, -this.top);
+      this.prepareBuildings(state);
       this.drawTerrain(state);
       this.drawBuildingDetails(state);
       this.drawStairs(state);
+      this.drawSettlement(state);
       this.drawSignals(state);
+      this.drawLivingDetails(state);
       const entities = [];
       for (const vehicle of state.vehicles || []) {
         if (this.inView(vehicle.x, vehicle.y, 50) && this.known(state, vehicle.x, vehicle.y)) entities.push({ y: vehicle.y, kind: 'vehicle', data: vehicle });
@@ -216,6 +239,15 @@
       for (const human of state.humans || []) {
         if (human.health <= 0 || !this.inView(human.x, human.y, 35) || !this.known(state, human.x, human.y)) continue;
         entities.push({ y: human.y, kind: 'human', data: human });
+      }
+      if (Sirens.Personal && !(state.stories && state.stories.floor > 0)) {
+        for (const pet of Sirens.Personal.wild(state)) {
+          if (this.inView(pet.x, pet.y, 30) && this.known(state, pet.x, pet.y)) entities.push({ y: pet.y + 3, kind: 'pet', data: pet });
+        }
+        for (const owned of Sirens.Personal.ensure(state).pets) {
+          const pet = Object.assign({}, owned, Sirens.Personal.local(state, owned), { owned: true });
+          if (this.inView(pet.x, pet.y, 30) && this.known(state, pet.x, pet.y)) entities.push({ y: pet.y + 3, kind: 'pet', data: pet });
+        }
       }
       for (const container of state.containers || []) {
         if (this.inView(container.x, container.y) && this.known(state, container.x, container.y)) entities.push({ y: container.y, kind: 'container', data: container });
@@ -227,6 +259,10 @@
         if (zombie.health <= 0 || !this.inView(zombie.x, zombie.y, 30) || !this.known(state, zombie.x, zombie.y)) continue;
         entities.push({ y: zombie.y, kind: 'zombie', data: zombie });
       }
+      for (const peer of state.party || []) {
+        const other = peer.player;
+        if (other && other.health > 0 && this.inView(other.x, other.y, 40)) entities.push({ y: other.y, kind: 'partner', data: peer });
+      }
       entities.push({ y: p.y, kind: 'player', data: p });
       for (const tree of this.visibleTrees) entities.push({ y: tree.y + 14, kind: 'tree', data: tree });
       entities.sort((a, b) => a.y - b.y);
@@ -236,17 +272,44 @@
         else if (entity.kind === 'container') this.drawContainer(entity.data, state);
         else if (entity.kind === 'vehicle') this.drawVehicle(entity.data, state);
         else if (entity.kind === 'human') this.drawHuman(entity.data, state);
+        else if (entity.kind === 'partner') this.drawPartner(entity.data, state);
+        else if (entity.kind === 'pet') this.drawPet(entity.data, state);
         else if (entity.kind === 'tree') this.drawTree(entity.data, state);
         else this.drawStructure(entity.data);
       }
       this.drawRoofs(state);
       this.drawParticles(state);
-      this.drawInteraction(state);
       ctx.restore();
       this.drawLighting(state);
       this.drawWeather(state);
       ctx.fillStyle = this.vignette; ctx.fillRect(0, 0, this.width, this.height);
+      this.drawWaypoint(state);
       this.drawMinimap(state, now);
+    }
+
+    prepareBuildings(state) {
+      if (this.buildingSource === state.buildings) return;
+      this.buildingSource = state.buildings; this.buildingTiles = new Map(); this.themes = new Map();
+      for (const b of state.buildings || []) {
+        const theme = buildingTheme(b, state); this.themes.set(b, theme);
+        for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) this.buildingTiles.set(y * state.width + x, theme);
+      }
+    }
+
+    drawInterior(state, tx, ty, theme) {
+      const c = this.ctx, s = state.tileSize, x = tx * s, y = ty * s;
+      c.fillStyle = theme.floor; c.fillRect(x, y, s, s);
+      if (theme.material === 'plank') {
+        c.strokeStyle = '#423b3340'; c.lineWidth = 1;
+        for (let yy = 0; yy < s; yy += 8) { c.beginPath(); c.moveTo(x, y + yy + .5); c.lineTo(x + s, y + yy + .5); c.stroke(); }
+        c.fillStyle = '#d9c39822'; c.fillRect(x + (ty % 2 ? 14 : 4), y + 1, 1, 31);
+      } else if (theme.material === 'tile') {
+        c.fillStyle = (tx + ty + theme.variant) % 2 ? '#f6f0da14' : '#14291f14'; c.fillRect(x + 1, y + 1, s - 2, s - 2);
+        c.strokeStyle = '#dddec02c'; c.lineWidth = 1; c.strokeRect(x + .5, y + .5, s - 1, s - 1);
+      } else {
+        c.fillStyle = '#dedaca12'; c.fillRect(x + 5, y + 7, 2, 1); c.fillRect(x + 21, y + 25, 3, 1);
+        if (theme.material === 'metal') { c.fillStyle = '#d4cc8644'; c.fillRect(x + 1, y + s - 3, s - 2, 1); }
+      }
     }
 
     drawTerrain(state) {
@@ -287,11 +350,45 @@
           if (this.tile(state, x, y - 1) !== 4) { ctx.fillStyle = '#66745a'; ctx.fillRect(xx, yy, s, 3); }
           if (this.tile(state, x - 1, y) !== 4) { ctx.fillStyle = '#4b6855'; ctx.fillRect(xx, yy, 3, s); }
         } else {
-          ctx.drawImage(this.floorSprites[variant], xx, yy, s, s);
+          const theme = this.buildingTiles.get(index);
+          if (theme) this.drawInterior(state, x, y, theme); else ctx.drawImage(this.floorSprites[variant], xx, yy, s, s);
           if (tile === 3) { this.drawWall(state, x, y); this.drawTerrainDamage(state, index, xx + s / 2, yy + s / 2); }
           else if (tile === 6 || tile === 7) this.drawDoor(state, x, y, tile === 7);
           else if (tile === 8 || tile === 9) this.drawWindow(state, x, y, tile === 9);
         }
+      }
+    }
+
+    drawLivingDetails(state) {
+      if (state.stories && state.stories.floor > 0) return;
+      const c = this.ctx, t = this.clock, s = state.tileSize;
+      // This scenery uses the presentation clock and a fixed hash, never simulation random draws.
+      if (state.time >= 6 && state.time < 19) {
+        const travel = (t * 38) % 900;
+        for (let i = 0; i < 3; i++) {
+          const x = this.left + travel - 60 + i * 21, y = this.top + 170 + Math.sin(t * .3) * 70 + i * 8;
+          c.strokeStyle = '#152c28b0'; c.lineWidth = 2; c.beginPath(); const flap = Math.sin(t * 9 + i) * 4;
+          c.moveTo(x - 5, y + flap); c.lineTo(x, y); c.lineTo(x + 5, y + flap); c.stroke();
+        }
+      }
+      const minX = Math.max(0, Math.floor(this.left / s)), maxX = Math.min(state.width, Math.ceil(this.right / s)), minY = Math.max(0, Math.floor(this.top / s)), maxY = Math.min(state.height, Math.ceil(this.bottom / s));
+      for (let ty = minY; ty < maxY; ty++) for (let tx = minX; tx < maxX; tx++) {
+        const tile = this.tile(state, tx, ty), n = noise(tx + this.lastOriginX, ty + this.lastOriginY, state.seed);
+        if (tile === 4 && n < .15) { c.strokeStyle = '#90b2a441'; c.lineWidth = 1; c.beginPath(); c.ellipse((tx + .5) * s, (ty + .5) * s, 4 + (t + n * 9) % 8, 2 + (t + n * 9) % 4, 0, 0, TAU); c.stroke(); }
+        if (tile === 0 && n < .045) {
+          const x = (tx + .5) * s, y = (ty + .5) * s;
+          if (state.time >= 19 || state.time < 6) { c.fillStyle = '#dce790' + (Math.sin(t * 2 + n * 600) > .1 ? 'b0' : '25'); c.fillRect(x + Math.sin(t + n * 900) * 7, y + Math.cos(t * .7 + n * 800) * 5, 2, 2); }
+          else { c.fillStyle = n < .02 ? '#bea776' : '#819d77'; c.fillRect(x + Math.sin(t * 1.1 + n * 400) * 8, y + Math.cos(t + n * 100) * 6, 2, 2); }
+        }
+      }
+      for (const b of state.buildings || []) {
+        const theme = this.themes.get(b), home = state.settlement && state.settlement.home;
+        if (!theme || !['home', 'cabin'].includes(theme.type) || !home) continue;
+        const hx = home.x - (state.world ? state.world.originX * s : 0), hy = home.y - (state.world ? state.world.originY * s : 0);
+        if (hx < b.x * s || hx >= (b.x + b.w) * s || hy < b.y * s || hy >= (b.y + b.h) * s) continue;
+        const x = (b.x + b.w - 1) * s - 14, y = b.y * s + 12;
+        for (let i = 0; i < 4; i++) { const age = (t * .6 + i * .7) % 3; c.globalAlpha = (3 - age) * .085; ellipse(c, x + Math.sin(t + i) * age * 4, y - age * 18, 3 + age * 2, 2 + age, '#e3dfcc'); }
+        c.globalAlpha = 1;
       }
     }
 
@@ -316,14 +413,18 @@
     }
 
     drawWall(state, tx, ty) {
-      const c = this.ctx, s = state.tileSize, x = tx * s, y = ty * s;
-      c.fillStyle = '#3e473d'; c.fillRect(x + 3, y + 5, s - 1, s);
-      c.fillStyle = '#9a9e83'; c.fillRect(x + 2, y + 1, s - 4, s - 2);
-      c.fillStyle = COLORS.wall; c.fillRect(x + 2, y + 1, s - 4, 6);
-      c.fillStyle = '#697562'; c.fillRect(x + 2, y + s - 6, s - 4, 5);
-      c.fillStyle = '#b1b49a'; c.fillRect(x + 3, y + 9, s - 6, 12);
-      c.strokeStyle = '#969d83'; c.lineWidth = 1; c.beginPath(); c.moveTo(x + 3, y + 20); c.lineTo(x + s - 3, y + 20); c.stroke();
-      if (this.tile(state, tx - 1, ty) !== 3) { c.fillStyle = '#d2c8a7'; c.fillRect(x + 2, y + 2, 3, s - 8); }
+      const c = this.ctx, s = state.tileSize, x = tx * s, y = ty * s, theme = this.buildingTiles.get(ty * state.width + tx) || { wall: '#9a9e83', trim: COLORS.wall, material: 'brick', accent: '#697562' };
+      c.fillStyle = '#253229'; c.fillRect(x + 3, y + 5, s - 1, s);
+      c.fillStyle = theme.wall; c.fillRect(x + 2, y + 1, s - 4, s - 2);
+      c.fillStyle = theme.trim; c.fillRect(x + 2, y + 1, s - 4, 5);
+      c.fillStyle = theme.accent; c.fillRect(x + 2, y + s - 6, s - 4, 4);
+      c.strokeStyle = '#243a3045'; c.lineWidth = 1;
+      if (theme.material === 'plank' || theme.material === 'metal') {
+        for (let i = 7; i < s - 4; i += theme.material === 'metal' ? 4 : 7) { c.beginPath(); c.moveTo(x + i, y + 7); c.lineTo(x + i, y + s - 7); c.stroke(); }
+      } else if (theme.material === 'brick') {
+        for (let i = 10; i < s - 5; i += 7) { c.beginPath(); c.moveTo(x + 3, y + i); c.lineTo(x + s - 3, y + i); c.moveTo(x + (i % 2 ? 11 : 21), y + i); c.lineTo(x + (i % 2 ? 11 : 21), y + i + 6); c.stroke(); }
+      } else { c.fillStyle = '#edf0d21a'; c.fillRect(x + 4, y + 8, s - 8, 8); }
+      if (this.tile(state, tx - 1, ty) !== 3) { c.fillStyle = theme.trim; c.fillRect(x + 2, y + 2, 3, s - 8); }
     }
 
     drawDoor(state, tx, ty, open) {
@@ -389,42 +490,78 @@
       }
     }
 
+    drawSettlement(state) {
+      const B = Sirens.Settlement;
+      if (!B || state.stories && state.stories.floor > 0) return;
+      const c = this.ctx, b = B.ensure(state), ox = state.world ? state.world.originX * 32 : 0, oy = state.world ? state.world.originY * 32 : 0;
+      const deposits = B.nodes(state, { minX: Math.max(0, Math.floor(this.left / 32)), minY: Math.max(0, Math.floor(this.top / 32)), maxX: Math.min(state.width, Math.ceil(this.right / 32)), maxY: Math.min(state.height, Math.ceil(this.bottom / 32)) });
+      for (const node of deposits) {
+        const x = node.x, y = node.y;
+        ellipse(c, x + 2, y + 7, 14, 7, '#14291d80');
+        c.fillStyle = '#53685b'; c.beginPath(); c.moveTo(x - 13, y + 4); c.lineTo(x - 9, y - 8); c.lineTo(x + 1, y - 14); c.lineTo(x + 11, y - 6); c.lineTo(x + 14, y + 5); c.lineTo(x + 4, y + 10); c.closePath(); c.fill();
+        c.strokeStyle = '#9ca795'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x - 8, y - 7); c.lineTo(x + 1, y - 11); c.lineTo(x + 9, y - 5); c.stroke();
+        c.fillStyle = node.type === 'iron' ? '#a8b3b5' : node.type === 'copper' ? '#cd9869' : '#85977e';
+        c.fillRect(x - 4, y - 5, 5, 4); c.fillRect(x + 3, y + 1, 5, 4); c.fillRect(x - 7, y + 3, 3, 3);
+        if (Math.hypot(x - state.player.x, y - state.player.y) < 100) {
+          c.fillStyle = '#172a20ed'; c.fillRect(x - 42, y - 33, 84, 15); c.fillStyle = '#ded3ae'; c.font = '600 8px ui-monospace, monospace'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(node.type.toUpperCase() + ' · ' + Math.ceil(node.health) + ' HP', x, y - 25);
+        }
+      }
+      for (const plot of b.plots) {
+        const x = plot.x - ox, y = plot.y - oy;
+        if (!this.inView(x, y, 40)) continue;
+        c.fillStyle = plot.moisture > 0 ? '#534b33' : '#6a5a3c'; roundRect(c, x - 14, y - 14, 28, 28, 3); c.fill();
+        c.strokeStyle = '#938459'; c.lineWidth = 1; for (const yy of [-8, 0, 8]) { c.beginPath(); c.moveTo(x - 11, y + yy); c.lineTo(x + 11, y + yy); c.stroke(); }
+        const mature = plot.progress >= 90, size = Math.max(3, Math.min(8, 3 + plot.progress / 18));
+        for (const xx of [-6, 6]) for (const yy of [-6, 6]) { if (mature) { c.fillStyle = '#d39750'; c.fillRect(x + xx - 2, y + yy, 4, 5); } c.strokeStyle = mature ? '#a6bd73' : '#8aaa68'; c.lineWidth = 2; c.beginPath(); c.moveTo(x + xx, y + yy + 1); c.lineTo(x + xx - size / 2, y + yy - size); c.moveTo(x + xx, y + yy + 1); c.lineTo(x + xx + size / 2, y + yy - size + 1); c.stroke(); }
+        c.fillStyle = '#17271f'; c.fillRect(x - 12, y + 17, 24, 3); c.fillStyle = mature ? '#edc888' : '#a0bb78'; c.fillRect(x - 12, y + 17, 24 * Math.min(1, plot.progress / 90), 3);
+      }
+      if (b.home) {
+        const x = b.home.x - ox, y = b.home.y - oy;
+        if (this.inView(x, y, 40)) { c.strokeStyle = '#d5c486'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y + 8); c.lineTo(x, y - 23); c.stroke(); c.fillStyle = '#c9c180'; c.beginPath(); c.moveTo(x, y - 23); c.lineTo(x + 15, y - 18); c.lineTo(x, y - 12); c.closePath(); c.fill(); }
+      }
+    }
+
     drawBuildingDetails(state) {
       const c = this.ctx, s = state.tileSize;
+      const box = (x, y, w, h, color) => { c.fillStyle = '#15271c55'; c.fillRect(x + 2, y + 3, w, h); c.fillStyle = color; c.fillRect(x, y, w, h); c.fillStyle = '#f1e5b532'; c.fillRect(x + 1, y + 1, w - 2, 2); };
+      const shelf = (x, y, w, color, seed) => { box(x, y, w, 14, color); for (let i = 4; i < w - 4; i += 8) { c.fillStyle = ['#c6a66e', '#7a9982', '#a77e6f', '#a9b4a0'][(i + seed) % 4]; c.fillRect(x + i, y + 4, 5, 7); } };
       for (const b of state.buildings || []) {
-        const x = b.x * s, y = b.y * s, w = b.w * s, h = b.h * s;
-        if (!this.inView(x + w / 2, y + h / 2, Math.max(w, h)) || !this.known(state, x + w / 2, y + h / 2)) continue;
+        const x = b.x * s, y = b.y * s, w = b.w * s, h = b.h * s, t = this.themes.get(b);
+        if (!this.inView(x + w / 2, y + h / 2, Math.max(w, h)) || !t) continue;
+        const left = x + s + 5, right = x + w - s - 5, top = y + s + 5, bottom = y + h - s - 5;
         c.save();
-        c.fillStyle = '#374c3866'; c.fillRect(x + s + 4, y + s + 6, Math.max(8, w - s * 2 - 8), Math.max(8, h - s * 2 - 12));
-        const name = String(b.name || '').toLowerCase();
-        if (/warehouse|workshop|depot|barn/i.test(name)) {
-          for (let yy = y + s + 6; yy < y + h - s - 20; yy += 26) {
-            c.fillStyle = name.includes('barn') ? '#9b8955' : '#738176'; c.fillRect(x + s + 6, yy, 34, 17);
-            c.fillStyle = name.includes('barn') ? '#c6b77a' : '#a2aea0'; c.fillRect(x + s + 6, yy, 34, 3);
-            c.fillStyle = '#526c55'; c.fillRect(x + s + 12, yy + 5, 11, 9);
-            c.fillStyle = '#9c966b'; c.fillRect(x + s + 25, yy + 6, 8, 7);
-          }
-        }
-        if (name.includes('cabin') || name.includes('home') || name.includes('house')) {
-          // Original furnishings use a modest top-down silhouette, with clear walkways.
-          c.fillStyle = '#3c4c48'; c.fillRect(x + s + 4, y + s + 6, 27, 44);
-          c.fillStyle = '#bcb591'; c.fillRect(x + s + 6, y + s + 8, 23, 10);
-          c.fillStyle = '#607b71'; c.fillRect(x + s + 6, y + s + 22, 23, 25);
-          c.fillStyle = '#729082'; c.fillRect(x + s + 6, y + s + 22, 23, 3);
-          c.fillStyle = '#5a523b'; c.fillRect(x + w - s - 40, y + s + 7, 31, 17);
-          c.fillStyle = '#998363'; c.fillRect(x + w - s - 40, y + s + 5, 31, 15);
-          c.fillStyle = '#d0c29a'; c.fillRect(x + w - s - 31, y + s + 8, 9, 7);
+        // Furnishings are original visual details, kept against walls to leave clear routes.
+        if (t.type === 'home' || t.type === 'cabin') {
+          const bedX = t.variant % 2 ? right - 30 : left;
+          box(bedX, top, 28, 47, '#535f52'); box(bedX + 2, top + 3, 24, 10, '#d8c7a5'); box(bedX + 2, top + 18, 24, 27, t.accent);
+          shelf(t.variant % 2 ? left : right - 64, top, 60, '#9a8769', t.variant);
+          box(right - 62, bottom - 36, 52, 24, t.accent); box(right - 60, bottom - 38, 48, 6, '#b5aa80');
+          c.fillStyle = '#b48b6450'; c.fillRect(x + w / 2 - 35, y + h / 2 + 15, 70, 35); c.strokeStyle = '#dcc09d55'; c.strokeRect(x + w / 2 - 32, y + h / 2 + 18, 64, 29);
+          if (t.type === 'home') { box(left, bottom - 22, 32, 18, '#b8bba5'); c.fillStyle = '#547d7c'; c.fillRect(left + 5, bottom - 17, 12, 8); }
+        } else if (t.type === 'medical') {
+          for (let i = 0; i < 2; i++) { box(left + i * 44, top + 25, 27, 49, '#bcc8bc'); c.fillStyle = '#d5dbce'; c.fillRect(left + 3 + i * 44, top + 28, 21, 11); c.fillStyle = '#6c978e'; c.fillRect(left + 3 + i * 44, top + 45, 21, 25); }
+          shelf(right - 74, top, 70, '#afbeb4', 2); box(right - 38, bottom - 25, 34, 18, '#a6b8b1');
+          c.fillStyle = '#efe1b5'; c.fillRect(x + w / 2 - 3, y + 7, 6, 16); c.fillRect(x + w / 2 - 8, y + 12, 16, 6);
+        } else if (t.type === 'shop') {
+          shelf(left, top, Math.min(110, right - left), '#8d8767', 3); shelf(right - 68, top + 45, 64, '#a89771', 1);
+          shelf(left, bottom - 19, Math.min(85, right - left), '#a99574', 0); box(right - 42, bottom - 32, 36, 23, '#897e65'); box(right - 38, bottom - 29, 13, 10, '#424e48');
+          c.fillStyle = t.accent; for (let i = 0; i < w - 12; i += 18) c.fillRect(x + 6 + i, y + h - 7, Math.min(9, w - 12 - i), 7);
+        } else if (t.type === 'warehouse' || t.type === 'barn') {
+          for (let yy = top; yy < bottom - 28; yy += 43) { shelf(left, yy, 66, '#9b896b', 2); box(right - 48, yy + 5, 40, 25, '#9a825d'); c.strokeStyle = '#d2b988'; c.strokeRect(right - 45, yy + 8, 34, 19); }
+          c.strokeStyle = '#d0bd7550'; c.setLineDash([7, 4]); c.strokeRect(x + w / 2 - 32, top + 20, 64, h - s * 2 - 45); c.setLineDash([]);
+          if (t.type === 'barn') { c.fillStyle = '#dac787'; for (let i = 0; i < 5; i++) c.fillRect(right - 44 + i * 7, bottom - 12, 4, 8); }
+        } else if (t.type === 'workshop') {
+          shelf(left, top, Math.min(120, right - left), '#818b7b', 3); box(right - 40, top + 34, 35, 32, '#889892'); c.fillStyle = '#263e39'; c.fillRect(right - 31, top + 42, 19, 14);
+          box(left, bottom - 26, 70, 20, '#917f5c'); c.fillStyle = '#b6bba4'; c.fillRect(left + 10, bottom - 21, 20, 4); c.fillRect(left + 32, bottom - 18, 4, 10);
+        } else if (t.type === 'fuel') {
+          shelf(left, top, 80, '#a69875', 0); box(right - 43, top + 35, 35, 40, '#98a8a4'); c.fillStyle = '#527571'; c.fillRect(right - 40, top + 40, 29, 30);
+          box(right - 70, bottom - 28, 64, 20, '#a29a7b'); box(right - 65, bottom - 25, 15, 11, '#3c524d');
         } else {
-          c.fillStyle = '#535743'; c.fillRect(x + s + 5, y + s + 7, Math.min(w - s * 2 - 10, 66), 15);
-          c.fillStyle = '#aba582'; c.fillRect(x + s + 5, y + s + 5, Math.min(w - s * 2 - 10, 66), 11);
-          c.fillStyle = '#65736b'; c.fillRect(x + s + 11, y + s + 7, 12, 7);
-          c.fillStyle = '#b3a670'; c.fillRect(x + s + 32, y + s + 8, 9, 6);
-          if (w > 170 && h > 150) {
-            c.fillStyle = '#5b5f47'; c.fillRect(x + w / 2 - 22, y + h / 2 - 15, 48, 25);
-            c.fillStyle = '#ad9c73'; c.fillRect(x + w / 2 - 24, y + h / 2 - 18, 48, 25);
-            c.fillStyle = '#cfbd8b'; c.fillRect(x + w / 2 - 21, y + h / 2 - 17, 42, 2);
-          }
+          shelf(left, top, Math.min(100, right - left), '#8d917b', 1); box(right - 55, top + 30, 48, 30, '#a29170'); box(right - 48, top + 34, 18, 12, '#486e73'); box(left, bottom - 30, 38, 23, '#657b7a');
         }
+        // Small fixtures and weathering make each facade distinct without hiding its interior.
+        const ventX = x + w - 24; box(ventX, y + 8, 16, 14, '#7c8b7e'); c.strokeStyle = '#3d514a'; for (let i = 3; i < 13; i += 3) { c.beginPath(); c.moveTo(ventX + 3, y + 8 + i); c.lineTo(ventX + 13, y + 8 + i); c.stroke(); }
+        if (t.variant === 0 || t.type === 'cabin') { c.fillStyle = '#344f37'; c.fillRect(x + 5, y + h - 25, 14, 14); c.fillStyle = '#8eac6e'; c.fillRect(x + 7, y + h - 24, 10, 8); }
         c.restore();
       }
     }
@@ -457,8 +594,8 @@
           c.font = '600 9px ui-monospace, SFMono-Regular, Menlo, monospace';
           c.textAlign = 'center'; c.textBaseline = 'middle';
           const signWidth = Math.min(w - 14, c.measureText(label).width + 16);
-          c.fillStyle = '#15282de8'; c.fillRect(x + w / 2 - signWidth / 2, y + h - 19, signWidth, 17);
-          c.fillStyle = '#b5bea2'; c.fillText(label, x + w / 2, y + h - 10, signWidth - 8);
+          c.fillStyle = this.themes.get(b).accent; c.fillRect(x + w / 2 - signWidth / 2, y + h - 19, signWidth, 17);
+          c.fillStyle = '#f2ebcd'; c.fillText(label, x + w / 2, y + h - 10, signWidth - 8);
         }
         c.restore();
       }
@@ -540,9 +677,9 @@
       }
     }
 
-    drawPlayer(player, state) {
+    drawPlayer(player, state, partner) {
       const c = this.ctx, x = Math.floor(player.x), y = Math.floor(player.y), angle = player.angle || 0;
-      const pose = Sirens.Effects ? Sirens.Effects.pose(state) : { stride: 0, attack: null };
+      const pose = !partner && Sirens.Effects ? Sirens.Effects.pose(state) : { stride: 0, attack: null };
       const attack = pose.attack;
       const id = attack ? attack.weapon : player.weapon;
       const items = Sirens.Engine && Sirens.Engine.items || {};
@@ -550,6 +687,7 @@
       const firearm = weapon ? weapon.kind === 'firearm' : id === 'pistol';
       const equipment = player.equipment || {};
       const clothing = items[equipment.clothing], backpack = items[equipment.backpack];
+      const appearance = partner && partner.look || (Sirens.Personal ? Sirens.Personal.look(state) : { skin: '#ddbc88', hair: '#382e26', coat: '#a99b69', hat: 'none' });
       const vehicle = (state.vehicles || []).find((car) => car.id === player.vehicleId);
       if (vehicle) {
         c.strokeStyle = '#e4d08d99'; c.lineWidth = 1; c.beginPath(); c.ellipse(vehicle.x, vehicle.y, 29, 19, vehicle.angle || 0, 0, TAU); c.stroke();
@@ -570,12 +708,12 @@
         c.beginPath(); c.arc(10, 2, Math.min(54, (weapon && weapon.range || 70) * .55), sweep - .65, sweep); c.stroke(); c.restore();
       }
       c.fillStyle = '#1b343a'; c.fillRect(-6 + stride, -9, 9, 6); c.fillRect(-6 - stride, 4, 9, 6);
-      c.fillStyle = clothing && clothing.color || '#a99b69'; c.fillRect(-8, -8, 13, 16);
-      c.fillStyle = clothing ? '#d9ddac85' : '#d5bd75'; c.fillRect(-8, -8, 13, 4); c.fillRect(-5, -3, 13, 6);
+      c.fillStyle = appearance.coat; c.fillRect(-8, -8, 13, 16);
+      c.fillStyle = clothing && clothing.color || '#d5bd75'; c.fillRect(-8, -8, 13, 3); c.fillRect(-5, -3, 13, 6);
       c.fillStyle = backpack && backpack.color || '#6c6e47'; c.fillRect(-10, -5, backpack ? 8 : 5, 10);
-      c.fillStyle = '#d6b78a'; c.fillRect(5 - recoil, -7, 9, 4);
+      c.fillStyle = appearance.skin; c.fillRect(5 - recoil, -7, 9, 4);
       c.save(); c.translate(10 - recoil + (thrust ? stroke * 12 : 0), 3); c.rotate(relativeAim + (firearm || thrust ? 0 : sweep));
-      c.fillStyle = '#d6b78a'; c.fillRect(-4, -2, 11, 4);
+      c.fillStyle = appearance.skin; c.fillRect(-4, -2, 11, 4);
       if (firearm) {
         const length = weapon && weapon.range > 300 ? 21 : 11;
         c.fillStyle = '#142b32'; c.fillRect(3, -4, length, 4); c.fillRect(5, -2, 4, 6);
@@ -587,16 +725,18 @@
         const length = weapon && weapon.range > 100 ? 37 : weapon && weapon.range < 55 ? 16 : 27;
         c.fillStyle = '#766e4c'; c.fillRect(2, -1, length, 4);
         if (/axe|hatchet/.test(id)) { c.fillStyle = '#d1d9bf'; c.fillRect(length - 5, -8, 9, 14); c.fillStyle = '#eef1d3'; c.fillRect(length + 2, -7, 2, 12); }
-        else if (/hammer|pickaxe/.test(id)) { c.fillStyle = '#a9b5ae'; c.fillRect(length - 4, -7, 10, 13); }
+        else if (/pick/.test(id)) { c.strokeStyle = id === 'iron_pick' ? '#c4d1c4' : '#93a58e'; c.lineWidth = 4; c.beginPath(); c.moveTo(length - 2, -10); c.quadraticCurveTo(length + 7, -3, length - 2, 10); c.stroke(); }
+        else if (/hammer/.test(id)) { c.fillStyle = '#a9b5ae'; c.fillRect(length - 4, -7, 10, 13); }
         else if (/machete|katana|knife|dagger/.test(id)) { c.fillStyle = '#d5dec4'; c.fillRect(9, -3, length - 6, 6); c.fillStyle = '#f3f2d3'; c.fillRect(10, -3, length - 8, 1); }
         else if (thrust) { c.fillStyle = '#d5dec4'; c.beginPath(); c.moveTo(length + 8, 1); c.lineTo(length - 2, -3); c.lineTo(length - 2, 5); c.closePath(); c.fill(); }
         else { c.fillStyle = '#d6c28c'; c.fillRect(10, -2, length - 5, 6); c.fillStyle = '#e9d7a3'; c.fillRect(11, -2, length - 7, 1); }
       }
       c.restore();
-      c.fillStyle = '#593f2d'; c.fillRect(-6, -6, 12, 12);
-      c.fillStyle = '#b99064'; c.fillRect(0, -4, 8, 8);
-      c.fillStyle = '#ddbc88'; c.fillRect(6, -3, 3, 6);
-      c.fillStyle = '#382e26'; c.fillRect(-5, -6, 8, 5); c.fillRect(-6, -2, 3, 6);
+      c.fillStyle = appearance.hair; c.fillRect(-6, -6, 12, 12);
+      c.fillStyle = appearance.skin; c.fillRect(0, -4, 8, 8); c.fillRect(6, -3, 3, 6);
+      c.fillStyle = appearance.hair; c.fillRect(-5, -6, 8, 5); c.fillRect(-6, -2, 3, 6);
+      if (appearance.hat === 'cap') { c.fillStyle = appearance.hatColor; c.fillRect(-7, -7, 11, 14); c.fillRect(4, -5, 6, 10); c.fillStyle = '#d3d69f66'; c.fillRect(-6, -6, 8, 2); }
+      else if (appearance.hat === 'beanie') { c.fillStyle = appearance.hatColor; c.fillRect(-7, -7, 12, 14); c.fillStyle = '#e7d8a988'; c.fillRect(2, -7, 3, 14); c.fillRect(-8, -2, 2, 4); }
       c.restore();
       if (player.bleeding > 0) { c.fillStyle = '#b96753'; c.fillRect(x - 2, y + 14, 3, 2); }
       c.strokeStyle = '#e4d08d'; c.lineWidth = 1; c.beginPath();
@@ -629,6 +769,13 @@
       }
     }
 
+    drawPartner(peer, state) {
+      const p = peer.player; this.drawPlayer(p, state, peer);
+      const c = this.ctx; c.save(); c.font = 'bold 10px monospace'; c.textAlign = 'center';
+      c.fillStyle = '#9ce5dc'; c.fillText(String(peer.name || 'Survivor').slice(0, 24), p.x, p.y - 30, 140);
+      c.fillStyle = '#152d26'; c.fillRect(p.x - 16, p.y - 25, 32, 3); c.fillStyle = '#a9d794'; c.fillRect(p.x - 16, p.y - 25, 32 * Math.max(0, Math.min(1, p.health / 100)), 3); c.restore();
+    }
+
     drawHuman(human, state) {
       const c = this.ctx, x = Math.floor(human.x), y = Math.floor(human.y), angle = Number(human.angle) || 0;
       const hostile = /raider|hostile/i.test(human.faction || '');
@@ -655,11 +802,37 @@
       if (distance < 160) {
         c.save(); c.font = '600 9px ui-monospace, SFMono-Regular, Menlo, monospace'; c.textAlign = 'center';
         c.fillStyle = hostile ? '#f2b797' : '#cadfc2';
-        c.fillText(String(human.name || (hostile ? 'Raider' : 'Survivor')) + (human.following ? ' · following' : ''), x, y - 30, 125); c.restore();
+        c.fillText(String(human.name || (hostile ? 'Raider' : 'Survivor')) + (human.following ? ' · ' + ((state.settlement && state.settlement.jobs[human.id] && state.settlement.jobs[human.id].role) || 'following') : ''), x, y - 30, 125);
+        if (Sirens.Actors && Sirens.Actors.activity) { c.font = '8px monospace'; c.fillStyle = '#e1d2a5'; c.fillText(Sirens.Actors.activity(state, human), x, y - 40, 145); } c.restore();
       }
       if (human.health < 80) {
         c.fillStyle = '#16302a'; c.fillRect(x - 9, y + 15, 18, 3);
         c.fillStyle = hostile ? '#c28a70' : '#acc593'; c.fillRect(x - 9, y + 15, Math.max(1, Math.round(18 * human.health / 100)), 2);
+      }
+    }
+
+    drawPet(pet, state) {
+      const c = this.ctx, x = Math.floor(pet.x), y = Math.floor(pet.y), dog = pet.kind === 'dog';
+      const variant = String(pet.id).split('').reduce((n, letter) => n + letter.charCodeAt(0), 0) % 3;
+      const fur = dog ? ['#aa895b', '#c1aa80', '#797969'][variant] : ['#a59478', '#bac1b0', '#787b76'][variant];
+      const stride = pet.moving ? Math.sin(state.elapsed * 16) * 2 : 0, wag = Math.sin(this.clock * (dog ? 7 : 2)) * (pet.owned ? 3 : 1.4);
+      ellipse(c, x, y + 5, dog ? 13 : 10, 4, '#0d211d85');
+      c.save(); c.translate(x, y); c.rotate(pet.angle || 0);
+      c.strokeStyle = fur; c.lineWidth = dog ? 3 : 2; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(-8, 0); c.quadraticCurveTo(-15, -3 + wag, -18, dog ? -5 + wag : -9 + wag); c.stroke();
+      c.fillStyle = '#514d3d'; c.fillRect(-8 + stride, -7, 4, 4); c.fillRect(3 - stride, -7, 4, 4); c.fillRect(-8 - stride, 4, 4, 4); c.fillRect(3 + stride, 4, 4, 4);
+      c.fillStyle = fur; roundRect(c, -10, -5, dog ? 19 : 17, 10, 3); c.fill();
+      c.fillStyle = '#dfceb0'; c.fillRect(-7, -3, 8, 3); c.fillRect(-3, 2, 7, 2);
+      c.fillStyle = fur; c.fillRect(dog ? 6 : 5, -5, dog ? 9 : 8, 10);
+      if (dog) { c.fillStyle = '#69533a'; c.fillRect(6, -8, 5, 4); c.fillRect(6, 4, 5, 4); c.fillStyle = '#d5c39b'; c.fillRect(12, -3, 6, 6); }
+      else { c.fillStyle = fur; c.beginPath(); c.moveTo(5, -4); c.lineTo(8, -9); c.lineTo(11, -4); c.moveTo(5, 4); c.lineTo(8, 9); c.lineTo(11, 4); c.fill(); c.fillStyle = '#c8a999'; c.fillRect(8, -6, 2, 2); c.fillRect(8, 4, 2, 2); }
+      c.fillStyle = '#1c2722'; c.fillRect(11, -3, 2, 2); c.fillRect(11, 2, 2, 2); c.fillRect(dog ? 17 : 13, -1, 2, 2);
+      if (pet.owned) { c.fillStyle = '#9fc5a5'; c.fillRect(5, -5, 2, 10); c.fillStyle = '#e0cf8a'; c.fillRect(6, 4, 2, 2); }
+      c.restore();
+      if (Math.hypot(pet.x - state.player.x, pet.y - state.player.y) < (pet.owned ? 150 : 85)) {
+        c.save(); c.textAlign = 'center'; c.font = '600 9px ui-monospace, SFMono-Regular, Menlo, monospace';
+        const text = pet.owned ? pet.name : 'Stray ' + pet.kind;
+        const width = c.measureText(text).width + 10; c.fillStyle = '#14271dd9'; c.fillRect(x - width / 2, y - 28, width, 13); c.fillStyle = pet.owned ? '#d3dfb8' : '#ded0a0'; c.fillText(text, x, y - 18); c.restore();
       }
     }
 
@@ -706,17 +879,26 @@
       }
     }
 
-    drawInteraction(state) {
-      if (!Sirens.Engine || typeof Sirens.Engine.nearby !== 'function') return;
-      const label = Sirens.Engine.nearby(state);
-      if (!label) return;
-      const c = this.ctx, p = state.player;
-      c.save(); c.font = '600 10px ui-monospace, SFMono-Regular, Menlo, monospace';
-      const text = 'E  ' + String(label), w = Math.min(270, c.measureText(text).width + 20);
-      const x = Math.max(this.left + 12, Math.min(this.right - w - 12, p.x - w / 2)), y = p.y + 34;
-      c.fillStyle = '#122d2de8'; roundRect(c, x, y, w, 24, 4); c.fill();
-      c.strokeStyle = '#d1bd7950'; c.lineWidth = 1; c.stroke();
-      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#e2d1a2'; c.fillText(text, x + w / 2, y + 12, w - 12); c.restore();
+    drawWaypoint(state) {
+      const point = Sirens.Progression && Sirens.Progression.waypoint(state);
+      if (!point) return;
+      const c = this.ctx, sx = (point.x - this.left) * this.zoom, sy = (point.y - this.top) * this.zoom;
+      const top = Math.min(250, this.height * .32), bottom = Math.max(top, this.height - 180);
+      const x = Math.max(38, Math.min(this.width - 38, sx)), y = Math.max(top, Math.min(bottom, sy));
+      const outside = Math.abs(x - sx) > 1 || Math.abs(y - sy) > 1;
+      const distance = Math.round(Math.hypot(point.x - state.player.x, point.y - state.player.y) / state.tileSize);
+      c.save(); c.translate(x, y); c.lineWidth = 2; c.strokeStyle = '#eac78b'; c.fillStyle = '#172c27';
+      c.beginPath(); c.moveTo(0, -10); c.lineTo(10, 0); c.lineTo(0, 10); c.lineTo(-10, 0); c.closePath(); c.fill(); c.stroke();
+      if (outside) {
+        c.save(); c.rotate(Math.atan2(sy - y, sx - x)); c.fillStyle = '#eac78b';
+        c.beginPath(); c.moveTo(5, 0); c.lineTo(-3, -4); c.lineTo(-3, 4); c.closePath(); c.fill(); c.restore();
+      } else { c.beginPath(); c.arc(0, 0, 2, 0, TAU); c.fillStyle = '#eac78b'; c.fill(); }
+      const label = point.label + ' · ' + distance + ' tiles';
+      c.font = '600 11px ui-monospace, SFMono-Regular, Menlo, monospace';
+      const width = Math.min(this.width - 32, c.measureText(label).width + 18);
+      const labelX = Math.max(16 - x, Math.min(this.width - 16 - x - width, -width / 2));
+      c.fillStyle = '#13251fed'; roundRect(c, labelX, 17, width, 25, 4); c.fill();
+      c.fillStyle = '#ead9ad'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(label, labelX + width / 2, 30, width - 12); c.restore();
     }
 
     drawLighting(state) {
@@ -729,6 +911,7 @@
     }
 
     drawWeather(state) {
+      if (!this.ambientMotion) return;
       const weather = typeof state.weather === 'string' ? state.weather : state.weather && state.weather.type;
       if (!/rain|storm/i.test(weather || '')) return;
       const c = this.ctx; c.strokeStyle = '#c6d8cc38'; c.lineWidth = 1;
@@ -774,6 +957,12 @@
         c.fillStyle = '#162b2b'; c.beginPath(); c.arc(gx, gy, 5, 0, TAU); c.fill();
         c.fillStyle = state.goal.complete ? '#bfe69d' : '#e7ca7c'; c.beginPath();
         c.moveTo(gx, gy - 4); c.lineTo(gx + 4, gy); c.lineTo(gx, gy + 4); c.lineTo(gx - 4, gy); c.closePath(); c.fill();
+      }
+      const waypoint = Sirens.Progression && Sirens.Progression.waypoint(state);
+      if (waypoint) {
+        const wx = Math.max(ox + 4, Math.min(ox + mapSize - 4, ox + waypoint.x * scaleX)), wy = Math.max(oy + 4, Math.min(oy + mapSize - 4, oy + waypoint.y * scaleY));
+        c.fillStyle = '#19332c'; c.strokeStyle = '#eac78b'; c.lineWidth = 1.5; c.beginPath();
+        c.moveTo(wx, wy - 4); c.lineTo(wx + 4, wy); c.lineTo(wx, wy + 4); c.lineTo(wx - 4, wy); c.closePath(); c.fill(); c.stroke();
       }
       const px = ox + state.player.x * scaleX, py = oy + state.player.y * scaleY, angle = state.player.angle || 0;
       c.save(); c.translate(px, py); c.rotate(angle);

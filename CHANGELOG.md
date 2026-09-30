@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0
+
+- Add locally hosted multiplayer worlds for up to 20 connected players, separate survivor packs, validated commands, shared loot and persistent host saves. Include public server browsing, private invite codes and an optional expiring directory service.
+- Add AI play with immediate manual handoff and a visible local neural steering network trained on seeded practice and actual movement feedback.
+- Add robbery, survivor resistance, corpse weapon/ammunition/supply drops, saved drop depletion, danger fleeing and fighting that attracts bounded undead migrations. Increase new road-sector zombie populations.
+- Give building types distinct materials, signs and procedural furniture; add birds, insects, night ambience, water detail and claimed-home smoke without consuming gameplay RNG.
+
+- Connect scavenging, manual study and survivor requests to insight and six projects: salvage, field care, reinforced shelter, vehicle repairs, rain collection and supply scanning.
+- Add four practice skills with five earned levels and actual combat, barricade, treatment and repair bonuses. Study each of six manuals once while retaining its reference uses.
+- Give survivors finite daily bandage stock, daily supplies requests, saved trust and short local routes. Helping earns supplies and insight and strengthens trusted companions' attacks; hostile actions erase trust.
+- Add fatigue and safe shelter sleep, plus seeded rain fronts, migrating dead and traveler caches after the opening minutes of open-world play.
+- Add Journal [J] with skills, projects, people, a 120-event daybook, searchable field guide and Atlas with saved pointer/keyboard navigation markers. Remember progress, contacts, routes, event timers and tracked supplies through validated saves; migrate older saves with fresh progression.
+- Simplify the default HUD, separate Pack/Crafting/Catalogue panes, explain missing requirements, preserve keyboard dialog focus and clear held input across menus. Keep one immediate interaction prompt and brief notices.
+- Add persistent sound volume, 70% to 150% camera zoom, ambient motion and HUD detail preferences, plus fullscreen. Ambient motion respects the initial reduced-motion preference without removing attack feedback.
+- Add seven original resources/tools/seeds and four recipes, bringing the catalogue to 219 items and 65 recipes. Mine deterministic surface stone, iron and copper deposits; retain partial damage and exhaustion.
+- Establish a fixed home with a 150 kg stockpile, plant up to 24 carrot plots, grow crops through moist simulation time, and assign companions to follow, guard, gather or farm. Stored food supports saved morale that affects work and combat.
+- Recruit up to twelve companions. Build reputation and alliances with three factions, request reinforcements using stored rations, and trigger staged horde or raider battles within bounded crowds of 360 zombies and 128 humans.
+- Save original appearance presets and up to two dogs/cats. Befriend and feed pets, choose Follow/Stay, receive nearby comfort and dog warnings, and retain positions through saves and travel.
+- Require every JavaScript source to be assembled once with one explicit namespace owner. Reject orphaned, duplicated, missing and misplaced modules before publishing.
+- Document the Fins influences and original implementations. No Fins source or art is copied into the MIT game.
+
 ## 0.3.0
 
 - Show all surrounding terrain, interiors, loot and actors without exploration or line-of-sight render masks. Reveal the full loaded minimap and keep roofs cut away.

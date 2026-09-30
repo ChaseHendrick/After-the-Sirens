@@ -1,48 +1,43 @@
 # Validation
 
-Validated September 30, 2026. These results describe version 0.3 of this original browser game. They do not measure improvements to another game.
+Validated September 30, 2026 for version 0.4. This is an original early playable browser game, not commercial-game parity.
 
-## Simulation and saves
+## Production simulation and saves
 
-Seventy-five grouped Node checks pass, including eight presentation checks. The suites cover the original rescue game, the streamed world, and expansion systems. All use production update, action, and save APIs.
+**165 grouped Node checks** passed, plus the Python module/build reproducibility guard. The suites use production updates, actions and validated save APIs. Controlled fixtures are labeled separately from natural generated-world play.
 
-- Twenty original town seeds have walkable spawns, reachable supplies and sufficient radio parts. Generation and movement are deterministic and finite.
-- Three standard-difficulty automated rescue playthroughs use ordinary movement, doors, scavenging, combat and waves. They finish in approximately 195 simulation seconds with 34 to 39 zombie kills and 100 health in the final run. This is an ideal automated player's result, not human difficulty or session-length evidence.
-- Four normal world-seam crossings preserve global coordinates, doors, loot, built defenses and exploration. Returning and reloading do not duplicate active zombies.
-- Generic consumption, original melee weapons, armor, backpacks, recipe costs, tools and crafting stations produce actual effects.
-- Seed checks compare full generated worlds, sector generation in different discovery orders, seed zero, and simulation continuation after save/restore. Generated loot plus crafting reaches the full original catalogue.
-- Destruction checks cover door bashing, tree resources, heavy-tool wall damage, window traversal, blocked landings, glass injuries, and damage/destroyed terrain surviving world and floor saves.
-- Vehicle fixtures test acceleration, reverse, moving steering, fuel consumption, empty tanks, collision damage, safe exit, refueling and a real procedural sector crossing with saved car identity and fields.
-- Human fixtures test exact trade and recruitment costs, weight limits, following around obstacles, companion combat, raider line of sight, armor, injury, hostility, dead-human persistence, and one zombie bite timer with three nearby humans.
-- Floor fixtures test climbing, upper-floor looting, doors, construction, dropped items, upstairs saves, return to ground, building revisits, and journals surviving sector departure. They verify that upper-floor arrays do not leak into ground persistence.
-- Invalid items, coordinates, entities, world journals, vehicles, humans and floor data are rejected. Legacy version 1 rescue saves and expanded version 2 saves are supported.
+Coverage includes reachable towns across 20 seeds, three standard-difficulty automated rescue playthroughs, four normal sector crossings, deterministic full worlds and RNG continuation, all 219 items and 65 recipes, exact consumption/crafting/building costs, terrain destruction, windows, drivable cars, floor persistence and malformed-save rejection. The three automated rescue runs finish at approximately 195 simulation seconds with 33, 35 and 37 zombie kills and full health in this run. These are ideal automated controls, not human difficulty measurements.
 
-Fixture tests deliberately isolate behavior or supply entities. They are separate from the three natural automated rescue playthroughs and the normal seam-travel check. They do not establish long-term balance or survival difficulty.
+The new checks cover four skills and six projects, one-time manual study, finite daily trade stock and requests, saved contacts and trust, sleep/fatigue, field repair/rain collection/scanning, seeded events and global map markers. Settlement coverage includes deterministic depleted deposits, crop moisture/growth/harvest, exact stock transfers, worker tools and deliveries, morale and validated persistence. Appearance, pets, twelve recruits, faction alliances, allied reinforcement, opposed human combat and staged battles use real state changes. Fifty-eight adversarial extension fixtures reject impossible progression, settlement, personal and warfare records.
 
-## Integrated browser checks
+Living-world checks exercise once-only corpse weapon and supply drops, robbery followed by death without duplicated goods, refusal, stale conversation rejection, actual E collection, full-pack retention, fleeing/defending, noise response, regular migration, larger seeded road populations and durable drop history. NPC goods remain a bounded allowance, not a full economic simulation.
 
-Thirty-eight integrated checks passed in installed Chrome 154.0.8037.59, headless, opening the actual assembled game through `file://`.
+## Neural controller and AI play
 
-The original suite covers keyboard start, WASD and looting, inventory pause, crafting, construction, quick-action focus, local saves after a full reload, export/import and invalid imports, death/title/restart/victory, and finite keyboard/pointer stress. Inventory layouts were exercised at 390x844, 700x300 and 3400x700 without horizontal document overflow.
+Eight grouped Node checks verify deterministic 65-parameter initialization/training, lower unseen synthetic teacher error, actual bounded backpropagation, finite malformed-input handling, ordinary paid supplies, door opening/looting, conversation completion, legal steering and movement feedback. AI steps produce normal commands and inputs; manual control and physics remain authoritative. Training/feedback state is session-local.
 
-The expansion suite uses explicitly labeled safe road, survivor and staircase fixtures, then actual V/W/S/G inputs, Page Up/Down, E, dialogue buttons, Escape, catalogue filters, downloads and file import. Exporting upstairs and importing into a fresh run restores the floor, changed car, inventory and recruited companion on returning downstairs.
+Seven real browser groups run a fresh seed-zero world without injected gameplay state: the AI collects actual generated supplies and earns insight, renders finite neural scores and feedback, keeps playing after blur, pauses behind solo menus and returns control on real keyboard and pointer input. No external AI service or asset request occurs. These checks establish the implementation, not superior survival or advanced general intelligence. Background browsers can throttle frames.
 
-The dedicated destruction suite adds eight actual keyboard/mouse checks: axe door bashing, intact and broken window climbing, glass smashing, tree resources, sledgehammer wall destruction, terrain after full reload, and a controlled lethal-glass death/restart. Controlled placements and RNG fixtures are labeled in the test.
+## Browser integration
 
-The presentation suite compares actual Canvas pixels with empty and full exploration masks, including the minimap. It renders real human/zombie sprites behind a wall and beyond the former sight distance. Three captured frames per axe, machete and spear attack have distinct weapon pixels. Mouse attacks and keyboard footsteps produce nonzero output from the actual Web Audio graph, measured after the master gain and compressor. Reloading remains distinct from attack poses. Mute produces a silent waveform, pause stops continuous ambience, and a rain/driving/crowded-effects fixture stays within the 40-voice cap and releases completed voices. A night-tint pixel check confirms equal brightness at the center and edge. Audio quality has not been assessed across speakers or headphones.
+**92 grouped integrated browser checks** passed in installed headless Chrome 154.0.8037.59. Singleplayer opens the actual assembled offline file; multiplayer suites run temporary real HTTP/WebSocket hosts. Tests include normal generated play and explicitly labeled fixtures.
 
-Node presentation checks compare otherwise identical runs with presentation enabled and removed, then compare full parsed saves and continuation after restore. Poses and sound queues remain outside saved state, use no simulation random draws, and have bounded queues. Controlled geometry, inventory and actor fixtures are explicitly labeled.
+The four original suites contribute 38 groups: real keyboard/pointer movement, loot, crafting, builds, quick-action focus, save/export/import, screens and finite input stress; driving/refueling, survivor dialogue/recruitment, upper floors and catalogue filters; door/tree/wall/glass destruction; and actual pixel differences, weapon poses and nonzero Web Audio waveforms. Mute produces silence, pause stops ambience, and sound queues/voices remain bounded. Audio quality across hardware has not been reviewed.
 
-All four suites reported no page errors or HTTP network requests. A short local observation at 1440x960 was about 60 FPS, 16.7 ms average frame interval and 16.7 ms p95. This is not a cross-device benchmark. Safari, Firefox, touch play and multiplayer have not been validated. Mobile-sized layout tests establish layout behavior only.
+Seventeen progression groups exercise real insight/project costs, separate Pack panes, manuals, requests/trust, sleep, repairs, rain collection, escaped journal text, pointer/keyboard map markers, save restoration, settings, zoom-correct aiming and layouts at narrow/short sizes. Eleven community groups cover home, planting/watering, one-item stock transfers, job requirement messages and visible assigned work, changed appearance pixels, pet care, alliances/support, horde HUD, durable state and keyboard dialogs. A labeled maximum-crowd fixture starts with 360 zombies and 128 humans; after 2.2 seconds of combat it retains 334 zombies and 128 humans with finite rendering. Its local result is approximately 60 FPS and 16.7 ms p95, not a cross-device benchmark.
 
-The README gameplay screenshot was captured after actual keyboard movement, looting and entering an original generated car. It is a real render of the shipped game. The animation contact sheet contains frames rendered by the production player renderer in a controlled empty-terrain fixture. The catalogue screenshot displays the real registry through its UI.
+Ten multiplayer browser groups use two independent Chrome contexts and actual controls, with no gameplay-state injection: denial of a wrong key, separate peer names, simultaneous looting without duplication, server movement reaching a peer, moving world time behind menus, floor restrictions, rejection of a replayed real Drop command, opaque identity rejoin, disk save/host restart and HTTPS rejection of insecure ws addresses. Nine lobby groups browse and join a real public host without a key, display live player counts and 20-player capacity, exclude private listings, import actual private invites, remove secret-bearing URL fragments, omit keys from preferences and recover from malformed invites or unavailable directories at 390 pixels. The remaining seven groups are the AI checks above.
 
-## Build and CI
+Reports record no uncaught page or host errors. Solo suites record no HTTP asset requests; multiplayer and public browsing intentionally contact their local hosts. Screenshot captures use actual movement/looting/driving or clearly labeled fixtures. The main README screenshot is a normal generated run.
 
-`build.py` checks JavaScript syntax and exactly one registration per system. Tests reject deliberately duplicated exports and HTML script terminators, then compare a fresh build with committed `index.html` to catch stale artifacts.
+## Twenty-player host and public directory
 
-Run `python3 build.py`, `npm test`, and `npm run test:browser`. GitHub Actions runs these on Linux with Playwright Chromium, then deploys GitHub Pages after success. Local Chrome results and the actual CI run are distinct evidence; the workflow's status is visible on GitHub.
+Nine Node integration groups connect **20 actual loopback WebSocket clients**, reject a twenty-first, move each separate survivor with ordinary input and advance world time once. Shared loot, inventory injection rejection, duplicate sequence rejection, stale input, floors, disk restart, private keys and hidden private listings are covered. Directory checks register an operator-authorized real host, expose no registration key, persist records and expire them after 180 seconds.
 
-## Scope
+Observed fixture averages were roughly 10 to 30 ms per host tick locally, varying with other tests running. This is not an internet load test. The browser test uses two players; it does not demonstrate twenty simultaneous remote browser sessions. The curated website list starts empty until real hosts are submitted; the optional directory is a separate service and is not claimed to be permanently operated.
 
-A bounded procedural open world, 212 original catalogue items, 61 recipes, simple vehicles, accessible building floors and simple NPC survivors/raiders are implemented. The [README](README.md) lists world and journal budgets. [ROADMAP.md](ROADMAP.md) describes further depth, including farming, power, richer NPC communities and multiplayer. Full commercial-game parity is not established.
+## Build, deployment and limitations
+
+`build.py` requires complete source coverage, one owner per module, valid JavaScript and no embedded script terminator. Python tests reject orphaned, missing, duplicate and misplaced modules and compare fresh assembly with committed index.html. GitHub Actions repeats the complete Node/browser suite on Linux Chromium before Pages deployment. Local and CI results are separate evidence, visible in the workflow.
+
+Multiplayer currently uses one shared loaded region and the ground floor. The anchor streams that region; guests outside it rendezvous safely. Enemy decisions focus on the anchor, with separate guest contact damage checks. Upper floors, independently distant regions, PvP, automatic NAT traversal and broad public-internet performance remain future work. Safari, Firefox, touch controls and long-term balance are not validated. The explicit world, journal and crowd limits are documented in README. AAA quality is not established.
