@@ -33,8 +33,8 @@ const { pathToFileURL } = require('node:url');
         mini.style.cssText = 'position:fixed;left:-2000px;width:170px;height:170px'; document.body.append(canvas, mini);
         const r = new Sirens.Renderer(canvas, mini);
         const hash = ctx => { const a = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height).data; let h = 2166136261; for (const v of a) h = Math.imul(h ^ v, 16777619); return h; };
-        s.discovered.fill(0); r.draw(s); const hidden = [hash(r.ctx), hash(r.miniCtx)];
-        s.discovered.fill(1); r.lastMini = -1000; r.draw(s); const revealed = [hash(r.ctx), hash(r.miniCtx)];
+        s.discovered.fill(0); r.clock = 0; r.lastTime = 0; r.draw(s); const hidden = [hash(r.ctx), hash(r.miniCtx)];
+        s.discovered.fill(1); r.clock = 0; r.lastTime = 0; r.lastMini = -1000; r.draw(s); const revealed = [hash(r.ctx), hash(r.miniCtx)];
         const visible = r.known(s, s.player.x + 520, s.player.y); canvas.remove(); mini.remove();
         return { hidden, revealed, visible };
       });
@@ -102,10 +102,14 @@ const { pathToFileURL } = require('node:url');
       assert.equal(await page.evaluate(() => Sirens.Effects.pose(Sirens.App.getState()).attack), null);
     });
     await check('pause stops ambience; mute silences attacks and resumes cleanly', async () => {
+      await until(() => Sirens.App.getState().player.cooldown === 0);
       await page.keyboard.press('Escape'); await until(() => Sirens.App.getAudioMetrics().loops === 0);
       await page.locator('[data-setting="sound"]').uncheck();
       await page.keyboard.press('Escape'); const before = (await audio()).played.shot || 0;
-      await page.mouse.down({ button: 'right' }); await page.waitForTimeout(250); await page.mouse.up({ button: 'right' });
+      const ammo = await page.evaluate(() => Sirens.App.getState().player.ammo);
+      await page.mouse.down({ button: 'right' });
+      try { await until(ammo => Sirens.App.getState().player.ammo < ammo, ammo); }
+      finally { await page.mouse.up({ button: 'right' }); }
       assert.equal((await audio()).played.shot || 0, before); assert.equal((await audio()).loops, 0);
       await page.waitForTimeout(150); assert((await audio()).peak < .0001);
       await page.keyboard.press('Escape'); await page.locator('[data-setting="sound"]').check(); await page.keyboard.press('Escape');
