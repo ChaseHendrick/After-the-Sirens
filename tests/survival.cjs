@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 global.window = {};
-for (const module of ['catalog', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + module + '.js');
+for (const module of ['catalog', 'progression', 'settlement', 'personal', 'warfare', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + module + '.js');
 const E = window.Sirens.Engine;
 const TILE = 32;
 const tick = (s, seconds, input = {}) => { for (let i = 0; i < seconds * 60 && !s.ended; i++) E.update(s, 1 / 60, input); };

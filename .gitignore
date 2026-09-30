@@ -5,3 +5,4 @@ __pycache__/
 *.save.json
 .DS_Store
 releases/*.zip
+server-data/

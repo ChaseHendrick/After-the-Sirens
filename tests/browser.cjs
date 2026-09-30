@@ -38,6 +38,7 @@ const fs=require('node:fs');
     await check('inventory pauses time and crafting gives items at displayed cost',async()=>{
       await page.keyboard.press('KeyI');await page.waitForTimeout(150);
       assert(await page.locator('[data-ui="inventory-overlay"]').isVisible());
+      await page.locator('[data-command="crafting"]').click();
       const paused=await state();await page.waitForTimeout(400);assert.equal((await state()).elapsed,paused.elapsed);
       await page.evaluate(()=>{Sirens.App.getState().player.inventory.scrap=3;});await page.waitForTimeout(220);
       const before=await state();await page.locator('[data-craft="field_wraps"]').click();await page.waitForTimeout(130);
@@ -54,6 +55,7 @@ const fs=require('node:fs');
     });
     await check('building from the inventory consumes materials and places a defense',async()=>{
       await page.keyboard.press('KeyI');
+      await page.locator('[data-command="crafting"]').click();
       await page.evaluate(()=>{const s=Sirens.App.getState();s.player.inventory.wood=3;s.player.inventory.scrap=1;});await page.waitForTimeout(220);
       const before=await state();await page.locator('[data-build="barricade"]').click();await page.waitForTimeout(130);
       const after=await state();assert.equal(after.structures.length,before.structures.length+1);assert.equal(after.player.inventory.wood||0,0);assert.equal(after.player.inventory.scrap||0,0);

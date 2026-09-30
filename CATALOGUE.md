@@ -1,16 +1,16 @@
 # After the Sirens original catalogue
 
-This early build contains **212 curated original item definitions**, **61 crafting recipes**, and **27 biome or building loot tables**. The catalogue uses common real-world item concepts with original descriptions and game balance. It is a content foundation for an original survival game, not a finished recreation or a comprehensive list of another game's items. No generated color or quality variants inflate these counts.
+This early build contains **219 curated original item definitions**, **65 crafting recipes**, and **27 biome or building loot tables**. The catalogue uses common real-world item concepts with original descriptions and game balance. It is a content foundation for an original survival game, not a finished recreation or a comprehensive list of another game's items. No generated color or quality variants inflate these counts.
 
 The authoritative data is `src/catalog.js`, exported as `Sirens.Catalog`. Records and collections are frozen.
 
 ## Implemented data contracts
 
 - 63 foods, drinks, and medical supplies have consumable effects. Positive hunger, thirst, infection, and bleeding effects reduce those needs; positive health and stamina restore them. Negative values are adverse effects. Untreated water increases infection. Dry foods increase thirst.
-- 32 items define usable melee or ranged weapon statistics, including two tools that double as weapons. Ranges and noise radii use world pixels. Firearms and bows define ammunition type and magazine size. The current ranged model is a direct shot, including arrows and shotgun shells, rather than a full ballistic or pellet simulation.
+- 34 items define usable melee or ranged weapon statistics, including two tools that double as weapons. Ranges and noise radii use world pixels. Firearms and bows define ammunition type and magazine size. The current ranged model is a direct shot, including arrows and shotgun shells, rather than a full ballistic or pellet simulation.
 - 14 protective clothing items define fractional incoming-damage reduction. The current engine has one clothing slot. Layering, body regions, temperature insulation, and material-specific penetration are future systems.
 - 9 carrying items define a capacity bonus in kilograms. The current engine has one backpack slot.
-- Recipe tools must be present and are not consumed. Recipe ingredients are consumed. Campfire recipes require a nearby campfire. Manuals are reusable recipe prerequisites, rather than skill books with reading progression.
+- Recipe tools must be present and are not consumed. Recipe ingredients are consumed. Campfire recipes require a nearby campfire. Six manuals can be studied once for practice and insight, and remain reusable recipe and project references.
 - Fuel flasks expose `fuel: 12` for the nearby-vehicle refueling handler. That number is a game unit, not a physical storage specification.
 
 ## Scope and quantities
@@ -21,7 +21,7 @@ Every definition is available either in a loot table or through a recipe whose i
 
 ## Honest collectible and ingredient boundaries
 
-Clay, route atlas, compass, binoculars, whistle, headlamp, and assembled lanterns are currently collectibles or future-system ingredients. They do not grant a hidden skill, map reveal, extended sight, deliberate noise action, or equipped light. The game supplies an awareness light independently of lamp items. Tarps, sleeping bags, and blankets can be salvaged or used as ingredients, but beds, sleep, and roof construction are not implemented by this catalogue. Vehicle batteries and solar panels have salvage recipes; an electrical power network is not implemented. Water damage and rain protection are not simulated. The utility and electronics entries say this in their descriptions.
+Clay, route atlas, compass, binoculars, whistle, headlamp, and assembled lanterns are currently collectibles or future-system ingredients. They do not grant a hidden skill, map reveal, extended sight, deliberate noise action, or equipped light. The whole surrounding view stays readable independently of lamp items. Tarps, sleeping bags, and blankets can be salvaged or used as ingredients, and Journal sleep works indoors or beside a campfire. Separate beds and roof construction are not implemented. Vehicle batteries and solar panels have salvage recipes; an electrical power network is not implemented. Water damage and rain protection are not simulated. The utility and electronics entries say this in their descriptions.
 
 Most materials participate in concrete recipes. The small number of future ingredients is included explicitly for a broader original world catalogue, without pretending those systems exist.
 
@@ -29,19 +29,19 @@ Most materials participate in concrete recipes. The small number of future ingre
 
 | Category | Definitions |
 |---|---:|
-| materials | 35 |
+| materials | 39 |
 | food | 36 |
 | drinks | 12 |
 | medical | 15 |
 | tools | 20 |
-| melee | 19 |
+| melee | 21 |
 | firearms | 11 |
 | ammo | 7 |
 | clothing | 14 |
 | containers | 9 |
 | electronics | 12 |
 | books | 8 |
-| utility | 14 |
+| utility | 15 |
 
 ## Loot regions
 
@@ -399,3 +399,18 @@ Most materials participate in concrete recipes. The small number of future ingre
 Legacy item identifiers `wood`, `scrap`, `parts`, `food`, `water`, `bandage`, and `ammo` retain their original stack weights. The existing `field_wraps`, `recover_rounds`, and `collect_water` recipe identifiers, ingredient amounts, and output amounts are preserved. The bat and pistol also have explicit equipment metadata.
 
 Catalogue-only validation passed: unique IDs, nonempty metadata, finite nonnegative weights, valid effect fields, valid weapon ammo references, positive finite armor/capacity fields, positive integer recipe quantities, known tool and station prerequisites, positive weighted loot entries, immutable records, required legacy identifiers, and complete item reachability through loot and recipe inputs. Runtime integration and browser verification are reported separately by the game project.
+
+
+## Mining and garden additions in v0.4
+
+| Item | Role |
+|---|---|
+| `stone` | Mine seeded stone deposits or scavenge chunks; craft a first mining pick. |
+| `iron_ore` | Mine seeded iron deposits; process ore at a campfire. |
+| `copper_ore` | Mine seeded copper deposits; recover wire at a campfire. |
+| `iron_ingot` | Processed iron for an upgraded pick. |
+| `stone_pick` | A reusable melee and mining tool. |
+| `iron_pick` | A stronger melee tool that mines deposits in fewer accepted swings. |
+| `carrot_seeds` | Plant a base garden, water crops, and recover carrots and seed at harvest. |
+
+Four additional recipes craft a stone pick, process iron, recover copper wire, and upgrade the pick. Surface mineral deposits, base plots, stockpiles, jobs and crop growth are implemented by `src/settlement.js`; they are saved systems rather than catalogue-only promises. Mining results have a carrying limit and can remain on the ground when your pack is full. Crop yields and ore processing are gameplay abstractions.

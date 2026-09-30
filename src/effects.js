@@ -15,12 +15,12 @@
   }
   function drain(s) { return record(s).events.splice(0); }
   function attack(s, weapon, kind, duration, angle) {
-    record(s).attack = { weapon, kind, duration: Math.min(.42, duration * .85), start: s.elapsed, angle };
+    record(s).attack = { weapon, kind, duration: Math.min(.42, duration * .85), start: record(s).clock === undefined ? s.elapsed : record(s).clock, angle };
     emit(s, kind === 'melee' ? 'swing' : 'shot', { weapon });
   }
   function walk(s, distance, sprint, sneak) {
     if (!(distance > 0)) return;
-    const r = record(s); r.stride += distance / 26 * Math.PI; r.step += distance; r.lastWalk = s.elapsed;
+    const r = record(s); r.stride += distance / 26 * Math.PI; r.step += distance; r.lastWalk = r.clock === undefined ? s.elapsed : r.clock;
     if (r.step >= (sprint ? 31 : 26)) {
       r.step %= sprint ? 31 : 26;
       const tx = Math.floor(s.player.x / s.tileSize), ty = Math.floor(s.player.y / s.tileSize);
@@ -28,13 +28,19 @@
     }
   }
   function pose(s) {
-    const r = record(s), a = r.attack;
-    const progress = a ? Math.max(0, (s.elapsed - a.start) / a.duration) : 1;
-    return { stride: s.elapsed - r.lastWalk < .06 ? r.stride : 0, attack: a && progress < 1 ? Object.assign({ progress }, a) : null };
+    const r = record(s), a = r.attack, now = r.clock === undefined ? s.elapsed : r.clock;
+    const progress = a ? Math.max(0, (now - a.start) / a.duration) : 1;
+    return { stride: now - r.lastWalk < .06 ? r.stride : 0, attack: a && progress < 1 ? Object.assign({ progress }, a) : null };
   }
 
+  function transfer(from, to) {
+    const r = record(from); r.clock = to.elapsed; runs.set(to, r);
+    if (lastState === from) lastState = to;
+  }
+  function advance(s, dt) { const r = record(s); r.clock = (r.clock === undefined ? s.elapsed : r.clock) + Math.max(0, Math.min(.1, dt)); }
+
   let context = null, master = null, compressor = null, analyser = null, noiseBuffer = null;
-  let enabled = true, active = false, loops = null, lastState = null, lastGrowl = -10;
+  let enabled = true, volume = .7, active = false, loops = null, lastState = null, lastGrowl = -10, lastWildlife = -20;
   const voices = new Set(), played = {}, MAX_VOICES = 40;
   function unlock() {
     if (!enabled) return;
@@ -42,7 +48,7 @@
       if (!context) {
         const Audio = window.AudioContext || window.webkitAudioContext;
         if (!Audio) return;
-        context = new Audio(); master = context.createGain(); master.gain.value = .48;
+        context = new Audio(); master = context.createGain(); master.gain.value = .48 * volume;
         compressor = context.createDynamicsCompressor(); analyser = context.createAnalyser(); analyser.fftSize = 256;
         master.connect(compressor); compressor.connect(analyser); analyser.connect(context.destination);
         noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
@@ -54,8 +60,12 @@
   }
   function setEnabled(on) {
     enabled = !!on;
-    if (master) { master.gain.cancelScheduledValues(context.currentTime); master.gain.setTargetAtTime(enabled ? .48 : 0, context.currentTime, .01); }
+    if (master) { master.gain.cancelScheduledValues(context.currentTime); master.gain.setTargetAtTime(enabled ? .48 * volume : 0, context.currentTime, .01); }
     if (!enabled) stopLoops();
+  }
+  function setVolume(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return;
+    volume = Math.max(0, Math.min(1, value)); setEnabled(enabled);
   }
   function stopLoops() {
     if (!loops) return;
@@ -113,6 +123,18 @@
       case 'growl':
         voice({ frequency: 62, end: 43, wave: 'sawtooth', cutoff: 330, duration: .65, gain: .09 });
         voice({ noise: true, filter: 'bandpass', cutoff: 260, duration: .7, gain: .06 }); break;
+      case 'bird':
+        voice({ frequency: 1850, end: 2900, wave: 'sine', duration: .09, gain: .025 });
+        voice({ frequency: 2500, end: 1650, wave: 'sine', duration: .13, gain: .021, delay: .15 }); break;
+      case 'nightLife':
+        for (let i = 0; i < 3; i++) voice({ frequency: 3700, end: 3450, wave: 'triangle', duration: .055, gain: .012, delay: i * .11 }); break;
+      case 'petDog':
+        voice({ frequency: 220, end: 108, wave: 'sawtooth', cutoff: 900, duration: .13, gain: .12 });
+        voice({ frequency: 170, end: 92, wave: 'sawtooth', cutoff: 750, duration: .11, gain: .09, delay: .17 });
+        voice({ noise: true, filter: 'bandpass', cutoff: 450, duration: .1, gain: .035 }); break;
+      case 'petCat':
+        voice({ frequency: 720, end: 1050, wave: 'triangle', cutoff: 2100, duration: .14, gain: .065 });
+        voice({ frequency: 1050, end: 540, wave: 'triangle', cutoff: 1700, duration: .23, gain: .06, delay: .12 }); break;
       default: voice({ frequency: 440, end: 260, duration: .08, gain: .035 });
     }
   }
@@ -130,7 +152,7 @@
   function updateAudio(s, playing) {
     const events = drain(s);
     active = !!playing;
-    if (lastState !== s) { stopLoops(); lastState = s; lastGrowl = s.elapsed; }
+    if (lastState !== s) { stopLoops(); lastState = s; lastGrowl = s.elapsed; lastWildlife = s.elapsed; }
     events.forEach(play);
     if (!active || !enabled || !context || context.state !== 'running') { stopLoops(); return; }
     startLoops();
@@ -138,6 +160,10 @@
     const now = context.currentTime, car = (s.vehicles || []).find(v => v.id === s.player.vehicleId);
     loops[0].gain.gain.setTargetAtTime(rain ? .055 : .012, now, .2);
     loops[0].filter.frequency.setTargetAtTime(rain ? 2600 : 650, now, .2);
+    const outdoors = s.tiles[Math.floor(s.player.y / s.tileSize) * s.width + Math.floor(s.player.x / s.tileSize)] !== 2;
+    if (outdoors && !car && !rain && s.elapsed - lastWildlife > 16 && !(s.zombies || []).some(z => z.health > 0 && Math.hypot(z.x - s.player.x, z.y - s.player.y) < 180)) {
+      play({ type: s.time >= 6 && s.time < 19 ? 'bird' : 'nightLife' }); lastWildlife = s.elapsed;
+    }
     const running = car && car.fuel > 0 && car.condition > 0;
     loops[1].gain.gain.setTargetAtTime(running ? .04 + Math.abs(car.speed) / 4000 : 0, now, .06);
     if (running) loops[1].source.frequency.setTargetAtTime(35 + Math.abs(car.speed) * .48, now, .06);
@@ -148,7 +174,7 @@
   function metrics() {
     let peak = 0;
     if (analyser) { const data = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data); for (const v of data) peak = Math.max(peak, Math.abs(v)); }
-    return { enabled, active, context: context ? context.state : 'locked', voices: voices.size, loops: loops ? loops.length : 0, peak, played: Object.assign({}, played) };
+    return { enabled, volume, active, context: context ? context.state : 'locked', voices: voices.size, loops: loops ? loops.length : 0, peak, played: Object.assign({}, played) };
   }
-  Sirens.Effects = Object.freeze({ emit, drain, attack, walk, pose, audio: Object.freeze({ unlock, setEnabled, update: updateAudio, metrics }) });
+  Sirens.Effects = Object.freeze({ emit, drain, attack, walk, pose, transfer, advance, audio: Object.freeze({ unlock, setEnabled, setVolume, update: updateAudio, metrics }) });
 })();

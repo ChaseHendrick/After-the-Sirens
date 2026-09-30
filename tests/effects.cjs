@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 global.window = {};
-for (const module of ['catalog', 'effects', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + module + '.js');
+for (const module of ['catalog', 'effects', 'progression', 'settlement', 'personal', 'warfare', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine']) require('../src/' + module + '.js');
 const S = window.Sirens, E = S.Engine, F = S.Effects;
 let passed = 0;
 function check(name, fn) { fn(); passed++; console.log('PASS ' + name); }

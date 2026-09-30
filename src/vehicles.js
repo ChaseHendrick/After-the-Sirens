@@ -40,6 +40,7 @@
       }
       log(s, 'No clear space beside this car. Move to an open area.', 'warn'); return false;
     }
+    if (s._occupiedVehicles && s._occupiedVehicles.has(v.id)) { log(s, 'Another survivor is driving that car.', 'info'); return false; }
     if (v.condition <= 0) { log(s, 'This car is wrecked.', 'warn'); return false; }
     p.vehicleId = v.id; p.x = v.x; p.y = v.y; p.resting = false;
     if (S.Effects) S.Effects.emit(s, 'vehicle');

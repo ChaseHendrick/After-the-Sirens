@@ -7,6 +7,23 @@
   const debug = document.getElementById('debug');
   const renderer = new S.Renderer(canvas, minimap);
   const SAVE_KEY = 'after-the-sirens-save-v1';
+  const OPTIONS_KEY = 'after-the-sirens-options-v1';
+  const preferences = { sound: true, volume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false };
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null');
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+      for (const key of ['sound', 'motion', 'details']) if (typeof saved[key] === 'boolean') preferences[key] = saved[key];
+      if (typeof saved.volume === 'number' && Number.isFinite(saved.volume)) preferences.volume = Math.max(0, Math.min(1, saved.volume));
+      if (typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)) preferences.zoom = Math.max(.7, Math.min(1.5, saved.zoom));
+    }
+  } catch (_) {}
+  function rememberOptions() { try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(preferences)); } catch (_) {} }
+  renderer.zoom = preferences.zoom; renderer.ambientMotion = preferences.motion;
+  S.Effects.audio.setVolume(preferences.volume); S.Effects.audio.setEnabled(preferences.sound);
+
+  const pilot = S.Autoplay ? S.Autoplay.create() : null;
+  let autoInput = null;
+  let network = null, networkUI = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
   let debugOn = false;
@@ -23,7 +40,7 @@
 
   function unlockAudio() { S.Effects.audio.unlock(); }
 
-  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; }
+  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; if (networkReady && network) network.sendInput(inputSnapshot()); }
 
   function setScreen(name) {
     screen = name;
@@ -38,6 +55,7 @@
   }
 
   function save(silent) {
+    if (networkReady) { if (!silent) toast('The host server saves this shared world and your pack.'); return false; }
     if (!active && screen === 'title') return false;
     try {
       localStorage.setItem(SAVE_KEY, S.Engine.serialize(state));
@@ -51,6 +69,8 @@
   }
 
   function begin(seed, difficulty, mode) {
+    stopAutoplay();
+    leaveNetwork(false);
     let parsed = Number(seed);
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) parsed = Date.now() % 2147483647;
     state = S.Engine.create(parsed, difficulty || 'standard', mode === 'rescue' ? 'rescue' : 'openworld');
@@ -65,6 +85,8 @@
   }
 
   function continueRun() {
+    stopAutoplay();
+    leaveNetwork(false);
     try {
       const data = localStorage.getItem(SAVE_KEY);
       if (!data) { toast('No local save found. Start a new run.', 'warning'); return; }
@@ -95,7 +117,9 @@
   }
 
   function applyAction(name) {
+    stopAutoplay();
     if (!active || state.ended) return;
+    if (networkReady) { network.sendAction(name); return; }
     const result = S.Engine.action(state, name);
     if (state.conversation) clearInput();
     if (result && name !== 'reload') S.Effects.emit(state, 'ui');
@@ -103,6 +127,7 @@
   }
 
   function exportSave() {
+    if (networkReady) { toast('World backups are kept by the host server.'); return; }
     if (!active) { toast('Start a run first.', 'warning'); return; }
     const blob = new Blob([S.Engine.serialize(state)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -117,7 +142,7 @@
   }
 
   async function importSave(file) {
-    if (!file) return;
+    if (!file || networkReady) return;
     try {
       if (file.size > 32 * 1024 * 1024) throw new Error('Save file is too large.');
       const loaded = S.Engine.deserialize(await file.text());
@@ -139,24 +164,107 @@
     hasSave: hasSave,
     pause: pause,
     resume: resume,
-    title: function () { clearInput(); active = false; setScreen('title'); },
+    title: function () { stopAutoplay(); leaveNetwork(false); clearInput(); active = false; setScreen('title'); },
     restart: function () { begin(state.seed, state.difficulty || 'standard', state.mode || 'openworld'); },
     save: function () { save(false); },
     exportSave: exportSave,
     importSave: importSave,
     action: applyAction,
+    menuChanged: clearInput,
     useItem: function (id) { applyAction('use:' + id); },
     equipItem: function (id) { applyAction('equip:' + id); },
     dropItem: function (id) { applyAction('drop:' + id); },
-    craft: function (id) { if (active && !state.ended) { S.Engine.craft(state, id); ui.update(state, frameInfo); } },
-    build: function (type) { if (active && !state.ended) { S.Engine.build(state, type); ui.update(state, frameInfo); } },
-    setSound: function (on) { S.Effects.audio.setEnabled(on); if (on) unlockAudio(); },
+    craft: function (id) { stopAutoplay(); if (active && !state.ended) { if (networkReady) network.sendAction('craft:' + id); else S.Engine.craft(state, id); ui.update(state, frameInfo); } },
+    build: function (type) { stopAutoplay(); if (active && !state.ended) { if (networkReady) network.sendAction('build:' + type); else S.Engine.build(state, type); ui.update(state, frameInfo); } },
+    setSound: function (on) { preferences.sound = !!on; S.Effects.audio.setEnabled(on); if (on) unlockAudio(); rememberOptions(); },
+    setVolume: function (value) { preferences.volume = Math.max(0, Math.min(1, Number(value) || 0)); S.Effects.audio.setVolume(preferences.volume); rememberOptions(); },
+    setZoom: function (value) { preferences.zoom = Math.max(.7, Math.min(1.5, Number(value) || 1)); renderer.zoom = preferences.zoom; rememberOptions(); },
+    setMotion: function (on) { preferences.motion = !!on; renderer.ambientMotion = preferences.motion; rememberOptions(); },
+    setDetails: function (on) { preferences.details = !!on; rememberOptions(); },
+    fullscreen: function () {
+      try {
+        const change = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+        if (change && change.catch) change.catch(function () { toast('Fullscreen is unavailable in this browser.'); });
+      } catch (_) { toast('Fullscreen is unavailable in this browser.'); }
+    },
     setDebug: function (on) { debugOn = !!on; debug.hidden = !debugOn; }
   });
+  const autoPanel = document.createElement('div'); autoPanel.className = 'as-autoplay';
+  autoPanel.innerHTML = '<button type="button" aria-pressed="false" data-autoplay-toggle>AI play: Off</button><span data-autoplay-status>You are in control.</span><details class="as-brain"><summary>Neural activity</summary><div data-brain-view>Enable AI play to train its local controller.</div></details>';
+  document.querySelector('.as-objective').appendChild(autoPanel);
+  const autoButton = autoPanel.querySelector('button'); autoButton.disabled = !pilot;
+  autoButton.addEventListener('click', function () {
+    if (!pilot) return; S.Autoplay.toggle(pilot); clearInput(); autoButton.blur();
+    toast(S.Autoplay.status(pilot).enabled ? 'AI play is on. Manual movement or combat returns control to you.' : 'AI play is off. You are in control.');
+  });
+  function renderBrain(force) {
+    if (pilot && autoPanel.querySelector('details').open && (force || Math.floor(performance.now() / 250) !== autoPanel._brainFrame)) {
+      autoPanel._brainFrame = Math.floor(performance.now() / 250); const info = S.Autoplay.status(pilot), brain = info.neural;
+      if (brain) { const names = ['E', 'W', 'S', 'N', 'SE', 'NE', 'SW', 'NW'];
+        autoPanel.querySelector('[data-brain-view]').innerHTML = '<p>Local network ' + brain.architecture + ' · ' + brain.parameters + ' parameters</p><p>' + brain.samples + ' training steps · ' + brain.feedback + ' play feedback · error ' + brain.loss.toFixed(4) + '</p><div class="as-brain-bars">' + info.choices.map(c => '<span title="' + names[c.direction] + ': ' + c.score.toFixed(3) + '">' + names[c.direction] + '<i style="width:' + Math.round((c.score + 1) * 50) + '%;opacity:' + (c.safe ? 1 : .3) + '"></i></span>').join('') + '</div><p>Seeded practice + movement feedback. Collision and manual control take priority.</p>'; }
+    }
+  }
+  autoPanel.querySelector('details').addEventListener('toggle', function () { renderBrain(true); });
+  function stopAutoplay() { if (pilot && S.Autoplay.status(pilot).enabled) S.Autoplay.toggle(pilot, false); autoInput = null; }
+  function autoCommand(command) {
+    if (networkReady) network.sendAction(command);
+    else if (command === 'interact') S.Engine.interact(state);
+    else if (command.startsWith('craft:')) S.Engine.craft(state, command.slice(6));
+    else if (command.startsWith('build:')) S.Engine.build(state, command.slice(6));
+    else S.Engine.action(state, command);
+  }
+  function leaveNetwork(showTitle) {
+    const old = network; network = null; networkReady = false; networkPlayers = []; state.party = []; state.networked = false;
+    if (old) old.disconnect();
+    if (networkUI) networkUI.update(false, [], state);
+    if (showTitle) { stopAutoplay(); active = false; clearInput(); setScreen('title'); }
+  }
+  function joinNetwork(options) {
+    leaveNetwork(false);
+    if (!S.Multiplayer) { networkUI.status('Multiplayer is unavailable in this build.', false); return; }
+    let identityKey;
+    try {
+      const url = new URL(options.url);
+      if (!['ws:', 'wss:'].includes(url.protocol) || url.username || url.password) throw new Error('Use a ws:// or wss:// server address.');
+      if (location.protocol === 'https:' && url.protocol !== 'wss:') throw new Error('This HTTPS page needs a secure wss:// host. For local play, open the game from your host server.');
+      if (!options.name) throw new Error('Enter your survivor name.');
+      identityKey = 'after-the-sirens-player:' + url.href;
+      try { options.identity = localStorage.getItem(identityKey) || ''; } catch (_) {}
+      networkUI.status('Connecting to your shared world…', true);
+      network = new S.Multiplayer({
+        onSnapshot: function (next, players, meId) {
+          const previous = state, wasReady = networkReady; state = next; state.networked = true; networkPlayers = players;
+          state.party = players.filter(p => p.id !== meId && p.connected !== false); networkReady = true; active = true;
+          if (wasReady) {
+            S.Effects.transfer(previous, state);
+            const ox = previous.world ? previous.world.originX * 32 : 0, oy = previous.world ? previous.world.originY * 32 : 0;
+            const nx = state.world ? state.world.originX * 32 : 0, ny = state.world ? state.world.originY * 32 : 0;
+            S.Effects.walk(state, Math.min(80, Math.hypot(state.player.x + nx - previous.player.x - ox, state.player.y + ny - previous.player.y - oy)), false, state.player._sneaking);
+            if (state.player.cooldown > previous.player.cooldown + .08 && (pointer.down || pointer.shoot || keys.has('Space'))) {
+              const item = S.Catalog.items[state.player.weapon], kind = item && item.weapon && item.weapon.kind || 'melee';
+              S.Effects.attack(state, state.player.weapon, kind, item && item.weapon && item.weapon.cooldown || .5, state.player.angle);
+            }
+            if (state.player.health < previous.player.health - .2) S.Effects.emit(state, 'hurt');
+          } else { clearInput(); accumulator = 0; unlockAudio(); setScreen('playing'); S.Effects.emit(state, 'ready'); }
+          ui.update(state, frameInfo); networkUI.update(true, networkPlayers, state);
+        },
+        onStatus: function (info) {
+          if (info.connected) networkUI.status('Connected to the shared world.', false);
+          else if (info.phase === 'offline' && networkReady) networkUI.status('Disconnected. Rejoin to restore your survivor.', false);
+          if (info.identity) { try { localStorage.setItem(identityKey, info.identity); } catch (_) {} }
+          if (info.connected === false && networkReady) { leaveNetwork(true); toast('Disconnected from the host. Rejoin to restore your survivor.', 'warning'); }
+        },
+        onError: function (text) { networkUI.status(String(text), false); if (networkReady) toast(String(text), 'warning'); }
+      });
+      Promise.resolve(network.connect(options)).catch(function (error) { networkUI.status(error.message, false); });
+    } catch (error) { networkUI.status(error.message, false); }
+  }
+  networkUI = new S.NetworkUI(document.getElementById('ui'), { join: joinNetwork, leave: function () { leaveNetwork(true); } });
+  if (ui.applyPreferences) ui.applyPreferences(preferences);
   setScreen('title');
   ui.update(state, frameInfo);
 
-  const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape']);
+  const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyJ', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape']);
 
   addEventListener('keydown', function (event) {
     const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
@@ -169,7 +277,8 @@
       if (state.conversation) applyAction('closeConversation');
       else if (screen === 'paused') resume();
       else if (active && screen === 'playing') {
-        if (ui.isBlocking()) ui.toggleInventory();
+        if (ui.journal && ui.journal.open) ui.toggleJournal();
+        else if (ui.isBlocking()) ui.toggleInventory();
         else pause();
       }
       return;
@@ -177,11 +286,13 @@
     if (event.code === 'KeyI' && active && screen === 'playing' && !state.ended) {
       clearInput(); ui.toggleInventory(); ui.update(state, frameInfo); return;
     }
+    if (event.code === 'KeyJ' && active && screen === 'playing' && !state.ended) { clearInput(); ui.toggleJournal(); ui.update(state, frameInfo); return; }
     if (!active || ui.isBlocking() || state.ended) return;
+    stopAutoplay();
     keys.add(event.code);
     unlockAudio();
     if (event.code === 'KeyE') {
-      S.Engine.interact(state);
+      if (networkReady) network.sendAction('interact'); else S.Engine.interact(state);
       if (state.conversation) clearInput();
       ui.update(state, frameInfo);
     } else if (event.code === 'Digit1') applyAction('eat');
@@ -193,15 +304,16 @@
     else if (event.code === 'KeyG') applyAction('refuel');
     else if (event.code === 'PageUp') applyAction('stairsUp');
     else if (event.code === 'PageDown') applyAction('stairsDown');
-    else if (event.code === 'KeyB') { S.Engine.build(state, 'barricade'); ui.update(state, frameInfo); }
+    else if (event.code === 'KeyB') { if (networkReady) network.sendAction('build:barricade'); else S.Engine.build(state, 'barricade'); ui.update(state, frameInfo); }
   });
   addEventListener('keyup', function (event) { keys.delete(event.code); });
-  addEventListener('blur', function () { clearInput(); if (active && screen === 'playing') pause(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); pause(); } });
+  addEventListener('blur', function () { clearInput(); if (active && screen === 'playing' && !(pilot && S.Autoplay.status(pilot).enabled)) pause(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); if (!(pilot && S.Autoplay.status(pilot).enabled)) pause(); } });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
   canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
   canvas.addEventListener('pointerdown', function (event) {
     if (!active || ui.isBlocking()) return;
+    stopAutoplay();
     event.preventDefault();
     pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
     if (event.button === 0) pointer.down = true;
@@ -245,11 +357,24 @@
     if (active && state.ended && screen === 'playing') {
       clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true);
     }
-    if (active && !ui.isBlocking() && !state.ended) {
+    autoInput = null;
+    if (pilot && S.Autoplay.status(pilot).enabled && active && (!ui.isBlocking() || screen === 'playing' && !!state.conversation && !ui.inventoryOpen && !(ui.journal && ui.journal.open)) && !state.ended) {
+      const choice = S.Autoplay.step(pilot, state, elapsed); autoInput = choice.input;
+      if (choice.command) autoCommand(choice.command);
+    }
+    if (pilot) { const pilotStatus = S.Autoplay.status(pilot); autoButton.textContent = 'AI play: ' + (pilotStatus.enabled ? 'On' : 'Off'); autoButton.setAttribute('aria-pressed', String(pilotStatus.enabled)); autoPanel.querySelector('span').textContent = pilotStatus.enabled ? pilotStatus.text : 'You are in control.'; }
+    if (networkReady && active) {
+      networkSendTime += elapsed; S.Effects.advance(state, elapsed);
+      if (networkSendTime >= .05) {
+        network.sendInput(ui.isBlocking() || state.ended ? { moveX: 0, moveY: 0, attack: false, shoot: false, aimX: state.player.x, aimY: state.player.y } : autoInput || inputSnapshot());
+        networkSendTime %= .05;
+      }
+      accumulator = 0;
+    } else if (active && !ui.isBlocking() && !state.ended) {
       accumulator += elapsed;
       while (accumulator >= 1 / 60) {
         const oldHealth = state.player.health;
-        S.Engine.update(state, 1 / 60, inputSnapshot());
+        S.Engine.update(state, 1 / 60, autoInput || inputSnapshot());
         accumulator -= 1 / 60;
         if (state.player.health < oldHealth - 0.2) S.Effects.emit(state, 'hurt');
         if (state.ended) break;
@@ -258,10 +383,11 @@
       if (autoSaveTime >= 30) { save(true); autoSaveTime = 0; }
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
+    renderBrain(false);
     S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !state.ended && !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
-    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); uiTime = 0; }
+    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); uiTime = 0; }
     debug.hidden = !debugOn || screen === 'title';
     if (!debug.hidden) debug.textContent = frameInfo.fps + ' FPS  |  ' + frameInfo.frameMs.toFixed(1) + ' ms avg  |  ' + frameInfo.p95.toFixed(1) + ' ms p95\n' +
       state.zombies.length + ' active zombies  |  ' + state.stats.aiUpdates + ' AI decisions  |  seed ' + state.seed +
@@ -273,5 +399,5 @@
 
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
-    getScreen: function () { return screen; }, getAudioMetrics: S.Effects.audio.metrics };
+    getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics };
 })();

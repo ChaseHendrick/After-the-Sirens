@@ -186,6 +186,7 @@ const { pathToFileURL } = require('node:url');
       await page.locator('[data-ui="category"]').selectOption('all');
       await page.locator('[data-command="owned"]').click();
       await until(() => document.querySelectorAll('[data-ui="items"] [data-drop]').length > 0);
+      await page.locator('[data-command="crafting"]').click();
       await page.locator('[data-ui="recipe-search"]').fill('field wraps');
       await until(() => document.querySelectorAll('[data-ui="recipes"] [data-craft]').length === 1);
       assert.equal(await page.locator('[data-ui="recipes"] [data-craft]').getAttribute('data-craft'), 'field_wraps');
