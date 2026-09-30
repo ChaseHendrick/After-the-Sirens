@@ -23,7 +23,7 @@
 
   const pilot = S.Autoplay ? S.Autoplay.create() : null;
   let autoInput = null;
-  let network = null, networkUI = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
+  let network = null, networkUI = null, social = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
   let debugOn = false;
@@ -215,6 +215,7 @@
   }
   function leaveNetwork(showTitle) {
     const old = network; network = null; networkReady = false; networkPlayers = []; state.party = []; state.networked = false;
+    if (social) social.disconnect();
     if (old) old.disconnect();
     if (networkUI) networkUI.update(false, [], state);
     if (showTitle) { stopAutoplay(); active = false; clearInput(); setScreen('title'); }
@@ -247,19 +248,27 @@
             if (state.player.health < previous.player.health - .2) S.Effects.emit(state, 'hurt');
           } else { clearInput(); accumulator = 0; unlockAudio(); setScreen('playing'); S.Effects.emit(state, 'ready'); }
           ui.update(state, frameInfo); networkUI.update(true, networkPlayers, state);
+          if (social) social.update(true, networkPlayers, state, network.getStatus());
         },
         onStatus: function (info) {
-          if (info.connected) networkUI.status('Connected to the shared world.', false);
+          if (info.connected) { networkUI.status('Connected to the shared world.', false); networkUI.nodes.ownerToken.value = ''; if (social) social.update(true, networkPlayers, state, info); }
           else if (info.phase === 'offline' && networkReady) networkUI.status('Disconnected. Rejoin to restore your survivor.', false);
           if (info.identity) { try { localStorage.setItem(identityKey, info.identity); } catch (_) {} }
           if (info.connected === false && networkReady) { leaveNetwork(true); toast('Disconnected from the host. Rejoin to restore your survivor.', 'warning'); }
         },
-        onError: function (text) { networkUI.status(String(text), false); if (networkReady) toast(String(text), 'warning'); }
+        onError: function (text) { networkUI.status(String(text), false); if (networkReady) toast(String(text), 'warning'); },
+        onSocial: function (message) { if (social) social.receive(message); }
       });
       Promise.resolve(network.connect(options)).catch(function (error) { networkUI.status(error.message, false); });
     } catch (error) { networkUI.status(error.message, false); }
   }
   networkUI = new S.NetworkUI(document.getElementById('ui'), { join: joinNetwork, leave: function () { leaveNetwork(true); } });
+  social = new S.Social(document.getElementById('ui'), {
+    send: function (packet) { return networkReady && network ? network.sendSocial(packet) : false; },
+    runCommand: function (text) { stopAutoplay(); const result = S.Commands.execute(state, text, { save: function () { return save(true); } }); ui.update(state, frameInfo); return result; },
+    clearInput: clearInput,
+    isPlaying: function () { return active && screen === 'playing' && !ui.isBlocking() && !state.ended; }
+  });
   if (ui.applyPreferences) ui.applyPreferences(preferences);
   setScreen('title');
   ui.update(state, frameInfo);
@@ -267,6 +276,7 @@
   const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyJ', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape']);
 
   addEventListener('keydown', function (event) {
+    if (event.defaultPrevented || social && social.isBlocking()) return;
     const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
     const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
     if (buttonActivation) return;
@@ -287,7 +297,7 @@
       clearInput(); ui.toggleInventory(); ui.update(state, frameInfo); return;
     }
     if (event.code === 'KeyJ' && active && screen === 'playing' && !state.ended) { clearInput(); ui.toggleJournal(); ui.update(state, frameInfo); return; }
-    if (!active || ui.isBlocking() || state.ended) return;
+    if (!active || ui.isBlocking() || social && social.isBlocking() || state.ended) return;
     stopAutoplay();
     keys.add(event.code);
     unlockAudio();
@@ -309,10 +319,12 @@
   addEventListener('keyup', function (event) { keys.delete(event.code); });
   addEventListener('blur', function () { clearInput(); if (active && screen === 'playing' && !(pilot && S.Autoplay.status(pilot).enabled)) pause(); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); if (!(pilot && S.Autoplay.status(pilot).enabled)) pause(); } });
+  addEventListener('pagehide', function () { if (active && !networkReady) save(true); });
+  addEventListener('beforeunload', function () { if (active && !networkReady) save(true); });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
   canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
   canvas.addEventListener('pointerdown', function (event) {
-    if (!active || ui.isBlocking()) return;
+    if (!active || ui.isBlocking() || social && social.isBlocking()) return;
     stopAutoplay();
     event.preventDefault();
     pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
@@ -358,7 +370,7 @@
       clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true);
     }
     autoInput = null;
-    if (pilot && S.Autoplay.status(pilot).enabled && active && (!ui.isBlocking() || screen === 'playing' && !!state.conversation && !ui.inventoryOpen && !(ui.journal && ui.journal.open)) && !state.ended) {
+    if (pilot && S.Autoplay.status(pilot).enabled && active && !(social && social.isBlocking()) && (!ui.isBlocking() || screen === 'playing' && !!state.conversation && !ui.inventoryOpen && !(ui.journal && ui.journal.open)) && !state.ended) {
       const choice = S.Autoplay.step(pilot, state, elapsed); autoInput = choice.input;
       if (choice.command) autoCommand(choice.command);
     }
@@ -366,11 +378,11 @@
     if (networkReady && active) {
       networkSendTime += elapsed; S.Effects.advance(state, elapsed);
       if (networkSendTime >= .05) {
-        network.sendInput(ui.isBlocking() || state.ended ? { moveX: 0, moveY: 0, attack: false, shoot: false, aimX: state.player.x, aimY: state.player.y } : autoInput || inputSnapshot());
+        network.sendInput(ui.isBlocking() || social && social.isBlocking() || state.ended ? { moveX: 0, moveY: 0, attack: false, shoot: false, aimX: state.player.x, aimY: state.player.y } : autoInput || inputSnapshot());
         networkSendTime %= .05;
       }
       accumulator = 0;
-    } else if (active && !ui.isBlocking() && !state.ended) {
+    } else if (active && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended) {
       accumulator += elapsed;
       while (accumulator >= 1 / 60) {
         const oldHealth = state.player.health;
@@ -380,14 +392,14 @@
         if (state.ended) break;
       }
       autoSaveTime += elapsed;
-      if (autoSaveTime >= 30) { save(true); autoSaveTime = 0; }
+      if (autoSaveTime >= 5) { save(true); autoSaveTime = 0; }
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
     renderBrain(false);
-    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !state.ended && !document.hidden);
+    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
-    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); uiTime = 0; }
+    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0; }
     debug.hidden = !debugOn || screen === 'title';
     if (!debug.hidden) debug.textContent = frameInfo.fps + ' FPS  |  ' + frameInfo.frameMs.toFixed(1) + ' ms avg  |  ' + frameInfo.p95.toFixed(1) + ' ms p95\n' +
       state.zombies.length + ' active zombies  |  ' + state.stats.aiUpdates + ' AI decisions  |  seed ' + state.seed +
@@ -399,5 +411,6 @@
 
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
+    getSocialStatus: function () { return social.getStatus(); }, getVoiceStats: function () { return social.getVoiceStats(); },
     getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics };
 })();

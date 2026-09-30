@@ -2,6 +2,8 @@
 
 ## 0.4.0
 
+- Add World and Nearby text chat, an input-safe command console in singleplayer and multiplayer, and separate owner-key authorization for moderation and world controls. Persist survivor identity bans on the host.
+- Add opt-in direct proximity voice with hold-N transmission, distance attenuation, mute/deafen controls and microphone/peer cleanup on leave. Add optional local HTTPS/WSS hosting with operator-provided certificates for secure voice access.
 - Add locally hosted multiplayer worlds for up to 20 connected players, separate survivor packs, validated commands, shared loot and persistent host saves. Include public server browsing, private invite codes and an optional expiring directory service.
 - Add AI play with immediate manual handoff and a visible local neural steering network trained on seeded practice and actual movement feedback.
 - Add robbery, survivor resistance, corpse weapon/ammunition/supply drops, saved drop depletion, danger fleeing and fighting that attracts bounded undead migrations. Increase new road-sector zombie populations.

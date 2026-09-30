@@ -362,6 +362,39 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 .as-ui .as-autoplay button[aria-pressed="true"],.as-ui .as-autoplay button[aria-pressed="true"]:hover:not(:disabled){background:#bed293;color:#14221a;border-color:#bed293}
 
 .as-lobby-browser{width:100%;min-width:0;border-top:1px solid #45604e;padding-top:12px}.as-lobby-browser summary{cursor:pointer;color:#d7e1c3;padding:4px}.as-lobby-browser label{margin-top:12px}.as-lobby-browser [data-lobby="servers"]{display:grid;gap:8px;margin-top:12px}.as-lobby-browser [data-lobby="servers"] button{text-align:left;overflow-wrap:anywhere;font-size:12px}.as-lobby-browser p{font-size:11px;line-height:1.5}
+
+/* Chat stays legible over the world and releases gameplay controls while focused. */
+.as-social-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:12px;max-width:100%;pointer-events:auto;position:relative;z-index:8}
+.as-ui .as-social-toolbar button{font-size:10px;padding:7px 10px;min-height:32px;background:#13291ff2;border-color:#829b6d70}
+.as-social-toolbar>span{font-size:10px;color:#edcf8e;background:#193024ee;padding:5px 8px;border-radius:4px}
+.as-social-panel{position:fixed;left:25px;bottom:25px;width:min(560px,calc(100vw - 50px));max-height:calc(100dvh - 50px);padding:18px;display:flex;flex-direction:column;gap:12px;background:#10241bf7;border:1px solid #84987180;border-radius:9px;box-shadow:0 15px 50px #0009;pointer-events:auto;z-index:35;overflow:auto;overscroll-behavior:contain}
+.as-social-panel>header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
+.as-social-panel h2{font-size:23px;margin:5px 0 0;letter-spacing:-.025em}
+.as-ui .as-social-panel>header button{font-size:11px;padding:7px 10px;background:transparent;white-space:nowrap}
+.as-social-history{min-height:100px;height:min(26vh,220px);overflow:auto;border:1px solid #9db98d26;border-radius:4px;background:#070f0b85;padding:8px 10px;scrollbar-width:thin;scrollbar-color:#607657 #132519;overscroll-behavior:contain;flex-shrink:0}
+.as-social-history:focus-visible{outline:3px solid #edcc88;outline-offset:3px}
+.as-social-line{display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.55;padding:7px 0;border-bottom:1px solid #b5caa610;overflow-wrap:anywhere;white-space:pre-wrap}
+.as-social-line>strong{font-size:10px;color:#dcc78d;font-weight:650}
+.as-social-line>span{color:#d1dfc4}
+.as-social-system>strong{color:#a4c1b1}.as-social-system>span{color:#b6c5a9}.as-social-error>span{color:#edbfa2}
+.as-social-compose{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:8px;align-items:end;flex-shrink:0}
+.as-social-compose label{font-size:10px;color:#c2d1b5;display:flex;flex-direction:column;gap:6px;min-width:0}
+.as-ui .as-social-compose input,.as-ui .as-social-compose select{background:#102118;color:#edf1db;border:1px solid #7e916766;border-radius:4px;height:38px;font:12px inherit;padding:8px;width:100%;min-width:0}
+.as-ui .as-social-compose input::placeholder{color:#a5b897;font-size:10px}
+.as-ui .as-social-compose>button{font-size:11px;min-height:38px;padding:8px 12px;background:#496348}
+.as-social-note{font-size:10px;line-height:1.6;color:#afc39f;flex-shrink:0}
+.as-social-voice{padding-top:13px;border-top:1px solid #9fb09138;flex-shrink:0}
+.as-social-voice h3{font-size:13px;color:#dfd7a7;margin-bottom:7px}
+.as-social-voice p{font-size:11px;line-height:1.6;color:#bccfb0;margin-bottom:9px}
+.as-social-voice small{display:block;font-size:10px;line-height:1.6;color:#9fb592;margin-top:9px}
+.as-social-voice-actions{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.as-ui .as-social-voice-actions button{font-size:10px;padding:7px 10px;min-height:33px}
+.as-ui .as-social-voice-actions button[aria-pressed="true"],.as-ui .as-social-toolbar button[aria-pressed="true"]{background:#bacd94;color:#162519;border-color:#d0dcac}
+.as-social-voice ul{padding:0;margin:10px 0 0;list-style:none;display:flex;flex-wrap:wrap;gap:5px}
+.as-social-voice li{font-size:10px;line-height:1.5;padding:5px 8px;background:#718e6026;border:1px solid #8fa87b36;border-radius:4px;color:#c4d2b4;overflow-wrap:anywhere;max-width:100%}
+.as-social-voice li[data-talking="true"]{background:#a0bf7236;border-color:#c2d796;color:#e2edc8}
+@media(max-width:650px){.as-social-toolbar{gap:5px;margin-top:9px}.as-ui .as-social-toolbar button{font-size:9px;padding:6px 8px;min-height:29px}.as-social-toolbar>span{font-size:9px;padding:4px 6px}.as-social-panel{left:10px;bottom:10px;width:calc(100vw - 20px);max-height:calc(100dvh - 20px);padding:14px;gap:10px}.as-social-panel h2{font-size:21px}.as-social-panel .as-kicker{font-size:8px}.as-social-history{height:min(25vh,190px);min-height:90px}.as-social-compose{grid-template-columns:75px minmax(0,1fr) auto;gap:5px}.as-ui .as-social-compose>button{padding:7px 8px}.as-ui .as-social-compose input,.as-ui .as-social-compose select{font-size:11px;padding:7px}.as-social-line{font-size:11px}.as-social-voice p{font-size:10px}.as-social-voice small{font-size:9px}.as-ui .as-social-voice-actions button{font-size:9px;padding:7px 9px}.as-social-note{font-size:9px}}
+@media(max-height:550px){.as-social-panel{padding:12px;gap:8px}.as-social-history{height:100px}.as-social-voice small{font-size:9px}.as-social-panel h2{font-size:19px}.as-social-voice{padding-top:9px}}
 </style>
 </head>
 <body>
@@ -4448,10 +4481,91 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
 (function () {
   'use strict';
+  const S = window.Sirens;
+  const HELP = '/help · /players · /save · /time 0-23.99 · /weather clear|overcast|rain · /difficulty calm|standard|hard · /give [me] item_id [1-100] · /heal [me] · /tp [me] global_tile_x global_tile_y · /where · /items [search]';
+  function result(ok, message) { return { ok: ok, message: message }; }
+  function tokenize(text) {
+    if (typeof text !== 'string' || text.length > 280 || /[\u0000-\u001f\u007f]/.test(text)) return null;
+    const parts = text.trim().match(/"[^"\r\n]*"|\S+/g) || [];
+    if (parts.some(p => p.startsWith('"') !== p.endsWith('"') || !p.startsWith('"') && p.includes('"'))) return null;
+    return parts.map(p => p.startsWith('"') ? p.slice(1, -1) : p);
+  }
+  function execute(state, text, callbacks) {
+    callbacks = callbacks || {};
+    if (!state || !state.player || state.networked) return result(false, 'Multiplayer commands must be sent to the world host.');
+    const args = tokenize(text);
+    if (!args || !args.length || args[0][0] !== '/') return result(false, 'Use /help to see singleplayer commands.');
+    const name = args.shift().slice(1).toLowerCase(), E = S.Engine, p = state.player;
+    const usage = message => result(false, 'Usage: ' + message);
+    if (name === 'help') return args.length ? usage('/help') : result(true, HELP);
+    if (name === 'players') return args.length ? usage('/players') : result(true, 'Singleplayer: you are the world owner.');
+    if (name === 'where') {
+      if (args.length) return usage('/where');
+      const ox = state.world ? state.world.originX : 0, oy = state.world ? state.world.originY : 0;
+      return result(true, 'Global tile ' + (ox + Math.floor(p.x / 32)) + ', ' + (oy + Math.floor(p.y / 32)) + ' · floor ' + (state.stories && state.stories.floor || 0));
+    }
+    if (name === 'items') {
+      if (args.length > 1) return usage('/items [search]');
+      const search = (args[0] || '').toLowerCase();
+      const ids = Object.keys(S.Catalog.items).filter(id => id.includes(search) || S.Catalog.items[id].name.toLowerCase().includes(search));
+      return result(true, ids.length ? ids.slice(0, 18).join(', ') + (ids.length > 18 ? ' · ' + (ids.length - 18) + ' more; refine your search.' : '') : 'No matching item IDs.');
+    }
+    if (name === 'save') {
+      if (args.length) return usage('/save');
+      return callbacks.save && callbacks.save() ? result(true, 'Run saved in this browser.') : result(false, 'Save unavailable. Export a backup from the pause menu.');
+    }
+    if (name === 'time') {
+      if (args.length !== 1 || !/^\d{1,2}(?:\.\d{1,3})?$/.test(args[0]) || Number(args[0]) >= 24) return usage('/time 0-23.99');
+      state.time = Number(args[0]); return result(true, 'World time set to ' + state.time.toFixed(2) + '.');
+    }
+    if (name === 'weather') {
+      if (args.length !== 1 || !['clear', 'overcast', 'rain'].includes(args[0])) return usage('/weather clear|overcast|rain');
+      state.weather = args[0];
+      if (state.progression && state.progression.event.kind === 'rain') { state.progression.event.previousWeather = args[0]; state.progression.event.kind = 'none'; state.progression.event.until = state.elapsed; }
+      return result(true, 'Weather set to ' + args[0] + '.');
+    }
+    if (name === 'difficulty') {
+      if (args.length !== 1 || !['calm', 'standard', 'hard'].includes(args[0])) return usage('/difficulty calm|standard|hard');
+      state.difficulty = args[0]; if (state.world) state.world.difficulty = args[0]; if (state.stories) state.stories.difficulty = args[0]; return result(true, 'Survival pressure set to ' + args[0] + '.');
+    }
+    if (name === 'give') {
+      if (args[0] === 'me') args.shift();
+      if (args.length < 1 || args.length > 2 || !Object.prototype.hasOwnProperty.call(S.Catalog.items, args[0]) || args.length === 2 && !/^\d{1,3}$/.test(args[1])) return usage('/give [me] item_id [1-100]');
+      const id = args[0], count = args.length === 1 ? 1 : Number(args[1]), old = p.inventory[id] || 0;
+      if (count < 1 || count > 100 || old + count > 1000) return result(false, 'Choose 1 to 100 items, within the 1,000-item stack limit.');
+      const weight = E.inventoryWeight(p.inventory) + S.Catalog.items[id].weight * count;
+      if (weight > E.carryCapacity(state) + 0.000001) return result(false, 'Your pack cannot carry that quantity. Nothing was added.');
+      p.inventory[id] = old + count; return result(true, 'Added ' + count + ' × ' + S.Catalog.items[id].name + ' to your pack.');
+    }
+    if (name === 'heal') {
+      if (args.length > 1 || args.length === 1 && args[0] !== 'me') return usage('/heal [me]');
+      if (p.health <= 0 || state.ended) return result(false, 'Start a new run after this survivor has fallen.');
+      p.health = 100; p.stamina = 100; p.hunger = 0; p.thirst = 0; p.bleeding = 0; p.infection = 0; p.resting = false;
+      if (state.progression) { state.progression.fatigue = 0; state.progression.sleeping = false; }
+      return result(true, 'Health and needs restored.');
+    }
+    if (name === 'tp' || name === 'teleport') {
+      if (args[0] === 'me') args.shift();
+      if (args.length !== 2 || !args.every(n => /^-?\d{1,5}$/.test(n))) return usage('/tp [me] global_tile_x global_tile_y');
+      if (p.vehicleId || state.stories && state.stories.floor) return result(false, 'Leave your car and return to the ground floor first.');
+      const ox = state.world ? state.world.originX : 0, oy = state.world ? state.world.originY : 0;
+      const tx = Number(args[0]) - ox, ty = Number(args[1]) - oy;
+      if (tx < 1 || ty < 1 || tx >= state.width - 1 || ty >= state.height - 1 || E.isSolid(state, tx, ty)) return result(false, 'Choose a clear ground tile inside the currently loaded region. Use /where for your coordinates.');
+      p.x = (tx + .5) * 32; p.y = (ty + .5) * 32; p.resting = false; state.conversation = null;
+      return result(true, 'Moved to global tile ' + args.join(', ') + '.');
+    }
+    if (['kick', 'ban', 'unban', 'bans', 'announce'].includes(name)) return result(false, 'That command manages multiplayer players. You own this singleplayer run.');
+    return result(false, 'Unknown command. Use /help to see available commands.');
+  }
+  S.Commands = Object.freeze({ execute: execute, help: HELP });
+})();
+
+(function () {
+  'use strict';
   const S = window.Sirens = window.Sirens || {};
   class Multiplayer {
-    constructor(callbacks) { this.callbacks = callbacks || {}; this.socket = null; this.phase = 'offline'; this.id = null; this.identity = null; this.url = ''; this.hostId = null; this.sequence = 0; this.lastSnapshot = -1; this.lastInput = 0; this.state = null; this.players = []; }
-    getStatus() { return { phase: this.phase, connected: this.phase === 'online', id: this.id, identity: this.identity, url: this.url, hostId: this.hostId }; }
+    constructor(callbacks) { this.callbacks = callbacks || {}; this.socket = null; this.phase = 'offline'; this.id = null; this.identity = null; this.url = ''; this.hostId = null; this.owner = false; this.sequence = 0; this.lastSnapshot = -1; this.lastInput = 0; this.state = null; this.players = []; }
+    getStatus() { return { phase: this.phase, connected: this.phase === 'online', id: this.id, identity: this.identity, url: this.url, hostId: this.hostId, owner: this.owner }; }
     status() { if (this.callbacks.onStatus) this.callbacks.onStatus(this.getStatus()); }
     error(text) { if (this.callbacks.onError) this.callbacks.onError(String(text).slice(0, 500)); }
     connect(options) {
@@ -4461,19 +4575,27 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       catch (_) { const error = new Error('Use a ws:// or wss:// server address without credentials or query parameters.'); this.error(error.message); return Promise.reject(error); }
       if (url.pathname === '/') url.pathname = '/game';
       if (typeof options.token !== 'string' || options.token.length > 0 && options.token.length < 12 || options.token.length > 128) { const error = new Error('Enter the host’s world access key (12 to 128 characters).'); this.error(error.message); return Promise.reject(error); }
-      this.url = url.href; this.identity = typeof options.identity === 'string' && options.identity ? options.identity : null; this.id = null; this.sequence = 0; this.lastSnapshot = -1; this.lastInput = 0; this.phase = 'connecting'; this.status();
+      const ownerToken = options.ownerToken || '';
+      if (typeof ownerToken !== 'string' || ownerToken.length > 0 && ownerToken.length < 12 || ownerToken.length > 128) { const error = new Error('An owner key must have 12 to 128 characters. Leave it empty to join as a player.'); this.error(error.message); return Promise.reject(error); }
+      this.url = url.href; this.identity = typeof options.identity === 'string' && options.identity ? options.identity : null; this.id = null; this.owner = false; this.sequence = 0; this.lastSnapshot = -1; this.lastInput = 0; this.phase = 'connecting'; this.status();
       return new Promise((resolve, reject) => {
         let welcomed = false;
         const socket = this.socket = new WebSocket(this.url);
         const timeout = setTimeout(() => { if (!welcomed) { socket.close(); reject(new Error('The world server did not answer.')); } }, 10000);
-        socket.onopen = () => socket.send(JSON.stringify({ type: 'join', protocol: 1, token: options.token, name: String(options.name || 'Survivor').slice(0, 24), identity: this.identity }));
+        socket.onopen = () => {
+          const join = { type: 'join', protocol: 1, token: options.token, name: String(options.name || 'Survivor').slice(0, 24), identity: this.identity };
+          if (ownerToken) join.ownerToken = ownerToken;
+          socket.send(JSON.stringify(join));
+        };
         socket.onmessage = event => {
           try {
             if (typeof event.data !== 'string' || event.data.length > 40000000) throw new Error('Invalid world message.');
             const message = JSON.parse(event.data);
             if (message.type === 'welcome') {
               if (message.protocol !== 1 || typeof message.id !== 'string' || typeof message.identity !== 'string') throw new Error('The server uses an unsupported protocol.');
-              welcomed = true; clearTimeout(timeout); this.id = message.id; this.identity = message.identity; this.hostId = message.hostId; this.phase = 'online'; this.status(); resolve(this.getStatus());
+              welcomed = true; clearTimeout(timeout); this.id = message.id; this.identity = message.identity; this.hostId = message.hostId; this.owner = message.owner === true; this.phase = 'online'; this.status();
+              if (this.callbacks.onSocial && Array.isArray(message.chatHistory)) message.chatHistory.slice(-100).forEach(entry => { if (entry && entry.type === 'chat') this.callbacks.onSocial(entry); });
+              resolve(this.getStatus());
             } else if (message.type === 'snapshot' && welcomed) {
               if (!Number.isSafeInteger(message.seq) || message.seq <= this.lastSnapshot || typeof message.save !== 'string' || !Array.isArray(message.players) || message.players.length > 20 || !message.player) return;
               const save = JSON.parse(message.save); save.state.player = message.player; save.state.personal = message.personal;
@@ -4485,7 +4607,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
               for (const e of message.effects || []) if (e && typeof e.type === 'string' && S.Effects) S.Effects.emit(state, e.type, e);
               this.state = state; this.players = players; this.hostId = message.hostId; this.lastSnapshot = message.seq;
               if (this.callbacks.onSnapshot) this.callbacks.onSnapshot(state, players, this.id);
-            } else if (message.type === 'ack') { this.lastAck = message; if (!message.ok && message.reason) this.error(message.reason); if (this.callbacks.onAction) this.callbacks.onAction(message); }
+            } else if (['chat', 'command-result', 'voice-peers', 'voice-signal'].includes(message.type) && welcomed) { if (this.callbacks.onSocial) this.callbacks.onSocial(message); }
+            else if (message.type === 'ack') { this.lastAck = message; if (!message.ok && message.reason) this.error(message.reason); if (this.callbacks.onAction) this.callbacks.onAction(message); }
             else if (message.type === 'error') { this.error(message.message || 'The server rejected this request.'); if (!welcomed) reject(new Error(message.message || 'Unable to join.')); }
           } catch (error) { this.error(error.message || 'Invalid world snapshot.'); }
         };
@@ -4495,6 +4618,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
     sendInput(input) {
       if (!this.socket || this.phase !== 'online' || this.socket.readyState !== WebSocket.OPEN) return false;
+      // Keep only the next current input when the socket is congested; old movement need not queue.
+      if (this.socket.bufferedAmount > 8192) return false;
       const now = typeof performance === 'object' ? performance.now() : Date.now(); if (now - this.lastInput < 45) return false; this.lastInput = now;
       const i = input || {}, world = this.state && this.state.world, x = world ? world.originX * 32 : 0, y = world ? world.originY * 32 : 0;
       const command = { type: 'input', seq: ++this.sequence, moveX: Number(i.moveX) || 0, moveY: Number(i.moveY) || 0, sprint: !!i.sprint, sneak: !!i.sneak, attack: !!i.attack, shoot: !!i.shoot };
@@ -4506,7 +4631,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (!this.socket || this.phase !== 'online' || this.socket.readyState !== WebSocket.OPEN || typeof action !== 'string' || action.length > 180) return false;
       this.socket.send(JSON.stringify({ type: 'action', seq: ++this.sequence, action })); return true;
     }
-    disconnect() { const socket = this.socket; this.socket = null; this.phase = 'offline'; this.state = null; this.players = []; if (socket) socket.close(); this.status(); }
+    sendSocial(packet) {
+      if (!this.socket || this.phase !== 'online' || this.socket.readyState !== WebSocket.OPEN || !packet || !['chat', 'voice-state', 'voice-signal'].includes(packet.type)) return false;
+      this.socket.send(JSON.stringify(Object.assign({}, packet, { seq: ++this.sequence }))); return true;
+    }
+    disconnect() { const socket = this.socket; this.socket = null; this.phase = 'offline'; this.owner = false; this.state = null; this.players = []; if (socket) socket.close(); this.status(); }
   }
   S.Multiplayer = Multiplayer;
 })();
@@ -6513,6 +6642,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const panel = document.createElement('form'); panel.className = 'as-network-panel'; panel.hidden = true;
       panel.innerHTML = '<p>Join a shared world run by you or a friend. The host server saves the world and every survivor’s pack.</p><label>Server address<input data-network="url" type="url" placeholder="wss://your-world.example/game" value="ws://localhost:8787/game" required spellcheck="false" autocomplete="url"></label><div class="as-network-fields"><label>Survivor name<input data-network="name" value="Survivor" maxlength="24" required autocomplete="nickname"></label><label>World access key<input data-network="token" type="password" maxlength="128" autocomplete="off" placeholder="Private key, or empty for public"></label></div><button class="as-primary" type="submit" data-network="join">JOIN THE WORLD <span>→</span></button><p class="as-network-status" data-network="status" role="status" aria-live="polite">Up to 20 survivors share the host’s loaded region. Multiplayer currently stays on the ground floor.</p><a class="as-host-guide" href="https://github.com/ChaseHendrick/After-the-Sirens/blob/main/docs/MULTIPLAYER.md" target="_blank" rel="noopener noreferrer">Host your own world · setup guide ↗</a>';
       title.insertBefore(panel, anchor); this.panel = panel; this.nodes = {};
+      const owner = document.createElement('details'); owner.className = 'as-owner-access';
+      owner.innerHTML = '<summary>World owner access</summary><label>Owner key<input data-network="ownerToken" type="password" maxlength="128" autocomplete="off" placeholder="Optional private owner key"></label><p>The host terminal prints this separate key. It enables moderation and world commands. Keep it out of guest invites.</p>';
+      panel.insertBefore(owner, panel.querySelector('[data-network="join"]'));
       panel.querySelectorAll('[data-network]').forEach(n => { this.nodes[n.dataset.network] = n; });
       try { const saved = JSON.parse(localStorage.getItem('after-the-sirens-server-preferences') || 'null'); if (saved && typeof saved.url === 'string') this.nodes.url.value = saved.url; if (saved && typeof saved.name === 'string') this.nodes.name.value = saved.name.slice(0, 24); } catch (_) {}
       modes.addEventListener('click', e => {
@@ -6520,7 +6652,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         const multiplayer = button.dataset.playMode === 'online'; panel.hidden = !multiplayer; this.solo.forEach(n => { n.hidden = multiplayer; });
         modes.querySelectorAll('button').forEach(n => { n.setAttribute('aria-pressed', String(n === button)); });
       });
-      panel.addEventListener('submit', e => { e.preventDefault(); const values = { url: this.nodes.url.value.trim(), name: this.nodes.name.value.trim(), token: this.nodes.token.value };
+      panel.addEventListener('submit', e => { e.preventDefault(); const values = { url: this.nodes.url.value.trim(), name: this.nodes.name.value.trim(), token: this.nodes.token.value, ownerToken: this.nodes.ownerToken.value };
         try { localStorage.setItem('after-the-sirens-server-preferences', JSON.stringify({ url: values.url, name: values.name })); } catch (_) {}
         this.callbacks.join(values);
       });
@@ -6574,6 +6706,258 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
 (function () {
   'use strict';
+  const S = window.Sirens = window.Sirens || {};
+  const MAX_HISTORY = 100, VOICE_RANGE = 640;
+  class Social {
+    constructor(root, callbacks) {
+      this.root = root; this.callbacks = callbacks || {}; this.online = false; this.id = null; this.owner = false; this.opened = false; this.history = []; this.seen = new Set(); this.unread = 0;
+      this.enabled = false; this.pending = false; this.held = false; this.muted = false; this.deafened = false; this.stream = null; this.context = null; this.pendingContext = null; this.epoch = 0; this.peers = new Map(); this.failed = new Map(); this.voiceMessage = 'Voice is off. Microphone access is requested only when you enable it.'; this.voiceProblem = ''; this.destroyed = false;
+      const toolbar = document.createElement('div'); toolbar.className = 'as-social-toolbar'; toolbar.hidden = true;
+      toolbar.innerHTML = '<button type="button" data-social="open" aria-controls="as-social-panel" aria-expanded="false">T Commands</button><button type="button" data-social="quick-talk" hidden aria-pressed="false">Hold N to talk</button><span data-social="unread" hidden></span>';
+      root.querySelector('.as-status').appendChild(toolbar); this.toolbar = toolbar;
+      const panel = document.createElement('section'); panel.id = 'as-social-panel'; panel.className = 'as-social-panel'; panel.hidden = true; panel.setAttribute('aria-label', 'Chat and game commands');
+      panel.innerHTML = '<header><div><span class="as-kicker" data-social="role">SINGLEPLAYER CONSOLE</span><h2>Chat &amp; commands</h2></div><button type="button" data-social="close" aria-label="Close chat">Esc Close</button></header><div class="as-social-history" data-social="history" role="log" aria-live="polite" aria-relevant="additions" tabindex="0"></div><form class="as-social-compose"><label class="as-social-scope">Channel<select data-social="scope" aria-label="Chat channel"><option value="world">World</option><option value="local">Nearby</option></select></label><label class="as-social-message">Message or command<input data-social="text" type="text" maxlength="280" autocomplete="off" spellcheck="false" placeholder="Type /help for commands"></label><button type="submit" data-social="send">Send</button></form><p class="as-social-note" data-social="hint">Type /help to see singleplayer commands. Your controls stop while the console is open.</p><section class="as-social-voice" data-social="voice"><h3>Proximity voice</h3><p>People within 20 tiles can hear you. Hold N or the talk button. Voice connects directly between players on the local network.</p><div class="as-social-voice-actions"><button type="button" data-social="enable">Enable proximity voice</button><button type="button" data-social="talk" disabled aria-pressed="false">Hold N to talk</button><button type="button" data-social="mute" disabled aria-pressed="false">Mute microphone</button><button type="button" data-social="deafen" disabled aria-pressed="false">Deafen</button><button type="button" data-social="disable" hidden>Turn voice off</button></div><p data-social="voice-status" role="status"></p><ul data-social="peers" aria-label="Nearby voice participants"></ul><small>Microphone access needs localhost or HTTPS. Use the host’s localhost address or a secure guest URL. Direct voice across different networks may need a VPN; no relay service is configured.</small></section>';
+      root.appendChild(panel); this.panel = panel; this.nodes = {};
+      for (const node of root.querySelectorAll('[data-social]')) this.nodes[node.dataset.social] = node;
+      this.nodes.open.addEventListener('click', () => this.open()); this.nodes.close.addEventListener('click', () => this.close());
+      panel.querySelector('form').addEventListener('submit', event => { event.preventDefault(); this.submit(); });
+      panel.addEventListener('keydown', event => {
+        if (event.code === 'Tab') {
+          const focusable = [...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node => !node.disabled && !node.closest('[hidden]'));
+          const first = focusable[0], last = focusable[focusable.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+        event.stopPropagation();
+      });
+      panel.addEventListener('keyup', event => event.stopPropagation());
+      this.nodes.enable.addEventListener('click', () => this.enableVoice()); this.nodes.disable.addEventListener('click', () => this.disableVoice());
+      this.nodes.mute.addEventListener('click', () => { this.muted = !this.muted; this.setHeld(false); this.renderVoice(); });
+      this.nodes.deafen.addEventListener('click', () => { this.deafened = !this.deafened; for (const peer of this.peers.values()) this.setGain(peer); this.renderVoice(); });
+      for (const button of [this.nodes.talk, this.nodes['quick-talk']]) {
+        button.addEventListener('pointerdown', event => { if (event.button !== 0) return; event.preventDefault(); this.setHeld(true); try { button.setPointerCapture(event.pointerId); } catch (_) {} });
+        button.addEventListener('pointerup', () => this.setHeld(false)); button.addEventListener('pointercancel', () => this.setHeld(false)); button.addEventListener('lostpointercapture', () => this.setHeld(false));
+        button.addEventListener('keydown', event => { if (event.code === 'Space' || event.code === 'Enter') { event.preventDefault(); event.stopPropagation(); this.setHeld(true); } });
+        button.addEventListener('keyup', event => { if (event.code === 'Space' || event.code === 'Enter') { event.preventDefault(); event.stopPropagation(); this.setHeld(false); } });
+      }
+      this.keydown = event => this.handleKey(event); this.keyup = event => { if (event.code === 'KeyN' && this.held) { this.setHeld(false); event.preventDefault(); event.stopPropagation(); } };
+      this.release = () => this.setHeld(false); this.visibility = () => { if (document.hidden) this.release(); }; this.pagehide = () => this.disableVoice();
+      window.addEventListener('keydown', this.keydown, true); window.addEventListener('keyup', this.keyup, true); window.addEventListener('blur', this.release); window.addEventListener('pointerup', this.release); document.addEventListener('visibilitychange', this.visibility); window.addEventListener('pagehide', this.pagehide);
+      this.renderVoice(); this.append({ name: 'Console', text: 'Type /help for commands. Multiplayer owners can manage their hosted world.', system: true });
+    }
+    isPlaying() { return !this.destroyed && (!this.callbacks.isPlaying || this.callbacks.isPlaying()); }
+    isBlocking() { return this.opened; }
+    clearInput() { if (this.callbacks.clearInput) this.callbacks.clearInput(); }
+    open() {
+      if (!this.isPlaying()) return;
+      this.clearInput(); this.release(); this.opened = true; this.panel.hidden = false; this.unread = 0; this.nodes.unread.hidden = true; this.nodes.open.setAttribute('aria-expanded', 'true');
+      this.nodes.text.focus(); this.nodes.history.scrollTop = this.nodes.history.scrollHeight;
+    }
+    close() {
+      this.opened = false; this.panel.hidden = true; this.nodes.open.setAttribute('aria-expanded', 'false'); this.clearInput(); this.release();
+      if (this.nodes.text === document.activeElement || this.panel.contains(document.activeElement)) { document.activeElement.blur(); const canvas = document.querySelector('canvas'); if (canvas && !canvas.closest('.as-journal')) canvas.focus({ preventScroll: true }); }
+    }
+    handleKey(event) {
+      const target = event.target, editing = target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      if (this.opened) {
+        if (event.code === 'Escape') { event.preventDefault(); event.stopPropagation(); this.close(); return; }
+        // Let forms receive typing and activation, but never let chat keys reach gameplay.
+        if (this.panel.contains(target)) return;
+        event.preventDefault(); event.stopPropagation(); this.nodes.text.focus(); return;
+      }
+      if (editing || !this.isPlaying()) return;
+      if (event.code === 'KeyT' || event.code === 'Enter' && !(target && /^(BUTTON|SUMMARY|A)$/.test(target.tagName))) { event.preventDefault(); event.stopPropagation(); if (!event.repeat) this.open(); }
+      else if (event.code === 'KeyN' && this.online) { event.preventDefault(); event.stopPropagation(); if (!event.repeat) this.setHeld(true); }
+    }
+    send(packet) { return !!(this.online && this.callbacks.send && this.callbacks.send(packet)); }
+    submit() {
+      const text = this.nodes.text.value.trim().slice(0, 280); if (!text) return; this.clearInput();
+      if (this.online) {
+        if (this.send({ type: 'chat', text, scope: this.nodes.scope.value === 'local' ? 'local' : 'world' })) this.nodes.text.value = '';
+        else this.append({ name: 'World', text: 'The connection is unavailable. Rejoin before sending.', system: true });
+      } else if (text.startsWith('/')) {
+        this.nodes.text.value = ''; this.append({ name: 'You', text });
+        try {
+          const result = this.callbacks.runCommand ? this.callbacks.runCommand(text) : { ok: false, message: 'Commands are unavailable in this build.' };
+          Promise.resolve(result).then(reply => { if (reply) this.append({ name: 'Console', text: typeof reply === 'string' ? reply : reply.message || 'Command completed.', system: true, error: reply.ok === false }); }).catch(error => this.append({ name: 'Console', text: error.message || 'Command failed.', system: true, error: true }));
+        } catch (error) { this.append({ name: 'Console', text: error.message || 'Command failed.', system: true, error: true }); }
+      } else this.append({ name: 'Console', text: 'Singleplayer uses slash commands. Type /help to see them.', system: true });
+      this.nodes.text.focus();
+    }
+    append(message) {
+      if (!message || typeof message.text !== 'string' || typeof message.name !== 'string') return;
+      const key = typeof message.id === 'string' || Number.isSafeInteger(message.id) ? String(message.id) : null; if (key && this.seen.has(key)) return;
+      const row = document.createElement('article'); row.className = 'as-social-line' + (message.system ? ' as-social-system' : '') + (message.error ? ' as-social-error' : '');
+      const name = document.createElement('strong'); name.textContent = message.name.slice(0, 24) + (message.owner ? ' [owner]' : '') + (message.scope === 'local' ? ' [nearby]' : '');
+      const text = document.createElement('span'); text.textContent = message.text.slice(0, 2000); row.append(name, text); this.nodes.history.appendChild(row);
+      this.history.push({ key, row }); if (key) this.seen.add(key);
+      if (this.history.length > MAX_HISTORY) { const old = this.history.shift(); old.row.remove(); if (old.key) this.seen.delete(old.key); }
+      this.nodes.history.scrollTop = this.nodes.history.scrollHeight;
+      if (!this.opened && !message.system) { this.unread = Math.min(MAX_HISTORY, this.unread + 1); this.nodes.unread.textContent = this.unread + ' unread'; this.nodes.unread.hidden = false; }
+    }
+    receive(message) {
+      if (!message || this.destroyed) return;
+      if (message.type === 'chat') this.append(message);
+      else if (message.type === 'command-result') this.append({ name: 'Console', text: String(message.message || (message.ok ? 'Command completed.' : 'Command refused.')), system: true, error: !message.ok });
+      else if (message.type === 'voice-peers') this.reconcile(message.peers);
+      else if (message.type === 'voice-signal') this.signal(message.from, message.data);
+    }
+    update(online, players, state, status) {
+      const nextId = status && typeof status.id === 'string' ? status.id : null;
+      if ((!online && (this.online || this.enabled || this.pending)) || this.id && nextId && this.id !== nextId) this.disableVoice();
+      if (online && status && status.url && (!this.online || this.room !== status.url)) { this.room = status.url; this.history = []; this.seen.clear(); this.nodes.history.replaceChildren(); this.unread = 0; this.nodes.unread.hidden = true; }
+      this.online = !!online; this.id = nextId; this.owner = !!(online && status && status.owner);
+      const visible = !!state && this.isPlaying(); this.toolbar.hidden = !visible;
+      if (this.opened && !visible) this.close();
+      this.nodes.open.textContent = online ? 'T Chat / Commands' : 'T Commands'; this.nodes.scope.disabled = !online; this.nodes.voice.hidden = !online;
+      this.nodes.role.textContent = online ? this.owner ? 'MULTIPLAYER · WORLD OWNER' : 'MULTIPLAYER · SURVIVOR' : 'SINGLEPLAYER CONSOLE';
+      this.nodes.text.placeholder = online ? 'Message your world, or type /help' : 'Type /help for commands';
+      this.nodes.hint.textContent = online ? 'World chat reaches everyone. Nearby chat and voice reach people within 20 tiles. /help lists your commands. Your controls stop while chat is open.' : 'Type /help to see singleplayer commands. Your controls stop while the console is open.';
+      if (!visible) this.release(); this.renderVoice();
+    }
+    async enableVoice() {
+      if (!this.online || this.enabled || this.pending || this.destroyed) return;
+      if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof RTCPeerConnection !== 'function') { this.voiceMessage = 'Microphone access needs localhost or HTTPS and a browser with WebRTC. Open a secure guest URL or the host’s localhost page.'; this.renderVoice(); return; }
+      this.pending = true; const epoch = ++this.epoch; this.voiceMessage = 'Waiting for your microphone permission…'; this.renderVoice();
+      let context;
+      try {
+        const Audio = window.AudioContext || window.webkitAudioContext; if (Audio) { context = new Audio(); this.pendingContext = context; context.resume().catch(() => {}); }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }, video: false });
+        if (this.destroyed || epoch !== this.epoch || !this.online) { stream.getTracks().forEach(track => track.stop()); if (context) context.close().catch(() => {}); return; }
+        this.pendingContext = null; this.stream = stream; this.context = context || null; this.enabled = true; this.pending = false; this.muted = false; this.deafened = false; this.held = false; this.voiceProblem = '';
+        for (const track of stream.getAudioTracks()) { track.enabled = false; track.addEventListener('ended', () => { if (this.stream === stream) this.disableVoice('Microphone disconnected. Enable voice to try again.'); }); }
+        if (!this.send({ type: 'voice-state', enabled: true, talking: false })) { this.disableVoice('Voice could not connect. Rejoin the world and enable it again.'); return; }
+        this.voiceMessage = 'Voice ready. Hold N or the talk button to transmit. You are silent until you hold it.'; this.renderVoice();
+      } catch (error) {
+        if (context) context.close().catch(() => {});
+        if (epoch === this.epoch) { this.pendingContext = null; this.pending = false; this.voiceMessage = error && error.name === 'NotAllowedError' ? 'Microphone permission was declined. Enable it in your browser and try again.' : 'Microphone unavailable. Check your input device and try again.'; this.renderVoice(); }
+      }
+    }
+    setHeld(held) {
+      const next = !!(held && this.enabled && this.online && !this.muted && !document.hidden && this.isPlaying()); if (next === this.held) return;
+      this.held = next; if (this.stream) for (const track of this.stream.getAudioTracks()) track.enabled = next;
+      this.send({ type: 'voice-state', enabled: this.enabled, talking: next }); this.renderVoice();
+    }
+    disableVoice(message) {
+      ++this.epoch; this.pending = false; this.held = false; const active = this.enabled; this.enabled = false;
+      if (this.stream) { const stream = this.stream; this.stream = null; stream.getTracks().forEach(track => track.stop()); }
+      for (const peer of [...this.peers.values()]) this.removePeer(peer); this.failed.clear();
+      if (this.pendingContext) { this.pendingContext.close().catch(() => {}); this.pendingContext = null; }
+      if (this.context) { this.context.close().catch(() => {}); this.context = null; }
+      if (active) this.send({ type: 'voice-state', enabled: false, talking: false });
+      this.voiceProblem = ''; this.voiceMessage = message || 'Voice is off. Microphone access is requested only when you enable it.'; this.renderVoice();
+    }
+    disconnect() { this.disableVoice(); this.online = false; this.id = null; this.owner = false; this.close(); }
+    reconcile(roster) {
+      if (!this.enabled || !this.online || !Array.isArray(roster)) return;
+      const eligible = new Map();
+      for (const info of roster.slice(0, 19)) if (info && typeof info.id === 'string' && info.id.length <= 80 && info.id !== this.id && typeof info.name === 'string' && Number.isFinite(info.distance) && info.distance >= 0 && info.distance <= VOICE_RANGE) eligible.set(info.id, { id: info.id, name: info.name.slice(0, 24), distance: info.distance, talking: !!info.talking });
+      for (const peer of [...this.peers.values()]) if (!eligible.has(peer.id)) this.removePeer(peer);
+      for (const info of eligible.values()) {
+        let peer = this.peers.get(info.id);
+        if (!peer && (this.failed.get(info.id) || 0) <= Date.now()) peer = this.createPeer(info);
+        if (peer) { peer.name = info.name; peer.distance = info.distance; peer.talking = info.talking; this.setGain(peer); }
+      }
+      for (const id of this.failed.keys()) if (!eligible.has(id)) this.failed.delete(id);
+      this.renderVoice();
+    }
+    createPeer(info) {
+      if (!this.stream || !this.enabled) return null;
+      const connection = new RTCPeerConnection({ iceServers: [] });
+      const peer = { ...info, connection, candidates: [], chain: Promise.resolve(), remote: null, source: null, gain: null, analyser: null, audio: null, makingOffer: false, ignoredOffer: false };
+      this.peers.set(info.id, peer);
+      connection.onicecandidate = event => {
+        if (!event.candidate || this.peers.get(peer.id) !== peer || !this.enabled) return;
+        const candidate = event.candidate.toJSON(); this.send({ type: 'voice-signal', to: peer.id, data: { type: 'candidate', candidate: candidate.candidate, sdpMid: candidate.sdpMid === undefined ? null : candidate.sdpMid, sdpMLineIndex: candidate.sdpMLineIndex === undefined ? null : candidate.sdpMLineIndex } });
+      };
+      connection.ontrack = event => {
+        if (this.peers.get(peer.id) !== peer || !this.enabled) { event.track.stop(); return; }
+        if (peer.remote) return;
+        peer.remote = event.streams[0] || new MediaStream([event.track]);
+        // Attach a native media sink as well as Web Audio so remote RTP is decoded.
+        peer.audio = document.createElement('audio'); peer.audio.autoplay = true; peer.audio.srcObject = peer.remote; peer.audio.hidden = true; peer.audio.muted = !!this.context; this.panel.appendChild(peer.audio);
+        if (this.context) { peer.source = this.context.createMediaStreamSource(peer.remote); peer.gain = this.context.createGain(); peer.analyser = this.context.createAnalyser(); peer.analyser.fftSize = 256; peer.source.connect(peer.analyser); peer.analyser.connect(peer.gain); peer.gain.connect(this.context.destination); }
+        peer.audio.play().catch(() => { if (this.peers.get(peer.id) !== peer || !this.enabled) return; this.voiceProblem = 'Your browser blocked audio playback; re-enable voice using the button.'; this.renderVoice(); });
+        this.setGain(peer); this.renderVoice();
+      };
+      connection.onconnectionstatechange = () => {
+        if (this.peers.get(peer.id) !== peer) return;
+        if (connection.connectionState === 'failed') { this.failed.set(peer.id, Date.now() + 5000); this.removePeer(peer); this.voiceProblem = 'A direct voice connection failed. On different networks, use a shared VPN.'; }
+        else if (connection.connectionState === 'connected') this.voiceProblem = '';
+        this.renderVoice();
+      };
+      for (const track of this.stream.getAudioTracks()) connection.addTrack(track, this.stream);
+      // One deterministic initiator per pair avoids simultaneous offers.
+      if (this.id < peer.id) peer.chain = peer.chain.then(async () => {
+        if (this.peers.get(peer.id) !== peer || !this.enabled) return;
+        peer.makingOffer = true;
+        try { await connection.setLocalDescription(await connection.createOffer()); if (this.peers.get(peer.id) === peer && this.enabled) this.send({ type: 'voice-signal', to: peer.id, data: { type: connection.localDescription.type, sdp: connection.localDescription.sdp } }); }
+        finally { peer.makingOffer = false; }
+      }).catch(() => { if (this.peers.get(peer.id) === peer) { this.voiceProblem = 'Voice setup failed. Turn voice off and enable it again.'; this.renderVoice(); } });
+      return peer;
+    }
+    signal(from, data) {
+      const peer = this.peers.get(from); if (!this.enabled || !this.online || !peer || !data || !['offer', 'answer', 'candidate'].includes(data.type)) return;
+      peer.chain = peer.chain.then(async () => {
+        if (this.peers.get(peer.id) !== peer || !this.enabled) return;
+        const connection = peer.connection;
+        if (data.type === 'candidate') {
+          if (typeof data.candidate !== 'string' || data.candidate.length > 2000) return;
+          const candidate = { candidate: data.candidate, sdpMid: data.sdpMid, sdpMLineIndex: data.sdpMLineIndex };
+          if (connection.remoteDescription) { if (!peer.ignoredOffer) await connection.addIceCandidate(candidate); }
+          else if (peer.candidates.length < 32) peer.candidates.push(candidate);
+          return;
+        }
+        if (typeof data.sdp !== 'string' || data.sdp.length > 8192) return;
+        const collision = data.type === 'offer' && (peer.makingOffer || connection.signalingState !== 'stable'); peer.ignoredOffer = collision && this.id < peer.id; if (peer.ignoredOffer) return;
+        if (collision) await connection.setLocalDescription({ type: 'rollback' });
+        await connection.setRemoteDescription({ type: data.type, sdp: data.sdp });
+        for (const candidate of peer.candidates.splice(0)) await connection.addIceCandidate(candidate);
+        if (data.type === 'offer') { await connection.setLocalDescription(await connection.createAnswer()); if (this.peers.get(peer.id) === peer && this.enabled) this.send({ type: 'voice-signal', to: peer.id, data: { type: connection.localDescription.type, sdp: connection.localDescription.sdp } }); }
+      }).catch(() => { if (this.peers.get(peer.id) === peer && this.enabled) { this.voiceProblem = 'Voice could not negotiate a direct connection. Re-enable voice to retry.'; this.renderVoice(); } });
+    }
+    setGain(peer) {
+      const gain = this.deafened ? 0 : Math.pow(Math.max(0, 1 - peer.distance / VOICE_RANGE), 1.5);
+      if (peer.gain && this.context && this.context.state !== 'closed') peer.gain.gain.setTargetAtTime(gain, this.context.currentTime, .04);
+      if (peer.audio) peer.audio.volume = gain;
+    }
+    removePeer(peer) {
+      this.peers.delete(peer.id); peer.connection.ontrack = null; peer.connection.onicecandidate = null; peer.connection.onconnectionstatechange = null; peer.connection.close();
+      if (peer.remote) peer.remote.getTracks().forEach(track => track.stop()); if (peer.source) peer.source.disconnect(); if (peer.gain) peer.gain.disconnect(); if (peer.analyser) peer.analyser.disconnect();
+      if (peer.audio) { peer.audio.pause(); peer.audio.srcObject = null; peer.audio.remove(); }
+    }
+    renderVoice() {
+      if (!this.nodes) return;
+      this.nodes.enable.hidden = this.enabled; this.nodes.enable.disabled = this.pending || !this.online; this.nodes.enable.textContent = this.pending ? 'Waiting for permission…' : 'Enable proximity voice'; this.nodes.disable.hidden = !this.enabled && !this.pending;
+      this.nodes['quick-talk'].hidden = !this.enabled || !this.online;
+      for (const node of [this.nodes.talk, this.nodes['quick-talk']]) { node.disabled = !this.enabled || this.muted; node.setAttribute('aria-pressed', String(this.held)); node.textContent = this.held ? 'TRANSMITTING · release to stop' : 'Hold N to talk'; }
+      this.nodes.mute.disabled = !this.enabled; this.nodes.mute.setAttribute('aria-pressed', String(this.muted)); this.nodes.mute.textContent = this.muted ? 'Unmute microphone' : 'Mute microphone';
+      this.nodes.deafen.disabled = !this.enabled; this.nodes.deafen.setAttribute('aria-pressed', String(this.deafened)); this.nodes.deafen.textContent = this.deafened ? 'Undeafen' : 'Deafen';
+      const voiceStatus = this.enabled ? (this.held ? 'Transmitting to nearby players. ' : this.muted ? 'Microphone muted. ' : 'Microphone silent. Hold N to talk. ') + (this.deafened ? 'Incoming voice is muted. ' : '') + this.peers.size + ' nearby voice participant(s).' + (this.voiceProblem ? ' ' + this.voiceProblem : '') : this.voiceMessage;
+      if (this.nodes['voice-status'].textContent !== voiceStatus) this.nodes['voice-status'].textContent = voiceStatus;
+      const roster = [...this.peers.values()].map(peer => ({ id: peer.id, name: peer.name, talking: peer.talking, state: peer.connection.connectionState, distance: Math.round(peer.distance / 32) }));
+      const key = JSON.stringify(roster); if (key !== this.rosterKey) { this.rosterKey = key; this.nodes.peers.replaceChildren(); for (const peer of roster) { const node = document.createElement('li'); node.dataset.voicePeer = peer.id; node.dataset.talking = String(peer.talking); node.textContent = peer.name + ' · ' + peer.distance + ' tiles · ' + (peer.talking ? 'speaking' : peer.state === 'connected' ? 'connected' : 'connecting'); this.nodes.peers.appendChild(node); } }
+    }
+    getStatus() { return { online: this.online, owner: this.owner, open: this.opened, enabled: this.enabled, pending: this.pending, transmitting: this.held, muted: this.muted, deafened: this.deafened, history: this.history.length, audioContext: this.context ? this.context.state : null, pendingAudioContext: this.pendingContext ? this.pendingContext.state : null, microphone: this.stream ? this.stream.getAudioTracks().map(track => ({ enabled: track.enabled, state: track.readyState })) : [], peers: [...this.peers.values()].map(peer => ({ id: peer.id, name: peer.name, distance: peer.distance, talking: peer.talking, connection: peer.connection.connectionState, gain: this.deafened ? 0 : Math.pow(Math.max(0, 1 - peer.distance / VOICE_RANGE), 1.5), remote: !!peer.remote })) }; }
+    async getVoiceStats() {
+      const peers = [];
+      for (const peer of this.peers.values()) {
+        const stats = await peer.connection.getStats().catch(() => new Map()), audio = [];
+        stats.forEach(item => { if ((item.kind === 'audio' || item.mediaType === 'audio') && ['inbound-rtp', 'outbound-rtp', 'media-source'].includes(item.type)) audio.push({ type: item.type, packets: item.packetsSent || item.packetsReceived || 0, bytes: item.bytesSent || item.bytesReceived || 0, totalAudioEnergy: item.totalAudioEnergy || 0, audioLevel: item.audioLevel || 0 }); });
+        let receivedRms = 0; if (peer.analyser) { const waveform = new Float32Array(peer.analyser.fftSize); peer.analyser.getFloatTimeDomainData(waveform); receivedRms = Math.sqrt(waveform.reduce((sum, value) => sum + value * value, 0) / waveform.length); }
+        peers.push({ id: peer.id, connection: peer.connection.connectionState, receivedRms, audio });
+      }
+      return peers;
+    }
+    destroy() {
+      this.destroyed = true; this.disconnect(); window.removeEventListener('keydown', this.keydown, true); window.removeEventListener('keyup', this.keyup, true); window.removeEventListener('blur', this.release); window.removeEventListener('pointerup', this.release); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); this.panel.remove(); this.toolbar.remove();
+    }
+  }
+  S.Social = Social;
+})();
+
+(function () {
+  'use strict';
   const S = window.Sirens;
   const canvas = document.getElementById('world');
   const minimap = document.getElementById('minimap');
@@ -6597,7 +6981,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   const pilot = S.Autoplay ? S.Autoplay.create() : null;
   let autoInput = null;
-  let network = null, networkUI = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
+  let network = null, networkUI = null, social = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
   let debugOn = false;
@@ -6789,6 +7173,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   }
   function leaveNetwork(showTitle) {
     const old = network; network = null; networkReady = false; networkPlayers = []; state.party = []; state.networked = false;
+    if (social) social.disconnect();
     if (old) old.disconnect();
     if (networkUI) networkUI.update(false, [], state);
     if (showTitle) { stopAutoplay(); active = false; clearInput(); setScreen('title'); }
@@ -6821,19 +7206,27 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
             if (state.player.health < previous.player.health - .2) S.Effects.emit(state, 'hurt');
           } else { clearInput(); accumulator = 0; unlockAudio(); setScreen('playing'); S.Effects.emit(state, 'ready'); }
           ui.update(state, frameInfo); networkUI.update(true, networkPlayers, state);
+          if (social) social.update(true, networkPlayers, state, network.getStatus());
         },
         onStatus: function (info) {
-          if (info.connected) networkUI.status('Connected to the shared world.', false);
+          if (info.connected) { networkUI.status('Connected to the shared world.', false); networkUI.nodes.ownerToken.value = ''; if (social) social.update(true, networkPlayers, state, info); }
           else if (info.phase === 'offline' && networkReady) networkUI.status('Disconnected. Rejoin to restore your survivor.', false);
           if (info.identity) { try { localStorage.setItem(identityKey, info.identity); } catch (_) {} }
           if (info.connected === false && networkReady) { leaveNetwork(true); toast('Disconnected from the host. Rejoin to restore your survivor.', 'warning'); }
         },
-        onError: function (text) { networkUI.status(String(text), false); if (networkReady) toast(String(text), 'warning'); }
+        onError: function (text) { networkUI.status(String(text), false); if (networkReady) toast(String(text), 'warning'); },
+        onSocial: function (message) { if (social) social.receive(message); }
       });
       Promise.resolve(network.connect(options)).catch(function (error) { networkUI.status(error.message, false); });
     } catch (error) { networkUI.status(error.message, false); }
   }
   networkUI = new S.NetworkUI(document.getElementById('ui'), { join: joinNetwork, leave: function () { leaveNetwork(true); } });
+  social = new S.Social(document.getElementById('ui'), {
+    send: function (packet) { return networkReady && network ? network.sendSocial(packet) : false; },
+    runCommand: function (text) { stopAutoplay(); const result = S.Commands.execute(state, text, { save: function () { return save(true); } }); ui.update(state, frameInfo); return result; },
+    clearInput: clearInput,
+    isPlaying: function () { return active && screen === 'playing' && !ui.isBlocking() && !state.ended; }
+  });
   if (ui.applyPreferences) ui.applyPreferences(preferences);
   setScreen('title');
   ui.update(state, frameInfo);
@@ -6841,6 +7234,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyJ', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape']);
 
   addEventListener('keydown', function (event) {
+    if (event.defaultPrevented || social && social.isBlocking()) return;
     const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
     const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
     if (buttonActivation) return;
@@ -6861,7 +7255,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       clearInput(); ui.toggleInventory(); ui.update(state, frameInfo); return;
     }
     if (event.code === 'KeyJ' && active && screen === 'playing' && !state.ended) { clearInput(); ui.toggleJournal(); ui.update(state, frameInfo); return; }
-    if (!active || ui.isBlocking() || state.ended) return;
+    if (!active || ui.isBlocking() || social && social.isBlocking() || state.ended) return;
     stopAutoplay();
     keys.add(event.code);
     unlockAudio();
@@ -6883,10 +7277,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   addEventListener('keyup', function (event) { keys.delete(event.code); });
   addEventListener('blur', function () { clearInput(); if (active && screen === 'playing' && !(pilot && S.Autoplay.status(pilot).enabled)) pause(); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); if (!(pilot && S.Autoplay.status(pilot).enabled)) pause(); } });
+  addEventListener('pagehide', function () { if (active && !networkReady) save(true); });
+  addEventListener('beforeunload', function () { if (active && !networkReady) save(true); });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
   canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
   canvas.addEventListener('pointerdown', function (event) {
-    if (!active || ui.isBlocking()) return;
+    if (!active || ui.isBlocking() || social && social.isBlocking()) return;
     stopAutoplay();
     event.preventDefault();
     pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
@@ -6932,7 +7328,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true);
     }
     autoInput = null;
-    if (pilot && S.Autoplay.status(pilot).enabled && active && (!ui.isBlocking() || screen === 'playing' && !!state.conversation && !ui.inventoryOpen && !(ui.journal && ui.journal.open)) && !state.ended) {
+    if (pilot && S.Autoplay.status(pilot).enabled && active && !(social && social.isBlocking()) && (!ui.isBlocking() || screen === 'playing' && !!state.conversation && !ui.inventoryOpen && !(ui.journal && ui.journal.open)) && !state.ended) {
       const choice = S.Autoplay.step(pilot, state, elapsed); autoInput = choice.input;
       if (choice.command) autoCommand(choice.command);
     }
@@ -6940,11 +7336,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     if (networkReady && active) {
       networkSendTime += elapsed; S.Effects.advance(state, elapsed);
       if (networkSendTime >= .05) {
-        network.sendInput(ui.isBlocking() || state.ended ? { moveX: 0, moveY: 0, attack: false, shoot: false, aimX: state.player.x, aimY: state.player.y } : autoInput || inputSnapshot());
+        network.sendInput(ui.isBlocking() || social && social.isBlocking() || state.ended ? { moveX: 0, moveY: 0, attack: false, shoot: false, aimX: state.player.x, aimY: state.player.y } : autoInput || inputSnapshot());
         networkSendTime %= .05;
       }
       accumulator = 0;
-    } else if (active && !ui.isBlocking() && !state.ended) {
+    } else if (active && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended) {
       accumulator += elapsed;
       while (accumulator >= 1 / 60) {
         const oldHealth = state.player.health;
@@ -6954,14 +7350,14 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         if (state.ended) break;
       }
       autoSaveTime += elapsed;
-      if (autoSaveTime >= 30) { save(true); autoSaveTime = 0; }
+      if (autoSaveTime >= 5) { save(true); autoSaveTime = 0; }
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
     renderBrain(false);
-    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !state.ended && !document.hidden);
+    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
-    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); uiTime = 0; }
+    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0; }
     debug.hidden = !debugOn || screen === 'title';
     if (!debug.hidden) debug.textContent = frameInfo.fps + ' FPS  |  ' + frameInfo.frameMs.toFixed(1) + ' ms avg  |  ' + frameInfo.p95.toFixed(1) + ' ms p95\n' +
       state.zombies.length + ' active zombies  |  ' + state.stats.aiUpdates + ' AI decisions  |  seed ' + state.seed +
@@ -6973,6 +7369,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
+    getSocialStatus: function () { return social.getStatus(); }, getVoiceStats: function () { return social.getVoiceStats(); },
     getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics };
 })();
 </script>

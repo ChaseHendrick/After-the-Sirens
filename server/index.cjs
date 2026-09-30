@@ -1,12 +1,15 @@
 'use strict';
 const http = require('node:http');
+const https = require('node:https');
 const os = require('node:os');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const { WebSocketServer, WebSocket } = require('ws');
+const { createSocial, restoreBans } = require('./social.cjs');
 const ROOT = path.resolve(__dirname, '..');
+const INPUT_RATE = 30, INPUT_BURST = 120;
 const SIMULATION = ['catalog', 'effects', 'progression', 'settlement', 'personal', 'warfare', 'vehicles', 'actors', 'destruction', 'stories', 'world', 'engine'];
 const clone = value => JSON.parse(JSON.stringify(value));
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -21,14 +24,27 @@ async function createServer(options = {}) {
   const guestHost = host === '0.0.0.0' || host === '::' ? (interfaces.find(n => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(n.address)) || interfaces[0] || { address: '127.0.0.1' }).address : host;
   const publicWorld = options.public === true, capacity = 20, worldName = String(options.name || 'After the Sirens world').slice(0, 60);
   const token = options.token || process.env.SIRENS_ROOM_TOKEN || crypto.randomBytes(24).toString('base64url');
+  const ownerToken = options.ownerToken === undefined ? process.env.SIRENS_OWNER_TOKEN || crypto.randomBytes(24).toString('base64url') : options.ownerToken;
   if (typeof token !== 'string' || token.length < 12 || token.length > 128) throw new Error('Set SIRENS_ROOM_TOKEN to a private access key of 12 to 128 characters.');
+  if (typeof ownerToken !== 'string' || ownerToken.length < 12 || ownerToken.length > 128 || /[\u0000-\u001f\u007f]/.test(ownerToken)) throw new Error('Set SIRENS_OWNER_TOKEN to an owner key of 12 to 128 characters.');
+  const certFile = options.tlsCert || process.env.SIRENS_TLS_CERT, keyFile = options.tlsKey || process.env.SIRENS_TLS_KEY;
+  if (!!certFile !== !!keyFile) throw new Error('TLS hosting requires both --tls-cert and --tls-key, or both SIRENS_TLS_CERT and SIRENS_TLS_KEY.');
+  let tls = null;
+  if (certFile && keyFile) {
+    if (typeof certFile !== 'string' || typeof keyFile !== 'string') throw new Error('TLS certificate and key must be file paths.');
+    const cert = fs.readFileSync(path.resolve(certFile)), key = fs.readFileSync(path.resolve(keyFile));
+    if (cert.length > 128000 || key.length > 128000) throw new Error('TLS certificate or key exceeds its file budget.');
+    tls = { cert, key };
+  }
+  const webScheme = tls ? 'https://' : 'http://', socketScheme = tls ? 'wss://' : 'ws://';
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid server port.');
   if (options.seed !== undefined && (!Number.isInteger(options.seed) || options.seed < 0 || options.seed > 4294967295)) throw new Error('World seed must be an integer from 0 to 4294967295.');
   if (options.difficulty && !['calm', 'standard', 'hard'].includes(options.difficulty)) throw new Error('Invalid world difficulty.');
   const S = loadEngine(), E = S.Engine, worldFile = path.resolve(options.worldFile || path.join(ROOT, 'server-data', 'world.save.json'));
   let state = E.create(options.seed === undefined ? 0 : options.seed, options.difficulty || 'standard', 'openworld');
   const template = clone(state.player), templatePersonal = clone(S.Personal.ensure(state)), records = new Map(), connections = new Map(), bites = new Map();
-  let hostId = null, sequence = 0, tickCount = 0, closed = false, saving = Promise.resolve();
+  const networkStats = { inputsAccepted: 0, inputsCoalesced: 0, inputRateDenials: 0 };
+  let hostId = null, sequence = 0, tickCount = 0, closed = false, saving = Promise.resolve(), savedBans;
   const offset = () => ({ x: state.world.originX * 32, y: state.world.originY * 32 });
   function localPlayer(record) { const p = clone(record.player), o = offset(); p.x -= o.x; p.y -= o.y; return p; }
   function inScene(p) { return p.x >= 16 && p.y >= 16 && p.x < state.width * 32 - 16 && p.y < state.height * 32 - 16; }
@@ -59,7 +75,7 @@ async function createServer(options = {}) {
   }
   if (fs.existsSync(worldFile)) {
     const text = fs.readFileSync(worldFile, 'utf8'); if (text.length > 40000000) throw new Error('Server world exceeds the persistence budget.');
-    const saved = JSON.parse(text); if (saved.version !== 1 || !Array.isArray(saved.players) || saved.players.length > 64) throw new Error('Invalid server world.');
+    const saved = JSON.parse(text); if (saved.version !== 1 || !Array.isArray(saved.players) || saved.players.length > 64) throw new Error('Invalid server world.'); savedBans = saved.bans;
     state = E.deserialize(saved.save); if (!state.world || state.stories && state.stories.floor) throw new Error('Multiplayer worlds must use the open-world ground floor.');
     for (const raw of saved.players) {
       if (!raw || typeof raw.id !== 'string' || !/^[a-f0-9-]{36}$/.test(raw.id) || records.has(raw.id) || typeof raw.identityHash !== 'string' || !/^[a-f0-9]{64}$/.test(raw.identityHash) || typeof raw.name !== 'string' || !/^[^\u0000-\u001f\u007f]{1,24}$/.test(raw.name)) throw new Error('Invalid survivor identity.');
@@ -71,10 +87,11 @@ async function createServer(options = {}) {
     }
     if (saved.hostId !== null && !records.has(saved.hostId)) throw new Error('Invalid room host identity.'); hostId = saved.hostId;
   }
+  const bans = restoreBans(savedBans, records);
   function send(socket, message) { if (socket.readyState === WebSocket.OPEN && socket.bufferedAmount < 4000000) socket.send(JSON.stringify(message)); }
   function deny(socket, message) { send(socket, { type: 'error', message }); socket.close(1008, message.slice(0, 100)); }
   function party() {
-    return connected().map(r => ({ id: r.id, name: r.name, player: localPlayer(r), look: withPlayer(r, () => clone(S.Personal.look(state))), connected: true, host: r.id === (leader() && leader().id) }));
+    return connected().map(r => ({ id: r.id, name: r.name, player: localPlayer(r), look: withPlayer(r, () => clone(S.Personal.look(state))), connected: true, host: r.id === (leader() && leader().id), owner: !!connections.get(r.id).owner }));
   }
   function snapshot() {
     if (!connections.size) return;
@@ -88,7 +105,7 @@ async function createServer(options = {}) {
     }
   }
   function save() {
-    alignWorld(); const document = JSON.stringify({ version: 1, hostId, save: E.serialize(state), players: [...records.values()].map(r => ({ id: r.id, identityHash: r.identityHash, name: r.name, player: r.player, personal: r.personal })) });
+    alignWorld(); const document = JSON.stringify({ version: 1, hostId, save: E.serialize(state), players: [...records.values()].map(r => ({ id: r.id, identityHash: r.identityHash, name: r.name, player: r.player, personal: r.personal })), bans: social.serializeBans() });
     saving = saving.catch(() => {}).then(async () => { await fs.promises.mkdir(path.dirname(worldFile), { recursive: true }); const temporary = worldFile + '.tmp'; await fs.promises.writeFile(temporary, document, { mode: 0o600 }); await fs.promises.rename(temporary, worldFile); });
     return saving;
   }
@@ -107,6 +124,7 @@ async function createServer(options = {}) {
     });
   }
   function usableInput(connection) {
+    connection.pendingInput = false;
     if (Date.now() - connection.lastInput > 600) return {};
     const input = Object.assign({}, connection.input), o = offset();
     if (input.aimX !== undefined) input.aimX -= o.x; if (input.aimY !== undefined) input.aimY -= o.y; return input;
@@ -121,17 +139,19 @@ async function createServer(options = {}) {
       if (r.id !== anchor.id) { withPlayer(r, () => { E.stepParticipant(state, .05, usableInput(connections.get(r.id))); S.Personal.update(state, .05); }); guestDanger(r); }
       const p = localPlayer(r); if (!inScene(p)) rendezvous(r);
     }
-    alignWorld(); tickCount++; if (tickCount % 2 === 0) snapshot();
+    alignWorld(); tickCount++; if (tickCount % 2 === 0) snapshot(); if (tickCount % 10 === 0) social.updatePeers();
   }
-  const server = http.createServer((req, res) => {
+  const social = createSocial({ connections, records, bans, send, save, snapshot, withPlayer, localPlayer, inScene, state: () => state, engine: E, catalog: S.Catalog });
+  const handler = (req, res) => {
     if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
     if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ game: 'After the Sirens', protocol: 1, players: connections.size, capacity, public: publicWorld, name: worldName, difficulty: state.difficulty })); return; }
-    if (req.url === '/servers') { res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }); const url = options.publicUrl || 'ws://' + (guestHost.includes(':') ? '[' + guestHost + ']' : guestHost) + ':' + server.address().port + '/game'; res.end(JSON.stringify({ version: 1, servers: publicWorld ? [{ name: worldName, url, players: connections.size, capacity, public: true, difficulty: state.difficulty }] : [] })); return; }
+    if (req.url === '/servers') { res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }); const url = options.publicUrl || socketScheme + (guestHost.includes(':') ? '[' + guestHost + ']' : guestHost) + ':' + server.address().port + '/game'; res.end(JSON.stringify({ version: 1, servers: publicWorld ? [{ name: worldName, url, players: connections.size, capacity, public: true, difficulty: state.difficulty }] : [] })); return; }
     if (req.url !== '/' && req.url !== '/index.html') { res.writeHead(404); res.end('Not found'); return; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
     fs.createReadStream(path.join(ROOT, 'index.html')).on('error', () => res.end('Build index.html first.')).pipe(res);
-  });
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
+  };
+  const server = tls ? https.createServer(tls, handler) : http.createServer(handler);
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16384, perMessageDeflate: false });
   server.on('upgrade', (req, socket, head) => {
     if (req.url !== '/game' || wss.clients.size >= 48) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); socket.destroy(); return; }
     const allowed = options.allowedOrigins || process.env.SIRENS_ALLOWED_ORIGINS;
@@ -146,14 +166,20 @@ async function createServer(options = {}) {
       try {
         if (binary) return deny(socket, 'Only JSON commands are accepted.');
         const message = JSON.parse(data.toString()); if (!message || typeof message !== 'object' || Array.isArray(message)) return deny(socket, 'Invalid command.');
+        if (data.length > (message.type === 'voice-signal' ? 12000 : 4096)) return deny(socket, 'Command exceeds its size limit.');
         if (Date.now() - messageWindow >= 1000) { messageWindow = Date.now(); messages = 0; actions = 0; }
-        if (++messages > 60) return deny(socket, 'Command rate exceeded.');
+        if (!['input', 'voice-state', 'voice-signal'].includes(message.type) && ++messages > 60) return deny(socket, 'Command rate exceeded.');
         if (!id) {
-          if (message.type !== 'join' || message.protocol !== 1 || typeof message.token !== 'string' || message.token.length > 128 || !publicWorld && !crypto.timingSafeEqual(Buffer.from(digest(message.token)), Buffer.from(digest(token)))) return deny(socket, 'Invalid world access key.');
+          if (Object.keys(message).some(key => !['type', 'protocol', 'token', 'name', 'identity', 'ownerToken'].includes(key)) || message.type !== 'join' || message.protocol !== 1 || typeof message.token !== 'string' || message.token.length > 128 || !publicWorld && !crypto.timingSafeEqual(Buffer.from(digest(message.token)), Buffer.from(digest(token)))) return deny(socket, 'Invalid world access key.');
+          let owner = false;
+          if (message.ownerToken !== undefined) {
+            if (typeof message.ownerToken !== 'string' || message.ownerToken.length < 12 || message.ownerToken.length > 128 || !crypto.timingSafeEqual(Buffer.from(digest(message.ownerToken)), Buffer.from(digest(ownerToken)))) return deny(socket, 'Invalid world owner key.');
+            owner = true;
+          }
           if (connections.size >= capacity) return deny(socket, 'This world already has twenty survivors.');
           let record, identity = message.identity || null;
           if (identity !== null && identity !== undefined && (typeof identity !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(identity))) return deny(socket, 'Invalid survivor identity.');
-          if (identity) { record = [...records.values()].find(r => r.identityHash === digest(identity)); if (!record) return deny(socket, 'Unknown survivor identity.'); if (connections.has(record.id)) return deny(socket, 'This survivor is already connected.'); }
+          if (identity) { record = [...records.values()].find(r => r.identityHash === digest(identity)); if (!record) return deny(socket, 'Unknown survivor identity.'); if (bans.has(record.identityHash)) return deny(socket, 'This survivor identity is banned from the world.'); if (connections.has(record.id)) return deny(socket, 'This survivor is already connected.'); }
           else {
             if (records.size >= 64) return deny(socket, 'This world has reached its durable survivor limit.');
             if (typeof message.name !== 'string' || !/^[^\u0000-\u001f\u007f]{1,24}$/.test(message.name.trim())) return deny(socket, 'Use a survivor name of 1 to 24 characters.');
@@ -163,14 +189,26 @@ async function createServer(options = {}) {
           }
           rendezvous(record); id = record.id; if (!hostId) hostId = id;
           if (record.player.health > 0) state.ended = false;
-          connections.set(id, { socket, record, input: {}, lastInput: 0 }); clearTimeout(timeout);
-          send(socket, { type: 'welcome', protocol: 1, id, identity, hostId: leader().id, tickRate: 20 }); snapshot(); save().catch(() => {}); return;
+          connections.set(id, { socket, record, owner, input: {}, lastInput: 0, pendingInput: false, inputTokens: INPUT_BURST, inputWindow: performance.now(), voiceEnabled: false, voiceTalking: false }); clearTimeout(timeout);
+          send(socket, { type: 'welcome', protocol: 1, id, identity, hostId: leader().id, tickRate: 20, owner, chatHistory: social.history() }); snapshot(); social.updatePeers(); save().catch(() => {}); return;
+        }
+        if (!connections.get(id) || connections.get(id).removed) return deny(socket, 'This survivor session is no longer active.');
+        if (!Number.isSafeInteger(message.seq) || message.seq < 0 || message.seq <= lastSeq) return deny(socket, 'Invalid or repeated command sequence.'); lastSeq = message.seq;
+        if (['chat', 'voice-state', 'voice-signal'].includes(message.type)) {
+          if (!social.validate(message)) return deny(socket, 'Invalid social command.');
+          social.handle(connections.get(id), message); return;
         }
         const allowed = message.type === 'input' ? ['type', 'seq', 'moveX', 'moveY', 'sprint', 'sneak', 'attack', 'shoot', 'aimX', 'aimY'] : ['type', 'seq', 'action'];
-        if (Object.keys(message).some(k => !allowed.includes(k)) || !Number.isSafeInteger(message.seq) || message.seq < 0 || message.seq <= lastSeq) return deny(socket, 'Invalid or repeated command sequence.'); lastSeq = message.seq;
+        if (Object.keys(message).some(k => !allowed.includes(k))) return deny(socket, 'Invalid command fields.');
         if (message.type === 'input') {
           if (![message.moveX, message.moveY].every(v => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 1) || ['sprint', 'sneak', 'attack', 'shoot'].some(k => typeof message[k] !== 'boolean') || ['aimX', 'aimY'].some(k => message[k] !== undefined && (typeof message[k] !== 'number' || !Number.isFinite(message[k]) || Math.abs(message[k]) > 600000))) return deny(socket, 'Input is outside valid bounds.');
-          connections.get(id).input = message; connections.get(id).lastInput = Date.now(); return;
+          const connection = connections.get(id), now = performance.now();
+          // A stalled event loop can deliver several seconds of legitimate controls together.
+          // Keep only the latest controls; received packets never advance the simulation.
+          connection.inputTokens = Math.min(INPUT_BURST, connection.inputTokens + Math.max(0, now - connection.inputWindow) * INPUT_RATE / 1000); connection.inputWindow = now;
+          if (connection.inputTokens < 1) { networkStats.inputRateDenials++; connection.input = {}; connection.lastInput = 0; connection.pendingInput = false; connection.removed = true; return deny(socket, 'Input rate exceeded.'); }
+          connection.inputTokens--; networkStats.inputsAccepted++; if (connection.pendingInput) networkStats.inputsCoalesced++;
+          connection.input = message; connection.lastInput = Date.now(); connection.pendingInput = true; return;
         }
         if (message.type !== 'action' || typeof message.action !== 'string' || message.action.length > 180 || ++actions > 12) return deny(socket, 'Invalid action or action rate exceeded.');
         const r = records.get(id), command = message.action; let reason = '', result = false;
@@ -194,7 +232,7 @@ async function createServer(options = {}) {
       clearTimeout(timeout);
       if (id && connections.get(id) && connections.get(id).socket === socket) {
         const r = records.get(id), car = state.vehicles.find(v => v.id === r.player.vehicleId); if (car) car.speed = 0; r.player.vehicleId = null;
-        connections.delete(id); alignWorld(); save().catch(() => {}); snapshot();
+        connections.delete(id); alignWorld(); save().catch(() => {}); snapshot(); social.updatePeers();
       }
     });
     socket._heartbeat = () => { if (!alive) return socket.terminate(); alive = false; socket.ping(); };
@@ -204,18 +242,19 @@ async function createServer(options = {}) {
   const persistence = setInterval(() => { save().catch(error => { if (options.onError) options.onError(error); }); }, 5000);
   const heartbeat = setInterval(() => { for (const socket of wss.clients) socket._heartbeat(); }, 10000);
   const actualPort = server.address().port, publicHost = host.includes(':') ? '[' + host + ']' : host;
-  const publicUrl = options.publicUrl || 'ws://' + (guestHost.includes(':') ? '[' + guestHost + ']' : guestHost) + ':' + actualPort + '/game';
+  const publicUrl = options.publicUrl || socketScheme + (guestHost.includes(':') ? '[' + guestHost + ']' : guestHost) + ':' + actualPort + '/game';
   const invite = 'SIRENS1.' + Buffer.from(JSON.stringify({ version: 1, url: publicUrl, token, name: worldName })).toString('base64url');
   const directory = options.directoryUrl || process.env.SIRENS_DIRECTORY_URL;
   async function advertise() { if (!publicWorld || !directory) return; try { const response = await fetch(directory, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (options.directoryToken || process.env.SIRENS_DIRECTORY_TOKEN || '') }, body: JSON.stringify({ name: worldName, url: publicUrl, players: connections.size, capacity, public: true, difficulty: state.difficulty }), signal: AbortSignal.timeout(5000) }); if (!response.ok) throw new Error('Directory registration failed: ' + response.status); } catch (error) { if (options.onError) options.onError(error); } }
   const advertising = publicWorld && directory ? setInterval(advertise, 60000) : null; if (advertising) advertise();
-  return { invite: publicWorld ? null : invite, publicUrl, url: 'ws://' + publicHost + ':' + actualPort + '/game', httpUrl: 'http://' + publicHost + ':' + actualPort + '/', port: actualPort, save, tick, snapshot, getState: () => state, getPlayers: () => clone([...records.values()].map(r => ({ id: r.id, name: r.name, player: r.player, connected: connections.has(r.id) }))), async close() { if (closed) return; closed = true; if (advertising) clearInterval(advertising); if (interval) clearInterval(interval); clearInterval(persistence); clearInterval(heartbeat); for (const socket of wss.clients) socket.terminate(); await new Promise(resolve => wss.close(resolve)); await save(); await new Promise(resolve => server.close(resolve)); } };
+  return { invite: publicWorld ? null : invite, ownerToken, publicUrl, url: socketScheme + publicHost + ':' + actualPort + '/game', httpUrl: webScheme + publicHost + ':' + actualPort + '/', port: actualPort, save, tick, snapshot, getState: () => state, getNetworkStats: () => ({ ...networkStats }), getPlayers: () => clone([...records.values()].map(r => ({ id: r.id, name: r.name, player: r.player, connected: connections.has(r.id) }))), async close() { if (closed) return; closed = true; if (advertising) clearInterval(advertising); if (interval) clearInterval(interval); clearInterval(persistence); clearInterval(heartbeat); for (const socket of wss.clients) socket.terminate(); await new Promise(resolve => wss.close(resolve)); await save(); await new Promise(resolve => server.close(resolve)); } };
 }
 module.exports = { createServer, loadEngine };
 if (require.main === module) {
   const args = process.argv.slice(2), get = (name, fallback) => { const index = args.indexOf('--' + name); return index >= 0 ? args[index + 1] : fallback; };
-  createServer({ host: get('host', '127.0.0.1'), public: args.includes('--public'), name: get('name', 'After the Sirens world'), publicUrl: get('public-url', undefined), directoryUrl: get('directory', undefined), port: Number(get('port', 8787)), seed: Number(get('seed', 0)), difficulty: get('difficulty', 'standard'), worldFile: get('world', path.join(ROOT, 'server-data', 'world.save.json')), onError: error => console.error('World server:', error.message) }).then(server => {
+  createServer({ host: get('host', '127.0.0.1'), public: args.includes('--public'), name: get('name', 'After the Sirens world'), publicUrl: get('public-url', undefined), directoryUrl: get('directory', undefined), tlsCert: get('tls-cert', undefined), tlsKey: get('tls-key', undefined), port: Number(get('port', 8787)), seed: Number(get('seed', 0)), difficulty: get('difficulty', 'standard'), worldFile: get('world', path.join(ROOT, 'server-data', 'world.save.json')), onError: error => console.error('World server:', error.message) }).then(server => {
     console.log('After the Sirens world server: ' + server.httpUrl); console.log('Join address: ' + server.url); console.log('Up to 20 survivors. The world is saved on this computer.'); if (server.invite) console.log('Private invite (share with guests): ' + server.invite); else console.log('Public world: no access key required.');
+    console.log('Owner key (keep private; enter separately to use owner commands): ' + server.ownerToken); console.log('Set SIRENS_OWNER_TOKEN to keep the same owner key after a restart.');
     const shutdown = () => server.close().then(() => process.exit(0)).catch(() => process.exit(1)); process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);
   }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }

@@ -12,6 +12,9 @@
       const panel = document.createElement('form'); panel.className = 'as-network-panel'; panel.hidden = true;
       panel.innerHTML = '<p>Join a shared world run by you or a friend. The host server saves the world and every survivor’s pack.</p><label>Server address<input data-network="url" type="url" placeholder="wss://your-world.example/game" value="ws://localhost:8787/game" required spellcheck="false" autocomplete="url"></label><div class="as-network-fields"><label>Survivor name<input data-network="name" value="Survivor" maxlength="24" required autocomplete="nickname"></label><label>World access key<input data-network="token" type="password" maxlength="128" autocomplete="off" placeholder="Private key, or empty for public"></label></div><button class="as-primary" type="submit" data-network="join">JOIN THE WORLD <span>→</span></button><p class="as-network-status" data-network="status" role="status" aria-live="polite">Up to 20 survivors share the host’s loaded region. Multiplayer currently stays on the ground floor.</p><a class="as-host-guide" href="https://github.com/ChaseHendrick/After-the-Sirens/blob/main/docs/MULTIPLAYER.md" target="_blank" rel="noopener noreferrer">Host your own world · setup guide ↗</a>';
       title.insertBefore(panel, anchor); this.panel = panel; this.nodes = {};
+      const owner = document.createElement('details'); owner.className = 'as-owner-access';
+      owner.innerHTML = '<summary>World owner access</summary><label>Owner key<input data-network="ownerToken" type="password" maxlength="128" autocomplete="off" placeholder="Optional private owner key"></label><p>The host terminal prints this separate key. It enables moderation and world commands. Keep it out of guest invites.</p>';
+      panel.insertBefore(owner, panel.querySelector('[data-network="join"]'));
       panel.querySelectorAll('[data-network]').forEach(n => { this.nodes[n.dataset.network] = n; });
       try { const saved = JSON.parse(localStorage.getItem('after-the-sirens-server-preferences') || 'null'); if (saved && typeof saved.url === 'string') this.nodes.url.value = saved.url; if (saved && typeof saved.name === 'string') this.nodes.name.value = saved.name.slice(0, 24); } catch (_) {}
       modes.addEventListener('click', e => {
@@ -19,7 +22,7 @@
         const multiplayer = button.dataset.playMode === 'online'; panel.hidden = !multiplayer; this.solo.forEach(n => { n.hidden = multiplayer; });
         modes.querySelectorAll('button').forEach(n => { n.setAttribute('aria-pressed', String(n === button)); });
       });
-      panel.addEventListener('submit', e => { e.preventDefault(); const values = { url: this.nodes.url.value.trim(), name: this.nodes.name.value.trim(), token: this.nodes.token.value };
+      panel.addEventListener('submit', e => { e.preventDefault(); const values = { url: this.nodes.url.value.trim(), name: this.nodes.name.value.trim(), token: this.nodes.token.value, ownerToken: this.nodes.ownerToken.value };
         try { localStorage.setItem('after-the-sirens-server-preferences', JSON.stringify({ url: values.url, name: values.name })); } catch (_) {}
         this.callbacks.join(values);
       });
