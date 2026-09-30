@@ -23,6 +23,12 @@
     { id: 'recover_rounds', name: 'Recover ammunition', cost: { scrap: 4 }, result: { ammo: 8 }, description: 'Sort eight usable rounds from salvaged components.' },
     { id: 'collect_water', name: 'Collect clean water', cost: { wood: 2, scrap: 2 }, result: { water: 2 }, description: 'Build a small condenser beside a campfire. Requires a campfire within 100 pixels.' }
   ]);
+  const recipeIndex = new Map(recipes.map(recipe => [recipe.id, recipe]));
+  const toolAlternatives = new Map();
+  for (const item of Object.values(items)) for (const tag of item.toolTags || []) {
+    if (!toolAlternatives.has(tag)) toolAlternatives.set(tag, []);
+    toolAlternatives.get(tag).push(item.id);
+  }
 
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
   function finite(n, fallback) { return typeof n === 'number' && Number.isFinite(n) ? n : fallback; }
@@ -86,9 +92,15 @@
   }
   function weight(inventory) {
     let total = 0;
-    Object.keys(items).forEach(id => { total += (inventory[id] || 0) * items[id].weight; });
+    for (const id of Object.keys(inventory || {})) if (Object.prototype.hasOwnProperty.call(items, id)) total += (inventory[id] || 0) * items[id].weight;
     return total;
   }
+  function toolIn(inventory, id) {
+    if (!inventory || !Object.prototype.hasOwnProperty.call(items, id)) return null;
+    if (inventory[id] > 0) return id;
+    return (toolAlternatives.get(id) || []).find(candidate => inventory[candidate] > 0) || null;
+  }
+  function ownedTool(s, id) { return toolIn(s && s.player && s.player.inventory, id); }
   function carryCapacity(s) {
     const id = s.player.equipment && s.player.equipment.backpack;
     return CAPACITY + clamp(finite(items[id] && items[id].capacity, 0), 0, 100);
@@ -797,15 +809,16 @@
     return craftQuote(s, recipeId).can;
   }
   function craftQuote(s, recipeId) {
-    const r = typeof recipeId === 'object' ? recipeId : recipes.find(r => r.id === recipeId);
+    const r = typeof recipeId === 'object' ? recipeId : recipeIndex.get(recipeId);
     const missing = [];
     if (!r || !s || s.ended) return { can: false, missing: ['Recipe unavailable'] };
     const inv = s.player.inventory;
     for (const [id, n] of Object.entries(r.cost)) if ((inv[id] || 0) < n) missing.push('Need ' + (n - (inv[id] || 0)) + ' ' + items[id].name.toLowerCase());
-    for (const id of r.tools || []) if (!(inv[id] > 0)) missing.push('Keep ' + items[id].name.toLowerCase());
+    for (const id of r.tools || []) if (!toolIn(inv, id)) missing.push('Keep ' + items[id].name.toLowerCase() + ' or a compatible tool');
     if ((r.station === 'campfire' || r.id === 'collect_water') && !s.structures.some(b => b.type === 'campfire' && dist2(b.x, b.y, s.player.x, s.player.y) <= 100 ** 2)) missing.push('Stand beside a campfire');
     if (canAfford(inv, r.cost)) {
       const next = Object.assign({}, inv); pay(next, r.cost); for (const [id, n] of Object.entries(r.result)) next[id] = (next[id] || 0) + n;
+      for (const id of r.tools || []) if (toolIn(inv, id) && !toolIn(next, id)) missing.push('Keep ' + items[id].name.toLowerCase() + ' after crafting');
       const pack = s.player.equipment && s.player.equipment.backpack;
       const capacity = pack && !next[pack] ? CAPACITY : carryCapacity(s);
       if (weight(next) > capacity + .00001 || Object.values(next).some(n => n > 1000)) missing.push('Make room for the crafted supplies');
@@ -814,7 +827,7 @@
   }
   function craft(s, recipeId) {
     if (!s || s.ended) return false;
-    const recipe = recipes.find(r => r.id === recipeId);
+    const recipe = recipeIndex.get(recipeId);
     if (!recipe) return false;
     const quote = craftQuote(s, recipeId);
     if (!quote.can) { log(s, quote.missing.join('. ') + '.', 'warn'); return false; }
@@ -1101,5 +1114,5 @@
   }
 
   if (Sirens.World) Sirens.World.setTownFactory((seed, difficulty) => create(seed, difficulty, 'rescue'));
-  Sirens.Engine = Object.freeze({ create, update, stepParticipant, interact, attack, action, craft, canCraft, craftQuote, build, buildQuote, spawnWanderers, serialize, deserialize, isSolid, hasLOS, nearby, recipes, items, capacity: CAPACITY, inventoryWeight: weight, carryCapacity });
+  Sirens.Engine = Object.freeze({ create, update, stepParticipant, interact, attack, action, craft, canCraft, craftQuote, ownedTool, build, buildQuote, spawnWanderers, serialize, deserialize, isSolid, hasLOS, nearby, recipes, items, capacity: CAPACITY, inventoryWeight: weight, carryCapacity });
 }());

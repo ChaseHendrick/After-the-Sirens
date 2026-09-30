@@ -4,6 +4,38 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
   const number = (value) => Math.max(0, Number(value) || 0);
   const label = (value) => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const searchText = (value) => String(value || '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const matchesSearch = (text, query) => !query || searchText(query).split(' ').every((term) => text.includes(term));
+  const ITEM_PAGE_SIZE = 48, RECIPE_PAGE_SIZE = 24;
+  let referenceIndex;
+
+  function catalogueIndex() {
+    const items = Sirens.Engine && Sirens.Engine.items || Sirens.Catalog && Sirens.Catalog.items || {};
+    const recipes = Sirens.Engine && Sirens.Engine.recipes || Sirens.Catalog && Sirens.Catalog.recipes || [];
+    if (referenceIndex && referenceIndex.items === items && referenceIndex.recipes === recipes) return referenceIndex;
+    const names = (entries) => Object.keys(entries || {}).map((id) => `${id} ${items[id] && items[id].name || id}`).join(' ');
+    const makers = Object.create(null), uses = Object.create(null), recipesById = Object.create(null), itemsById = Object.create(null);
+    const recipeRows = recipes.map((recipe) => {
+      const results = Object.keys(recipe.result || {}).map((id) => items[id]).filter(Boolean);
+      const result = results.slice().sort((a, b) => number(b.tier) - number(a.tier))[0] || {};
+      const record = Object.freeze({ recipe, family: result.family || result.category || 'materials', tier: number(result.tier), search: searchText(`${recipe.id} ${recipe.name} ${recipe.description || ''} ${result.family || ''} ${names(recipe.cost)} ${names(recipe.result)} ${(recipe.tools || []).map((id) => `${id} ${items[id] && items[id].name || id}`).join(' ')} ${recipe.station || ''}`) });
+      recipesById[recipe.id] = record;
+      for (const id of Object.keys(recipe.result || {})) (makers[id] || (makers[id] = [])).push(record);
+      for (const id of new Set(Object.keys(recipe.cost || {}).concat(recipe.tools || []))) (uses[id] || (uses[id] = [])).push(record);
+      return record;
+    });
+    const itemRows = Object.entries(items).map(([id, item]) => {
+      const ingredients = (makers[id] || []).map(({ recipe }) => names(recipe.cost)).join(' ');
+      const record = Object.freeze({ id, item, category: item.category || 'materials', family: item.family || item.category || 'materials', tier: number(item.tier), search: searchText(`${id} ${item.name} ${item.description || ''} ${item.category || ''} ${item.family || ''} ${item.rarity || ''} ${(item.tags || []).join(' ')} ${(item.toolTags || []).join(' ')} ${(item.sources || []).join(' ')} ${ingredients}`) });
+      itemsById[id] = record;
+      return record;
+    });
+    for (const table of [makers, uses]) { for (const id of Object.keys(table)) Object.freeze(table[id]); Object.freeze(table); }
+    const byName = Object.freeze(itemRows.slice().sort((a, b) => a.item.name.localeCompare(b.item.name) || a.id.localeCompare(b.id)));
+    const byWeight = Object.freeze(byName.slice().sort((a, b) => number(b.item.weight) - number(a.item.weight)));
+    referenceIndex = Object.freeze({ items, recipes, byName, byWeight, recipesById: Object.freeze(recipesById), itemsById: Object.freeze(itemsById), recipeRows: Object.freeze(recipeRows), makers, uses });
+    return referenceIndex;
+  }
   const icon = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 26V44M17 44h14M24 26l-7 18M24 26l7 18M15 17a13 13 0 0 1 18 0M9 11a22 22 0 0 1 30 0"/><circle cx="24" cy="22" r="4"/></svg>';
   // These small catalogue symbols are drawn here so menus look the same offline on every platform.
   const itemSymbols = Object.freeze({
@@ -39,9 +71,22 @@
       this.sort = 'name';
       this.itemQuery = '';
       this.category = 'all';
+      this.family = 'all';
+      this.tier = 'all';
+      this.itemPage = 0;
+      this.itemPages = 1;
       this.itemView = 'owned';
       this.recipeQuery = '';
+      this.recipeFamily = 'all';
+      this.recipeTier = 'all';
+      this.recipePage = 0;
+      this.recipePages = 1;
       this.readyOnly = false;
+      this.itemMatches = null;
+      this.recipeMatches = null;
+      this.recipeQuoteSignature = '';
+      this.recipeQuotes = new Map();
+      this.reference = catalogueIndex();
       this.sound = true;
       this.debug = false;
       this.toastTimer = null;
@@ -112,7 +157,7 @@
             <div class="as-kicker">TAKE A BREATH</div><h2 id="as-pause-title">Run paused</h2><p class="as-muted">The town waits while you plan your next move.</p>
             <div class="as-pause-actions"><button class="as-primary" data-command="resume">BACK TO THE TOWN <span>→</span></button><button class="as-secondary" data-command="save">SAVE RUN</button></div>
             <div class="as-save-actions"><button data-command="exportSave">Export save</button><label class="as-file-label">Import save<input type="file" data-ui="import" accept=".json,application/json"></label><button data-command="restart">New run</button></div>
-            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Procedural sound</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Sound volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label></div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
+            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Game audio</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Overall volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label></div><div class="as-audio-channels"><div class="as-section-heading">SOUND AND MUSIC</div>${this.audioPreferencesMarkup()}</div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
             ${this.controlsMarkup()}
             <p class="as-save-note">Saves stay in this browser. Export a file to keep a copy.</p>
           </section>
@@ -125,14 +170,16 @@
             <div class="as-equipment-summary" data-ui="equipment">Bat equipped</div>
             <div class="as-inventory-tabs" role="group" aria-label="Pack sections"><button data-command="owned" aria-pressed="true">Your pack</button><button data-command="crafting" aria-pressed="false">Crafting & building</button><button data-command="catalogue" aria-pressed="false">Item catalogue</button></div>
             <div class="as-inventory-grid"><section data-ui="items-pane" aria-label="Items in your pack or catalogue">
-              <div class="as-filter-row"><input type="search" data-ui="item-search" placeholder="Search items" aria-label="Search items"><select data-ui="category" aria-label="Filter items by category"><option value="all">All categories</option></select></div>
-              <div class="as-section-heading as-result-count" data-ui="items-count">SUPPLIES</div>
+              <div class="as-filter-row"><input type="search" data-ui="item-search" placeholder="Search name, ID, family or material" aria-label="Search items"><select data-ui="category" aria-label="Filter items by category"><option value="all">All categories</option></select></div>
+              <div class="as-reference-filters"><select data-ui="item-family" aria-label="Filter items by family"><option value="all">All families</option></select><select data-ui="item-tier" aria-label="Filter items by tier"><option value="all">All tiers</option>${this.tierOptions()}</select><button data-clear-filters="items">Clear filters</button></div>
+              <div class="as-section-heading as-result-count" data-ui="items-count" role="status" aria-live="polite">SUPPLIES</div>
               <p class="as-catalogue-note" data-ui="catalogue-note" hidden>Original item reference. Browse definitions here; find or craft supplies in the world.</p>
-              <div class="as-item-list" data-ui="items"></div><div class="as-inventory-actions"><button data-action="eat">Eat</button><button data-action="drink">Drink</button><button data-action="bandage">Bandage</button><button data-action="rest">Rest</button></div></section>
+              <div class="as-item-list" data-ui="items"></div>${this.paginationMarkup('items', 'item')}<div class="as-inventory-actions"><button data-action="eat">Eat</button><button data-action="drink">Drink</button><button data-action="bandage">Bandage</button><button data-action="rest">Rest</button></div></section>
               <section data-ui="crafting-pane" aria-label="Crafting and building" hidden><div class="as-section-heading">MAKE SOMETHING USEFUL</div>
               <div class="as-recipe-filters"><input type="search" data-ui="recipe-search" placeholder="Search recipes" aria-label="Search recipes"><label><input type="checkbox" data-ui="recipe-ready"> Ready to craft</label></div>
-              <div class="as-result-count" data-ui="recipes-count"></div>
-              <div data-ui="recipes" class="as-recipe-list"></div><div class="as-section-heading as-build-heading">PLACE BESIDE YOU</div><div class="as-recipe-list">
+              <div class="as-reference-filters"><select data-ui="recipe-family" aria-label="Filter recipes by result family"><option value="all">All result families</option></select><select data-ui="recipe-tier" aria-label="Filter recipes by result tier"><option value="all">All result tiers</option>${this.tierOptions()}</select><button data-clear-filters="recipes">Clear filters</button></div>
+              <div class="as-result-count" data-ui="recipes-count" role="status" aria-live="polite"></div>
+              <div data-ui="recipes" class="as-recipe-list"></div>${this.paginationMarkup('recipes', 'recipe')}<div class="as-section-heading as-build-heading">PLACE BESIDE YOU</div><div class="as-recipe-list">
               <article class="as-recipe"><div><h3>Barricade</h3><p>Block a route and buy time. Aim toward a clear tile beside you.</p><span class="as-cost">3 wood + 1 scrap</span><small class="as-recipe-missing" data-ui="barricade-reason"></small></div><button data-build="barricade">Build</button></article>
               <article class="as-recipe"><div><h3>Campfire</h3><p>Rest and craft beside its light. Aim toward a clear tile beside you.</p><span class="as-cost">4 wood + 1 scrap</span><small class="as-recipe-missing" data-ui="campfire-reason"></small></div><button data-build="campfire">Build</button></article>
             </div></section></div>
@@ -168,17 +215,32 @@
       return `<div class="as-meter ${cls}"><div class="as-meter-label"><span>${label}</span><b data-meter-value="${id}">100</b></div><div class="as-meter-track" role="meter" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-meter="${id}"><span></span></div></div>`;
     }
 
+    tierOptions() { return Array.from({ length: 6 }, (_, tier) => `<option value="${tier}">Tier ${tier}</option>`).join(''); }
+
+    paginationMarkup(kind, singular) {
+      return `<nav class="as-pagination" data-ui="${kind}-pages" aria-label="${label(singular)} pages"><button data-page="${kind}" data-edge="first" aria-label="First ${singular} page">First</button><button data-page="${kind}" data-step="-1" aria-label="Previous ${singular} page">Previous</button><span data-ui="${kind}-page-status" role="status" aria-live="polite"></span><button data-page="${kind}" data-step="1" aria-label="Next ${singular} page">Next</button><button data-page="${kind}" data-edge="last" aria-label="Last ${singular} page">Last</button></nav>`;
+    }
+
+    audioPreferencesMarkup() {
+      return [['music', 'Music', 'An evolving score while you explore.', 35], ['effects', 'Sound effects', 'Strikes, shots and interactions.', 100], ['ambience', 'Ambience', 'Weather and sounds around the town.', 70]].map(([channel, name, description, volume]) => `<div class="as-audio-channel"><label class="as-audio-switch"><input type="checkbox" data-setting="${channel}" data-ui="setting-${channel}" checked><span>${name}<small>${description}</small></span></label><label class="as-audio-level" for="as-${channel}-volume">Volume <output data-ui="${channel}-volume-value" for="as-${channel}-volume">${volume}%</output><input id="as-${channel}-volume" type="range" aria-label="${name} volume" data-setting="${channel}Volume" data-ui="setting-${channel}Volume" min="0" max="100" step="5" value="${volume}"></label></div>`).join('');
+    }
+
     controlsMarkup() {
       return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause or close the current menu</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. The game uses a keyboard and mouse.</p></details>`;
     }
 
     refreshCategories() {
-      const items = Sirens.Engine && Sirens.Engine.items || Sirens.Catalog && Sirens.Catalog.items || {};
-      const categories = Array.from(new Set(Object.values(items).map((item) => item.category || 'materials'))).sort();
+      const items = this.reference.items;
+      const categories = Array.from(new Set(this.reference.byName.map((record) => record.category))).sort();
       const select = this.nodes.category;
       categories.forEach((category) => {
         const option = document.createElement('option'); option.value = category; option.textContent = label(category); select.append(option);
       });
+      for (const [node, families] of [[this.nodes['item-family'], this.reference.byName.map((record) => record.family)], [this.nodes['recipe-family'], this.reference.recipeRows.map((record) => record.family)]]) {
+        for (const family of Array.from(new Set(families)).sort()) {
+          const option = document.createElement('option'); option.value = family; option.textContent = label(family); node.append(option);
+        }
+      }
       this.nodes['catalogue-count'].textContent = String(Object.keys(items).length);
       this.nodes['recipe-count'].textContent = String((Sirens.Engine && Sirens.Engine.recipes || []).length);
     }
@@ -211,6 +273,24 @@
     onClick(event) {
       const button = event.target.closest('button');
       if (!button || !this.root.contains(button) || button.disabled) return;
+      if (button.dataset.page) {
+        const kind = button.dataset.page, field = kind === 'items' ? 'itemPage' : 'recipePage', pages = kind === 'items' ? this.itemPages : this.recipePages;
+        this[field] = clamp(button.dataset.edge === 'first' ? 0 : button.dataset.edge === 'last' ? pages - 1 : this[field] + Number(button.dataset.step), 0, pages - 1);
+        this.refreshInventory(true); this.nodes[kind].scrollTop = 0;
+        if (button.disabled && event.detail === 0) {
+          const available = this.nodes[kind + '-pages'].querySelector('button:not(:disabled)');
+          if (available) available.focus({ preventScroll: true });
+        }
+        return;
+      }
+      if (button.dataset.clearFilters) { this.clearReferenceFilters(button.dataset.clearFilters); return; }
+      if (button.dataset.showRecipe || button.dataset.recipeUses) {
+        this.inventoryPane = 'crafting'; this.recipeQuery = button.dataset.showRecipe || button.dataset.recipeUses;
+        this.recipeFamily = this.recipeTier = 'all'; this.readyOnly = false; this.recipePage = 0;
+        this.nodes['recipe-search'].value = this.recipeQuery; this.nodes['recipe-family'].value = this.nodes['recipe-tier'].value = 'all'; this.nodes['recipe-ready'].checked = false;
+        this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; this.nodes['recipe-search'].focus({ preventScroll: true });
+        return;
+      }
       if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.inventoryOpen) button.blur(); return; }
       if (button.dataset.use) { this.invoke('useItem', button.dataset.use); this.refreshInventory(true); return; }
       if (button.dataset.equip) { this.invoke('equipItem', button.dataset.equip); this.refreshInventory(true); return; }
@@ -223,7 +303,7 @@
         this.nodes.seed.value = seed;
         this.invoke('start', seed, this.nodes.difficulty.value, this.nodes.mode.value);
       } else if (command === 'owned' || command === 'catalogue' || command === 'crafting') {
-        this.inventoryPane = command; if (command !== 'crafting') this.itemView = command; this.refreshInventory(true);
+        this.inventoryPane = command; if (command !== 'crafting') { if (this.itemView !== command) this.itemPage = 0; this.itemView = command; } this.refreshInventory(true);
       } else if (command === 'inventory') {
         this.toggleInventory();
         if (event.detail > 0 && this.inventoryOpen) this.lastFocus = null;
@@ -245,10 +325,17 @@
       if (target.dataset.setting === 'sound') { this.sound = target.checked; this.invoke('setSound', this.sound); }
       if (target.dataset.setting === 'debug') { this.debug = target.checked; this.invoke('setDebug', this.debug); }
       if (target.dataset.setting === 'motion') this.invoke('setMotion', target.checked);
-      if (target === this.nodes.sort) { this.sort = target.value; this.refreshInventory(true); }
+      if (['music', 'effects', 'ambience'].includes(target.dataset.setting)) this.invoke('setAudioPreference', target.dataset.setting, target.checked);
+      if (target === this.nodes.sort) { this.sort = target.value; this.itemPage = 0; this.refreshInventory(true); }
       if (target === this.nodes.mode) this.refreshMode();
-      if (target === this.nodes.category) { this.category = target.value; this.refreshInventory(true); }
-      if (target === this.nodes['recipe-ready']) { this.readyOnly = target.checked; this.refreshInventory(true); }
+      if (target === this.nodes.category) { this.category = target.value; this.itemPage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['item-family']) { this.family = target.value; this.itemPage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['item-tier']) { this.tier = target.value; this.itemPage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['recipe-family']) { this.recipeFamily = target.value; this.recipePage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['recipe-tier']) { this.recipeTier = target.value; this.recipePage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['recipe-ready']) { this.readyOnly = target.checked; this.recipePage = 0; this.refreshInventory(true); }
+      if ([this.nodes.sort, this.nodes.category, this.nodes['item-family'], this.nodes['item-tier']].includes(target)) this.nodes.items.scrollTop = 0;
+      if ([this.nodes['recipe-family'], this.nodes['recipe-tier'], this.nodes['recipe-ready']].includes(target)) this.nodes.recipes.scrollTop = 0;
       if (target === this.nodes.import && target.files && target.files[0]) {
         this.invoke('importSave', target.files[0]);
         target.value = '';
@@ -256,10 +343,22 @@
     }
 
     onInput(event) {
-      if (event.target === this.nodes['item-search']) { this.itemQuery = event.target.value.trim().toLowerCase(); this.refreshInventory(true); }
-      if (event.target === this.nodes['recipe-search']) { this.recipeQuery = event.target.value.trim().toLowerCase(); this.refreshInventory(true); }
+      if (event.target === this.nodes['item-search']) { this.itemQuery = event.target.value.trim().toLowerCase(); this.itemPage = 0; this.refreshInventory(true); this.nodes.items.scrollTop = 0; }
+      if (event.target === this.nodes['recipe-search']) { this.recipeQuery = event.target.value.trim().toLowerCase(); this.recipePage = 0; this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; }
       if (event.target.dataset.setting === 'volume') { const value = clamp(event.target.value, 0, 100); this.nodes['volume-value'].textContent = value + '%'; this.invoke('setVolume', value / 100); }
       if (event.target.dataset.setting === 'zoom') { const value = clamp(event.target.value, 70, 150); this.nodes['zoom-value'].textContent = value + '%'; this.invoke('setZoom', value / 100); }
+      for (const channel of ['music', 'effects', 'ambience']) if (event.target.dataset.setting === channel + 'Volume') { const value = clamp(event.target.value, 0, 100); this.nodes[channel + '-volume-value'].textContent = value + '%'; this.invoke('setAudioPreference', channel + 'Volume', value / 100); }
+    }
+
+    clearReferenceFilters(kind) {
+      if (kind === 'items') {
+        this.itemQuery = ''; this.category = this.family = this.tier = 'all'; this.itemPage = 0;
+        this.nodes['item-search'].value = ''; this.nodes.category.value = this.nodes['item-family'].value = this.nodes['item-tier'].value = 'all';
+      } else {
+        this.recipeQuery = ''; this.recipeFamily = this.recipeTier = 'all'; this.readyOnly = false; this.recipePage = 0;
+        this.nodes['recipe-search'].value = ''; this.nodes['recipe-family'].value = this.nodes['recipe-tier'].value = 'all'; this.nodes['recipe-ready'].checked = false;
+      }
+      this.refreshInventory(true); this.nodes[kind].scrollTop = 0; this.nodes[kind === 'items' ? 'item-search' : 'recipe-search'].focus({ preventScroll: true });
     }
 
     applyPreferences(preferences) {
@@ -267,6 +366,11 @@
       this.sound = p.sound !== false;
       this.root.querySelector('[data-setting="sound"]').checked = this.sound;
       this.root.querySelector('[data-setting="motion"]').checked = p.motion !== false;
+      for (const [channel, defaultVolume] of [['music', .35], ['effects', 1], ['ambience', .7]]) {
+        this.nodes['setting-' + channel].checked = p[channel] !== false;
+        const channelVolume = Math.round(clamp(p[channel + 'Volume'] === undefined ? defaultVolume : p[channel + 'Volume'], 0, 1) * 100);
+        this.nodes['setting-' + channel + 'Volume'].value = channelVolume; this.nodes[channel + '-volume-value'].textContent = channelVolume + '%';
+      }
       const volume = Math.round(clamp(p.volume === undefined ? .7 : p.volume, 0, 1) * 100), zoom = Math.round(clamp(p.zoom === undefined ? 1 : p.zoom, .7, 1.5) * 100);
       this.root.querySelector('[data-setting="volume"]').value = volume; this.nodes['volume-value'].textContent = volume + '%';
       this.root.querySelector('[data-setting="zoom"]').value = zoom; this.nodes['zoom-value'].textContent = zoom + '%';
@@ -574,29 +678,106 @@
       });
       if (item.weapon) {
         facts.push(`${item.weapon.damage} damage`, `${(number(item.weapon.range) / 32).toFixed(1)} tile reach`);
+        if (item.weapon.cooldown) facts.push(`${item.weapon.cooldown}s recovery`);
+        if (item.weapon.staminaCost) facts.push(`${item.weapon.staminaCost} stamina per swing`);
         if (item.weapon.kind === 'firearm') facts.push(`${item.weapon.clipSize} rounds`, this.itemMetadata(item.weapon.ammoId || 'ammo').name);
       }
       if (item.armor) facts.push(`${Math.round(Number(item.armor) * 100)}% protection`);
       if (item.capacity) facts.push(`+${item.capacity} kg capacity`);
       if (item.fuel) facts.push(`+${item.fuel} vehicle fuel`);
+      if (item.miningDamage) facts.push(`${item.miningDamage} mining power`);
+      if (item.treeDamage) facts.push(`${item.treeDamage} tree damage`);
+      if (item.wallDamage) facts.push(`${item.wallDamage} wall damage`);
+      if (item.doorDamage) facts.push(`${item.doorDamage} door damage`);
       if (!facts.length) facts.push(item.category === 'tools' ? 'Recipe tool, kept after crafting' : Sirens.Progression && Object.hasOwn(Sirens.Progression.manuals, item.id || '') ? 'Study once for 18 practice and 1 insight' : ['books', 'electronics', 'utility'].includes(item.category) ? 'Reference or crafting ingredient' : 'Crafting ingredient');
       return facts.join(' · ');
     }
 
     craftReady(recipe, inventory) {
+      if (Sirens.Engine && typeof Sirens.Engine.craftQuote === 'function') return this.recipeQuote(recipe).can;
       if (Sirens.Engine && typeof Sirens.Engine.canCraft === 'function') return Sirens.Engine.canCraft(this.state, recipe.id);
       if (!this.canAfford(recipe.cost, inventory) || !(recipe.tools || []).every((id) => number(inventory[id]) > 0)) return false;
       if (recipe.station === 'campfire') return (this.state.structures || []).some((structure) => structure.type === 'campfire' && Math.hypot(structure.x - this.state.player.x, structure.y - this.state.player.y) <= 100);
       return true;
     }
 
+    recipeQuote(recipe) {
+      if (!this.recipeQuotes.has(recipe.id)) this.recipeQuotes.set(recipe.id, Sirens.Engine.craftQuote(this.state, recipe));
+      return this.recipeQuotes.get(recipe.id);
+    }
+
+    matchingItems(inventory, inventorySignature) {
+      const key = JSON.stringify([this.itemView, this.sort, this.category, this.family, this.tier, this.itemQuery, this.itemView === 'owned' || this.sort === 'quantity' ? inventorySignature : '']);
+      if (this.itemMatches && this.itemMatches.key === key) return this.itemMatches;
+      let source = this.itemView === 'catalogue' ? this.sort === 'weight' ? this.reference.byWeight : this.reference.byName : Object.keys(inventory).filter((id) => number(inventory[id]) > 0).map((id) => this.reference.itemsById[id]).filter(Boolean);
+      if (this.itemView === 'owned' || this.sort === 'quantity') {
+        source = source.slice().sort((a, b) => {
+          if (this.sort === 'quantity') return number(inventory[b.id]) - number(inventory[a.id]) || a.item.name.localeCompare(b.item.name);
+          if (this.sort === 'weight') return number(b.item.weight) * number(inventory[b.id]) - number(a.item.weight) * number(inventory[a.id]) || a.item.name.localeCompare(b.item.name);
+          return a.item.name.localeCompare(b.item.name) || a.id.localeCompare(b.id);
+        });
+      }
+      const exact = this.itemQuery.includes('_') && this.reference.itemsById[this.itemQuery];
+      const rows = source.filter((record) => (this.category === 'all' || record.category === this.category) && (this.family === 'all' || record.family === this.family) && (this.tier === 'all' || record.tier === Number(this.tier)) && (exact ? record.id === exact.id : matchesSearch(record.search, this.itemQuery)));
+      const canonical = this.reference.itemsById[this.itemQuery], canonicalIndex = canonical && rows.indexOf(canonical);
+      if (canonicalIndex > 0) { rows.splice(canonicalIndex, 1); rows.unshift(canonical); }
+      this.itemMatches = { key, rows, total: source.length };
+      return this.itemMatches;
+    }
+
+    matchingRecipes(inventory, requirementSignature) {
+      const key = JSON.stringify([this.recipeQuery, this.recipeFamily, this.recipeTier, this.readyOnly, this.readyOnly ? requirementSignature : '']);
+      if (this.recipeMatches && this.recipeMatches.key === key) return this.recipeMatches.rows;
+      const exact = this.reference.recipesById[this.recipeQuery];
+      const rows = (exact ? [exact] : this.reference.recipeRows).filter((record) => (this.recipeFamily === 'all' || record.family === this.recipeFamily) && (this.recipeTier === 'all' || record.tier === Number(this.recipeTier)) && (exact || matchesSearch(record.search, this.recipeQuery)) && (!this.readyOnly || this.craftReady(record.recipe, inventory)));
+      this.recipeMatches = { key, rows };
+      return rows;
+    }
+
+    refreshPagination(kind, count) {
+      const size = kind === 'items' ? ITEM_PAGE_SIZE : RECIPE_PAGE_SIZE, field = kind === 'items' ? 'itemPage' : 'recipePage', pagesField = kind === 'items' ? 'itemPages' : 'recipePages';
+      this[pagesField] = Math.max(1, Math.ceil(count / size));
+      this[field] = Math.floor(clamp(this[field], 0, this[pagesField] - 1));
+      const start = this[field] * size, end = Math.min(count, start + size), nav = this.nodes[kind + '-pages'];
+      nav.dataset.current = String(this[field] + 1); nav.dataset.pages = String(this[pagesField]);
+      this.nodes[kind + '-page-status'].textContent = count ? `Page ${this[field] + 1} of ${this[pagesField]} · Showing ${start + 1} to ${end} of ${count}` : 'No matching results';
+      for (const button of nav.querySelectorAll('button')) button.disabled = !count || (button.dataset.edge === 'first' || button.dataset.step === '-1' ? this[field] === 0 : this[field] >= this[pagesField] - 1);
+      return { start, end };
+    }
+
+    itemOrigins(id) {
+      const item = this.itemMetadata(id), makers = this.reference.makers[id] || [], uses = this.reference.uses[id] || [];
+      const details = document.createElement('details'); details.className = 'as-item-origin';
+      const summary = document.createElement('summary'); summary.textContent = 'Where to find it and how to make it'; details.append(summary);
+      if ((item.sources || []).length) { const source = document.createElement('p'); source.textContent = 'Loot locations: ' + item.sources.map(label).join(', ') + '.'; details.append(source); }
+      if ((item.toolTags || []).length) { const tools = document.createElement('p'); tools.textContent = 'Reusable recipe tools: ' + item.toolTags.map((tag) => this.itemMetadata(tag).name).join(', ') + '. Compatible versions can fill these tool requirements.'; details.append(tools); }
+      for (const { recipe } of makers.slice(0, 3)) {
+        const path = document.createElement('div'); path.className = 'as-item-make-path';
+        const text = document.createElement('p');
+        text.textContent = `Make with ${recipe.name}: ${this.costText(recipe.cost)}.${recipe.station ? ' Stand beside a ' + label(recipe.station).toLowerCase() + '.' : ''}${(recipe.tools || []).length ? ' Keep ' + recipe.tools.map((tool) => this.itemMetadata(tool).name.toLowerCase()).join(', ') + ' in your pack.' : ''}`;
+        const button = document.createElement('button'); button.dataset.showRecipe = recipe.id; button.textContent = 'Show recipe'; button.setAttribute('aria-label', 'Show recipe: ' + recipe.name);
+        path.append(text, button); details.append(path);
+      }
+      if (makers.length > 3) { const other = document.createElement('p'); other.textContent = `${makers.length - 3} more ways to make this item are searchable in Crafting.`; details.append(other); }
+      if (uses.length) {
+        const use = document.createElement('button'); use.dataset.recipeUses = id; use.textContent = `Used in ${uses.length} ${uses.length === 1 ? 'recipe' : 'recipes'}`; use.setAttribute('aria-label', 'Browse recipes using ' + item.name); details.append(use);
+      }
+      if (!(item.sources || []).length && !makers.length) { const source = document.createElement('p'); source.textContent = 'Gather this resource through its field activity. Search the Journal field guide for mining, gardening and world supplies.'; details.append(source); }
+      return details;
+    }
+
     refreshInventory(force) {
       if (!this.state || !this.state.player) return;
       const inventory = this.state.player.inventory || {};
-      const recipes = Sirens.Engine && Array.isArray(Sirens.Engine.recipes) ? Sirens.Engine.recipes : [];
+      const recipes = this.reference.recipes;
       const equipment = this.state.player.equipment || {};
       const progression = Sirens.Progression && Sirens.Progression.ensure(this.state);
-      const signature = `${this.inventoryPane}|${this.itemView}|${this.sort}|${this.category}|${this.itemQuery}|${this.recipeQuery}|${this.readyOnly}|${JSON.stringify(inventory)}|${JSON.stringify(equipment)}|${this.state.player.weapon}|${this.state.player.x}|${this.state.player.y}|${this.state.player.angle}|${this.state.player.vehicleId}|${this.state.player.health}|${this.state.player.hunger}|${this.state.player.thirst}|${this.state.player.bleeding}|${(this.state.structures || []).length}|${JSON.stringify(progression && [progression.studied, progression.research, progression.xp])}`;
+      const inventorySignature = JSON.stringify(inventory), player = this.state.player;
+      const buildQuotes = this.inventoryPane === 'crafting' ? ['barricade', 'campfire'].map((type) => Sirens.Engine.buildQuote(this.state, type)) : [];
+      const requirementSignature = JSON.stringify([inventorySignature, equipment.backpack, player.vehicleId, player.x, player.y, player.angle, this.state.ended, this.state.stories && this.state.stories.floor, (this.state.structures || []).map((structure) => [structure.type, structure.x, structure.y]), buildQuotes.map((quote) => [quote.can, quote.missing])]);
+      if (requirementSignature !== this.recipeQuoteSignature) { this.recipeQuoteSignature = requirementSignature; this.recipeQuotes.clear(); }
+      const vehicle = this.inventoryPane === 'owned' ? this.nearbyVehicle() : null;
+      const signature = JSON.stringify([this.inventoryPane, this.itemView, this.sort, this.category, this.family, this.tier, this.itemQuery, this.itemPage, this.recipeQuery, this.recipeFamily, this.recipeTier, this.recipePage, this.readyOnly, inventorySignature, equipment, player.weapon, progression && progression.studied, this.inventoryPane === 'crafting' ? requirementSignature : this.inventoryPane === 'owned' ? [player.vehicleId, vehicle && [vehicle.id, vehicle.speed, vehicle.fuel, vehicle.tank]] : '']);
       if (!force && signature === this.lastInventorySignature) return;
       this.lastInventorySignature = signature;
       this.nodes['items-pane'].hidden = this.inventoryPane === 'crafting';
@@ -614,83 +795,87 @@
       const equippedNames = Array.from(new Set([this.state.player.weapon, equipment.clothing, equipment.backpack].filter((id) => typeof id === 'string' && id))).map((id) => this.itemMetadata(id).name);
       this.nodes.equipment.textContent = 'Equipped: ' + (equippedNames.join(' · ') || 'nothing');
       this.nodes['catalogue-note'].hidden = this.itemView !== 'catalogue';
-      this.nodes.items.replaceChildren();
-      const catalogue = Sirens.Engine && Sirens.Engine.items || {};
-      const allEntries = this.itemView === 'catalogue' ? Object.keys(catalogue).map((id) => [id, inventory[id] || 0]) : Object.entries(inventory).filter(([, quantity]) => number(quantity) > 0);
-      const entries = allEntries.filter(([id]) => {
-        const item = this.itemMetadata(id);
-        return (this.category === 'all' || (item.category || 'materials') === this.category) && (!this.itemQuery || `${item.name} ${item.category || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase().includes(this.itemQuery));
-      });
-      this.nodes['items-count'].textContent = this.itemView === 'catalogue' ? `${entries.length} / ${Object.keys(catalogue).length} ORIGINAL ITEM DEFINITIONS` : `${entries.length} / ${allEntries.length} ITEM TYPES IN YOUR PACK`;
-      entries.sort((a, b) => {
-        if (this.sort === 'weight') return number(this.itemMetadata(b[0]).weight) * (this.itemView === 'catalogue' ? 1 : number(b[1])) - number(this.itemMetadata(a[0]).weight) * (this.itemView === 'catalogue' ? 1 : number(a[1]));
-        if (this.sort === 'quantity') return number(b[1]) - number(a[1]);
-        return this.itemMetadata(a[0]).name.localeCompare(this.itemMetadata(b[0]).name);
-      });
-      if (!entries.length) {
-        const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = allEntries.length ? 'No items match these filters.' : 'Your pack is empty. Search marked supplies.'; this.nodes.items.append(empty);
-      }
-      entries.forEach(([id, quantity]) => {
-        const metadata = this.itemMetadata(id);
-        const row = document.createElement('article'); row.className = 'as-item'; row.dataset.item = id;
-        row.classList.toggle('as-equipped-item', this.equipped(id));
-        const swatch = document.createElement('span'); swatch.className = 'as-item-icon'; swatch.setAttribute('aria-hidden', 'true'); swatch.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' + (itemSymbols[metadata.category] || itemSymbols.materials) + '</svg>';
-        if (/^#[0-9a-f]{3,8}$/i.test(metadata.color || '')) swatch.style.color = metadata.color;
-        const detail = document.createElement('div');
-        const name = document.createElement('h3'); name.textContent = metadata.name;
-        const description = document.createElement('p'); description.textContent = metadata.description;
-        const facts = document.createElement('small'); facts.className = 'as-item-facts'; facts.textContent = this.itemFacts(metadata);
-        detail.append(name, description, facts);
-        const total = document.createElement('div'); total.className = 'as-item-count';
-        const count = document.createElement('strong'); count.textContent = this.itemView === 'catalogue' ? label(metadata.category || 'materials') : `×${Math.floor(number(quantity))}`;
-        const mass = document.createElement('small'); mass.textContent = `${((this.itemView === 'catalogue' ? 1 : number(quantity)) * number(metadata.weight)).toFixed(2)} kg`;
-        total.append(count, mass); row.append(swatch, detail, total); this.nodes.items.append(row);
-        if (this.itemView === 'owned') {
-          const actions = document.createElement('div'); actions.className = 'as-item-actions';
-          const action = document.createElement('button');
-          if (metadata.weapon || number(metadata.armor) > 0 || number(metadata.capacity) > 0) {
-            action.dataset.equip = id; action.textContent = this.equipped(id) ? 'Equipped' : 'Equip'; action.disabled = this.equipped(id); action.title = 'Equip ' + metadata.name;
-          } else if (metadata.effect) {
-            action.dataset.use = id; action.textContent = metadata.category === 'food' ? 'Eat' : metadata.category === 'drinks' ? 'Drink' : 'Use'; action.title = 'Use ' + metadata.name;
-          } else if (metadata.fuel) {
-            action.dataset.use = id; action.textContent = 'Refuel'; action.title = 'Refuel a nearby stopped vehicle with ' + metadata.name;
-            const reason = this.fuelReason(this.nearbyVehicle(), id); action.disabled = !!reason; if (reason) action.title = reason;
-          } else if (Sirens.Progression && Object.hasOwn(Sirens.Progression.manuals, id)) {
-            action.dataset.action = 'study:' + id; action.textContent = Sirens.Progression.ensure(this.state).studied.includes(id) ? 'Studied' : 'Study'; action.disabled = Sirens.Progression.ensure(this.state).studied.includes(id); action.title = 'Study once for 18 practice and 1 insight; keep the reference.';
+      if (this.inventoryPane !== 'crafting') {
+        const openOrigins = new Set(Array.from(this.nodes.items.querySelectorAll('.as-item-origin[open]')).map((details) => details.closest('[data-item]').dataset.item));
+        this.nodes.items.replaceChildren();
+        const matched = this.matchingItems(inventory, inventorySignature), entries = matched.rows;
+        this.nodes['items-count'].textContent = this.itemView === 'catalogue' ? `${entries.length} / ${matched.total} ORIGINAL ITEM DEFINITIONS` : `${entries.length} / ${matched.total} ITEM TYPES IN YOUR PACK`;
+        this.nodes['items-count'].dataset.matched = String(entries.length); this.nodes['items-count'].dataset.total = String(matched.total);
+        const itemRange = this.refreshPagination('items', entries.length);
+        if (!entries.length) {
+          const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = matched.total ? 'No items match these filters. Clear filters to browse again.' : 'Your pack is empty. Search marked supplies.'; this.nodes.items.append(empty);
+        }
+        entries.slice(itemRange.start, itemRange.end).forEach(({ id, item: metadata }) => {
+          const quantity = inventory[id] || 0;
+          const row = document.createElement('article'); row.className = 'as-item'; row.dataset.item = id;
+          row.classList.toggle('as-equipped-item', this.equipped(id));
+          const swatch = document.createElement('span'); swatch.className = 'as-item-icon'; swatch.setAttribute('aria-hidden', 'true'); swatch.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' + (itemSymbols[metadata.category] || itemSymbols.materials) + '</svg>';
+          if (/^#[0-9a-f]{3,8}$/i.test(metadata.color || '')) swatch.style.color = metadata.color;
+          const detail = document.createElement('div');
+          const name = document.createElement('h3'); name.textContent = metadata.name;
+          const description = document.createElement('p'); description.textContent = metadata.description;
+          const facts = document.createElement('small'); facts.className = 'as-item-facts'; facts.textContent = this.itemFacts(metadata);
+          detail.append(name, description, facts);
+          if (this.itemView === 'catalogue') {
+            const lineage = document.createElement('small'); lineage.className = 'as-item-lineage'; lineage.textContent = `${label(metadata.family || metadata.category)} · Tier ${number(metadata.tier)}${metadata.rarity ? ' · ' + label(metadata.rarity) : ''}`;
+            const origin = this.itemOrigins(id); origin.open = openOrigins.has(id); detail.append(lineage, origin);
           }
-          if (action.textContent) { action.className = 'as-item-action'; actions.append(action); }
-          const drop = document.createElement('button'); drop.className = 'as-item-action as-drop'; drop.dataset.drop = id; drop.textContent = 'Drop'; drop.title = 'Drop 1 ' + metadata.name + ' on the ground';
-          const dropReason = this.state.player.vehicleId ? 'Leave the vehicle before dropping supplies' : equipment.backpack === id && quantity === 1 && weight - number(metadata.weight) > 24 + .00001 ? 'Drop heavy supplies before dropping your equipped pack' : '';
-          drop.disabled = !!dropReason; if (dropReason) drop.title = dropReason; actions.append(drop);
-          row.append(actions);
+          const total = document.createElement('div'); total.className = 'as-item-count';
+          const count = document.createElement('strong'); count.textContent = this.itemView === 'catalogue' ? label(metadata.category || 'materials') : `×${Math.floor(number(quantity))}`;
+          const mass = document.createElement('small'); mass.textContent = `${((this.itemView === 'catalogue' ? 1 : number(quantity)) * number(metadata.weight)).toFixed(2)} kg`;
+          total.append(count, mass); row.append(swatch, detail, total); this.nodes.items.append(row);
+          if (this.itemView === 'owned') {
+            const actions = document.createElement('div'); actions.className = 'as-item-actions';
+            const action = document.createElement('button');
+            if (metadata.weapon || number(metadata.armor) > 0 || number(metadata.capacity) > 0) {
+              action.dataset.equip = id; action.textContent = this.equipped(id) ? 'Equipped' : 'Equip'; action.disabled = this.equipped(id); action.title = 'Equip ' + metadata.name;
+            } else if (metadata.effect) {
+              action.dataset.use = id; action.textContent = metadata.category === 'food' ? 'Eat' : metadata.category === 'drinks' ? 'Drink' : 'Use'; action.title = 'Use ' + metadata.name;
+            } else if (metadata.fuel) {
+              action.dataset.use = id; action.textContent = 'Refuel'; action.title = 'Refuel a nearby stopped vehicle with ' + metadata.name;
+              const reason = this.fuelReason(this.nearbyVehicle(), id); action.disabled = !!reason; if (reason) action.title = reason;
+            } else if (Sirens.Progression && Object.hasOwn(Sirens.Progression.manuals, id)) {
+              action.dataset.action = 'study:' + id; action.textContent = Sirens.Progression.ensure(this.state).studied.includes(id) ? 'Studied' : 'Study'; action.disabled = Sirens.Progression.ensure(this.state).studied.includes(id); action.title = 'Study once for 18 practice and 1 insight; keep the reference.';
+            }
+            if (action.textContent) { action.className = 'as-item-action'; actions.append(action); }
+            const drop = document.createElement('button'); drop.className = 'as-item-action as-drop'; drop.dataset.drop = id; drop.textContent = 'Drop'; drop.title = 'Drop 1 ' + metadata.name + ' on the ground';
+            const dropReason = this.state.player.vehicleId ? 'Leave the vehicle before dropping supplies' : equipment.backpack === id && quantity === 1 && weight - number(metadata.weight) > 24 + .00001 ? 'Drop heavy supplies before dropping your equipped pack' : '';
+            drop.disabled = !!dropReason; if (dropReason) drop.title = dropReason; actions.append(drop);
+            row.append(actions);
+          }
+        });
+      }
+      if (this.inventoryPane === 'crafting') {
+        this.nodes.recipes.replaceChildren();
+        const visibleRecipes = this.matchingRecipes(inventory, requirementSignature);
+        this.nodes['recipes-count'].textContent = `${visibleRecipes.length} / ${recipes.length} RECIPES`;
+        this.nodes['recipes-count'].dataset.matched = String(visibleRecipes.length); this.nodes['recipes-count'].dataset.total = String(recipes.length);
+        const recipeRange = this.refreshPagination('recipes', visibleRecipes.length);
+        if (!visibleRecipes.length) { const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = 'No recipes match. Clear filters or gather tools and supplies.'; this.nodes.recipes.append(empty); }
+        visibleRecipes.slice(recipeRange.start, recipeRange.end).forEach(({ recipe, family, tier }) => {
+          const row = document.createElement('article'); row.className = 'as-recipe'; row.dataset.recipe = recipe.id;
+          const detail = document.createElement('div');
+          const heading = document.createElement('h3'); heading.textContent = recipe.name;
+          const description = document.createElement('p'); description.textContent = recipe.description || '';
+          const cost = document.createElement('span'); cost.className = 'as-cost'; cost.textContent = this.costText(recipe.cost);
+          const result = document.createElement('span'); result.className = 'as-recipe-result'; result.textContent = 'Makes ' + this.costText(recipe.result);
+          detail.append(heading, description, cost, result);
+          const lineage = document.createElement('small'); lineage.className = 'as-item-lineage'; lineage.textContent = `${label(family)} · Result tier ${tier}`; detail.append(lineage);
+          if ((recipe.tools || []).length || recipe.station) {
+            const requirements = document.createElement('span'); requirements.className = 'as-recipe-requirements';
+            requirements.textContent = [(recipe.tools || []).length ? 'Reusable tools: ' + recipe.tools.map((id) => this.itemMetadata(id).name).join(', ') + ' (compatible versions count)' : '', recipe.station ? 'Station: ' + label(recipe.station) + ' nearby' : ''].filter(Boolean).join(' · ');
+            detail.append(requirements);
+          }
+          const quote = this.recipeQuote(recipe);
+          const reason = document.createElement('small'); reason.className = 'as-recipe-missing'; reason.textContent = quote.can ? 'Ready to craft' : quote.missing.join('. '); detail.append(reason);
+          reason.classList.toggle('as-ready', quote.can);
+          const button = document.createElement('button'); button.dataset.craft = recipe.id; button.textContent = 'Craft'; button.disabled = !quote.can; button.title = reason.textContent;
+          row.append(detail, button); this.nodes.recipes.append(row);
+        });
+        for (const [index, type] of ['barricade', 'campfire'].entries()) {
+          const quote = buildQuotes[index], button = this.root.querySelector('[data-build="' + type + '"]'), reason = this.nodes[type + '-reason'];
+          button.disabled = !quote.can; reason.textContent = quote.can ? 'Ready on the tile you are aiming toward' : quote.missing.join('. '); reason.classList.toggle('as-ready', quote.can); button.title = reason.textContent;
         }
-      });
-      this.nodes.recipes.replaceChildren();
-      const visibleRecipes = recipes.filter((recipe) => (!this.recipeQuery || `${recipe.name} ${recipe.description || ''} ${this.costText(recipe.cost)} ${this.costText(recipe.result)}`.toLowerCase().includes(this.recipeQuery)) && (!this.readyOnly || this.craftReady(recipe, inventory)));
-      this.nodes['recipes-count'].textContent = `${visibleRecipes.length} / ${recipes.length} RECIPES`;
-      if (!visibleRecipes.length) { const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = 'No recipes match. Check your filters or gather tools and supplies.'; this.nodes.recipes.append(empty); }
-      visibleRecipes.forEach((recipe) => {
-        const row = document.createElement('article'); row.className = 'as-recipe';
-        const detail = document.createElement('div');
-        const heading = document.createElement('h3'); heading.textContent = recipe.name;
-        const description = document.createElement('p'); description.textContent = recipe.description || '';
-        const cost = document.createElement('span'); cost.className = 'as-cost'; cost.textContent = this.costText(recipe.cost);
-        const result = document.createElement('span'); result.className = 'as-recipe-result'; result.textContent = 'Makes ' + this.costText(recipe.result);
-        detail.append(heading, description, cost, result);
-        if ((recipe.tools || []).length || recipe.station) {
-          const requirements = document.createElement('span'); requirements.className = 'as-recipe-requirements';
-          requirements.textContent = [(recipe.tools || []).length ? 'Tools: ' + recipe.tools.map((id) => this.itemMetadata(id).name).join(', ') : '', recipe.station ? 'Station: ' + label(recipe.station) + ' nearby' : ''].filter(Boolean).join(' · ');
-          detail.append(requirements);
-        }
-        const quote = Sirens.Engine.craftQuote(this.state, recipe.id);
-        const reason = document.createElement('small'); reason.className = 'as-recipe-missing'; reason.textContent = quote.can ? 'Ready to craft' : quote.missing.join('. '); detail.append(reason);
-        reason.classList.toggle('as-ready', quote.can);
-        const button = document.createElement('button'); button.dataset.craft = recipe.id; button.textContent = 'Craft'; button.disabled = !quote.can; button.title = reason.textContent;
-        row.append(detail, button); this.nodes.recipes.append(row);
-      });
-      for (const type of ['barricade', 'campfire']) {
-        const quote = Sirens.Engine.buildQuote(this.state, type), button = this.root.querySelector('[data-build="' + type + '"]'), reason = this.nodes[type + '-reason'];
-        button.disabled = !quote.can; reason.textContent = quote.can ? 'Ready on the tile you are aiming toward' : quote.missing.join('. '); reason.classList.toggle('as-ready', quote.can); button.title = reason.textContent;
       }
       this.refreshQuickActions();
       if (focusAction) {

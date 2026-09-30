@@ -8,18 +8,19 @@
   const renderer = new S.Renderer(canvas, minimap);
   const SAVE_KEY = 'after-the-sirens-save-v1';
   const OPTIONS_KEY = 'after-the-sirens-options-v1';
-  const preferences = { sound: true, volume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false };
+  const preferences = { sound: true, volume: .7, music: true, musicVolume: .35, effects: true, effectsVolume: 1, ambience: true, ambienceVolume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false };
   try {
     const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null');
     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-      for (const key of ['sound', 'motion', 'details']) if (typeof saved[key] === 'boolean') preferences[key] = saved[key];
-      if (typeof saved.volume === 'number' && Number.isFinite(saved.volume)) preferences.volume = Math.max(0, Math.min(1, saved.volume));
+      for (const key of ['sound', 'music', 'effects', 'ambience', 'motion', 'details']) if (typeof saved[key] === 'boolean') preferences[key] = saved[key];
+      for (const key of ['volume', 'musicVolume', 'effectsVolume', 'ambienceVolume']) if (typeof saved[key] === 'number' && Number.isFinite(saved[key])) preferences[key] = Math.max(0, Math.min(1, saved[key]));
       if (typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)) preferences.zoom = Math.max(.7, Math.min(1.5, saved.zoom));
     }
   } catch (_) {}
   function rememberOptions() { try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(preferences)); } catch (_) {} }
   renderer.zoom = preferences.zoom; renderer.ambientMotion = preferences.motion;
   S.Effects.audio.setVolume(preferences.volume); S.Effects.audio.setEnabled(preferences.sound);
+  for (const channel of ['music', 'effects', 'ambience']) S.Effects.audio.setChannel(channel, preferences[channel], preferences[channel + 'Volume']);
 
   const pilot = S.Autoplay ? S.Autoplay.create() : null;
   let autoInput = null;
@@ -44,6 +45,7 @@
 
   function setScreen(name) {
     screen = name;
+    if (name !== 'playing') S.Effects.audio.suspend();
     ui.showScreen(name);
     mapShell.hidden = name === 'title';
   }
@@ -170,7 +172,7 @@
     exportSave: exportSave,
     importSave: importSave,
     action: applyAction,
-    menuChanged: clearInput,
+    menuChanged: function () { clearInput(); S.Effects.audio.suspend(); },
     useItem: function (id) { applyAction('use:' + id); },
     equipItem: function (id) { applyAction('equip:' + id); },
     dropItem: function (id) { applyAction('drop:' + id); },
@@ -178,6 +180,15 @@
     build: function (type) { stopAutoplay(); if (active && !state.ended) { if (networkReady) network.sendAction('build:' + type); else S.Engine.build(state, type); ui.update(state, frameInfo); } },
     setSound: function (on) { preferences.sound = !!on; S.Effects.audio.setEnabled(on); if (on) unlockAudio(); rememberOptions(); },
     setVolume: function (value) { preferences.volume = Math.max(0, Math.min(1, Number(value) || 0)); S.Effects.audio.setVolume(preferences.volume); rememberOptions(); },
+    setAudioPreference: function (field, value) {
+      const channel = field.replace(/Volume$/, '');
+      if (!['music', 'effects', 'ambience'].includes(channel) || field !== channel && field !== channel + 'Volume') return;
+      if (field === channel) { if (typeof value !== 'boolean') return; preferences[field] = value; }
+      else { if (typeof value !== 'number' || !Number.isFinite(value)) return; preferences[field] = Math.max(0, Math.min(1, value)); }
+      S.Effects.audio.setChannel(channel, preferences[channel], preferences[channel + 'Volume']);
+      if (preferences[channel] && preferences.sound) unlockAudio();
+      rememberOptions();
+    },
     setZoom: function (value) { preferences.zoom = Math.max(.7, Math.min(1.5, Number(value) || 1)); renderer.zoom = preferences.zoom; rememberOptions(); },
     setMotion: function (on) { preferences.motion = !!on; renderer.ambientMotion = preferences.motion; rememberOptions(); },
     setDetails: function (on) { preferences.details = !!on; rememberOptions(); },
@@ -318,8 +329,8 @@
   });
   addEventListener('keyup', function (event) { keys.delete(event.code); });
   addEventListener('blur', function () { clearInput(); if (active && screen === 'playing' && !(pilot && S.Autoplay.status(pilot).enabled)) pause(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); if (!(pilot && S.Autoplay.status(pilot).enabled)) pause(); } });
-  addEventListener('pagehide', function () { if (active && !networkReady) save(true); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); S.Effects.audio.suspend(); if (!(pilot && S.Autoplay.status(pilot).enabled)) pause(); } });
+  addEventListener('pagehide', function () { S.Effects.audio.suspend(); if (active && !networkReady) save(true); });
   addEventListener('beforeunload', function () { if (active && !networkReady) save(true); });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
   canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
@@ -396,7 +407,7 @@
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
     renderBrain(false);
-    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden);
+    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden, !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
     if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0; }

@@ -223,6 +223,40 @@
   .as-journal-tabs{margin:12px 0 15px}
   .as-item-list,.as-recipe-list[data-ui="recipes"]{max-height:230px}
 }
+
+/* Bounded reference pages keep the expanding catalogue usable on small screens. */
+.as-reference-filters{display:grid;grid-template-columns:minmax(0,1fr) 160px auto;gap:8px;align-items:center;margin:10px 0}
+.as-reference-filters select{width:100%;min-width:0;height:36px;padding:6px 9px;font-size:11px}
+.as-ui .as-reference-filters button{min-height:36px;padding:7px 12px;font-size:11px;background:transparent;color:#c5d2b8}
+.as-pagination{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;gap:7px;align-items:center;margin-top:13px;border-top:1px solid var(--as-border);padding-top:12px}
+.as-ui .as-pagination button{min-height:34px;padding:7px 11px;font-size:10px}
+.as-pagination>span{text-align:center;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.6;color:#c8d4b8}
+.as-item-lineage{display:block;margin-top:5px;color:#adc5b7;font-size:10px;line-height:1.6}
+.as-item-origin{margin-top:8px;border-left:2px solid #bbcea230;padding-left:9px;color:#c0cdb4}
+.as-item-origin summary{font-size:10px;line-height:1.7;color:#d9c58b;cursor:pointer}
+.as-item-origin p{overflow-wrap:anywhere;margin-top:7px;font-size:10px;color:#c0cdb4}
+.as-item-make-path{margin-top:8px;padding-top:5px;border-top:1px solid #bbcea218}
+.as-ui .as-item-origin button{margin-top:6px;padding:6px 9px;font-size:10px;min-height:30px}
+.as-audio-channels{margin-top:19px;padding-top:17px;border-top:1px solid var(--as-border)}
+.as-audio-channel{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,.9fr);align-items:center;gap:15px;padding:9px 0}
+.as-audio-switch{display:flex;gap:9px;align-items:flex-start;color:#d4dfc7;font-size:12px;cursor:pointer}
+.as-audio-switch>input{margin-top:2px;flex-shrink:0}
+.as-audio-switch small{display:block;font-size:10px;color:#a7bb9a;margin-top:3px;line-height:1.6}
+.as-audio-level{display:grid;grid-template-columns:1fr auto;gap:5px 10px;font-size:10px;color:#bcccac}
+.as-audio-level output{color:#e2cc90;font:11px ui-monospace,SFMono-Regular,Consolas,monospace}
+.as-audio-level>input{grid-column:1/-1;min-width:0;width:100%;accent-color:var(--as-gold);cursor:pointer}
+@media(max-width:650px){
+  .as-reference-filters{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+  .as-reference-filters>select:first-child{grid-column:1/-1}
+  .as-reference-filters select,.as-ui .as-reference-filters button{font-size:10px}
+  .as-pagination{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  .as-pagination>span{grid-column:1/-1;grid-row:1;text-align:left;font-size:9px}
+  .as-ui .as-pagination button{font-size:9px;padding:7px 5px;min-height:35px}
+  .as-item-lineage,.as-item-origin summary{font-size:9px}
+  .as-audio-channel{grid-template-columns:1fr;gap:10px;padding:11px 0}
+  .as-audio-switch{font-size:11px}
+  .as-audio-level{padding-left:24px}
+}
 @media(prefers-reduced-motion:reduce){.as-ui *{scroll-behavior:auto!important}}
 
 .as-atlas-heading{font-size:14px!important;margin:20px 0 9px!important;color:#e1d198}

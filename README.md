@@ -8,7 +8,7 @@ An original open world zombie survival game. Leave the town of Morrow, follow ro
 
 ![Gameplay in Morrow](docs/gameplay.png)
 
-**Version 0.4 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. The catalogue contains 219 original items and 65 recipes, with collectible ingredients clearly identified.
+**Version 0.5 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. The catalogue contains **3,455 original items and 4,457 crafting and salvage recipes** across 38 families, with actual acquisition paths and collectible limitations shown. Material and design choices change equipment handling, protection and carrying capacity; food preparations change their effects. See the [item guide](docs/ITEMS.md).
 
 ## Play
 
@@ -118,19 +118,21 @@ Choose original skin, hair, coat and hat presets in the journal. These cosmetic 
 
 ## Reading the game
 
-The default HUD keeps your health, stamina, ammunition, current objective and immediate interaction visible. **Details** expands the survival meters. Pack [I] separates owned supplies, crafting/building and the searchable catalogue. Craft and project buttons explain missing materials, tools, stations or capacity; browsing the catalogue does not grant items.
+The default HUD keeps your health, stamina, ammunition, current objective and immediate interaction visible. **Details** expands the survival meters. Pack [I] separates owned supplies, crafting/building and the searchable catalogue. Browse 48 items or 24 recipes per page; filter by category, family and tier, search stable IDs and materials, and follow obtain links into the relevant recipe. Filters stay in place while crafting. Craft and project buttons explain missing materials, tools, stations or capacity; browsing the catalogue does not grant items.
 
 Journal [J] groups your skills, projects, people, daybook, searchable field guide and **Atlas**. The Atlas shows loaded terrain and the nearest 24 recorded sectors. Click a map tile to place a navigation marker, or focus the map and use arrows followed by Enter. Selecting a recorded sector marks its center. Markers appear in the world and minimap and survive saves; they guide travel rather than moving the survivor.
 
-In singleplayer, Pack, journal, dialogue and pause menus stop the simulation. Multiplayer menus idle your controls while the shared world keeps moving. Escape closes the current menu, and keyboard focus stays inside an open dialog. The game uses one immediate interaction prompt and brief notices so the world remains readable. The pause menu includes sound volume, camera zoom from 70% to 150%, ambient motion and fullscreen. Sound, volume, zoom, motion and HUD detail preferences are remembered in browser storage when available. Ambient motion defaults to your browser's reduced-motion preference; attack animations remain functional feedback.
+In singleplayer, Pack, journal, dialogue and pause menus stop the simulation. Multiplayer menus idle your controls while the shared world keeps moving. Escape closes the current menu, and keyboard focus stays inside an open dialog. The game uses one immediate interaction prompt and brief notices so the world remains readable. The pause menu includes **Game audio** and overall volume, plus independent **Music**, **Sound effects** and **Ambience** switches and volume sliders. Camera zoom from 70% to 150%, ambient motion and fullscreen are also available. Audio, zoom, motion and HUD detail preferences are remembered in browser storage when available. Ambient motion defaults to your browser's reduced-motion preference; attack animations remain functional feedback.
 
 ## Visibility, animation and sound
+
+The original Web Audio score adapts between daytime exploration, night, nearby danger and driving. Music, effects and environmental audio have separate controls, and continuous sound stops immediately on pause or hiding the game. No music downloads or external audio service are used. [Sound settings and themes](docs/AUDIO.md).
 
 The entire surrounding area and loaded minimap are visible as you travel, including unexplored terrain, interiors, supplies, cars and people. Roofs stay cut away. Night uses a gentle uniform tint. Walls still block movement, attacks and AI sight; seeing a target does not let you attack through a wall. Each floor shows its own scene.
 
 Axes, machetes and bats swing with a visible arc; spears and knives thrust. Walking animates the feet, and guns recoil with a muzzle flash. Successful attacks animate even when they miss. Failed attacks and reloading do not create phantom swings.
 
-Original Web Audio sounds cover footsteps, melee swings, gunfire, reloads, flesh/wood/stone/glass impacts, doors, looting, climbing, nearby zombie growls, wind, rain and a car engine whose pitch follows speed. Sound starts after a click or key press. Toggle **Procedural sound** in the pause menu to mute everything; ambience stops while paused or in a menu. All sounds are generated locally without downloads.
+Original Web Audio sounds cover footsteps, melee swings, gunfire, reloads, flesh/wood/stone/glass impacts, doors, looting, climbing, nearby zombie growls, wind, rain and a car engine whose pitch follows speed. Sound starts after a click or key press. Toggle **Game audio** in the pause menu to mute game sound, or control Music, Sound effects and Ambience separately; continuous audio stops while paused or in a menu. All sounds are generated locally without downloads.
 
 ![Axe, machete and spear attack frames](docs/combat-animation.png)
 

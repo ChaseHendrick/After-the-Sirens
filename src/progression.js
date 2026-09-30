@@ -48,7 +48,7 @@
     for (const prev of node.prerequisites) if (!known(s, prev)) missing.push('Learn ' + projects.find(n => n.id === prev).name);
     if (p.insight < node.insight) missing.push('Need ' + (node.insight - p.insight) + ' more insight');
     for (const [item, n] of Object.entries(node.cost)) if ((inv[item] || 0) < n) missing.push('Need ' + (n - (inv[item] || 0)) + ' ' + S.Catalog.items[item].name.toLowerCase());
-    for (const item of node.tools) if (!(inv[item] > 0)) missing.push('Keep ' + S.Catalog.items[item].name.toLowerCase() + ' in your pack');
+    for (const item of node.tools) if (!S.Engine.ownedTool(s, item)) missing.push('Keep ' + S.Catalog.items[item].name.toLowerCase() + ' or a compatible tool in your pack');
     return { node, can: !s.ended && missing.length === 0, missing, cost: node.cost, insight: node.insight };
   }
   function loot(s, container) {
@@ -112,7 +112,7 @@
       result.car = nearCar(s); cost.scrap = 3;
       if (!result.car) missing.push('Stand beside a car');
       else if (Math.abs(result.car.speed) > 1 || result.car.condition >= 100) missing.push('Car must be stopped and damaged');
-      if (!(inv.hammer > 0)) missing.push('Keep a claw hammer');
+      if (!S.Engine.ownedTool(s, 'hammer')) missing.push('Keep a claw hammer or a compatible tool');
     } else if (id === 'rain') {
       if (!known(s, 'water')) missing.push('Learn Rain collection'); cost.empty_bottle = 1;
       if (s.weather !== 'rain' || s.tiles[Math.floor(s.player.y / T) * s.width + Math.floor(s.player.x / T)] === 2 || s.stories && s.stories.floor > 0) missing.push('Stand outside during rain');
