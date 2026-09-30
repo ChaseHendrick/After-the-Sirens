@@ -1,6 +1,6 @@
 # Roadmap
 
-Version 0.2 establishes an original playable foundation. Feature depth and balance still need sustained development.
+Version 0.3 establishes an original playable foundation. Feature depth and balance still need sustained development.
 
 ## Next improvements
 
@@ -13,7 +13,7 @@ Version 0.2 establishes an original playable foundation. Feature depth and balan
 - Wear and repair of weapons, richer wounds, skills, professions and character creation.
 - Construction expansion, doors/windows, player shelter interiors and a wider recipe catalogue.
 - More floor layouts, visibility and interaction between floors.
-- Audio variety, animation, accessibility settings and performance measurements on more hardware.
+- Richer animation and audio, accessibility settings and performance measurements on more hardware.
 - Longer natural playtesting, world-journal pruning or migration, and more browser/device validation.
 
 ## Larger work

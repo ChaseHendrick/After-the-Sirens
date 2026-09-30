@@ -410,7 +410,11 @@
     if (p.health < 30) speed *= 0.87;
     if (p.resting) speed = 0;
     const driving = !!(Sirens.Vehicles && Sirens.Vehicles.update(s, dt, input));
-    if (!driving) move(s, p, mx * speed * dt, my * speed * dt, 10);
+    if (!driving) {
+      const oldX = p.x, oldY = p.y;
+      move(s, p, mx * speed * dt, my * speed * dt, 10);
+      if (Sirens.Effects) Sirens.Effects.walk(s, Math.hypot(p.x - oldX, p.y - oldY), sprint, p._sneaking);
+    }
     const shift = s.world && !(s.stories && s.stories.floor > 0) ? Sirens.World.maybeRecenter(s) : { shiftX: 0, shiftY: 0 };
     if (shift.blocked) log(s, shift.blocked, 'warn');
     const ax = clamp(finite(input.aimX, p.x + Math.cos(p.angle) * 80 + shift.shiftX) - shift.shiftX, 0, s.width * TILE);
@@ -514,7 +518,9 @@
       if (s.tiles[n.value] === 7 && (dist2(p.x, p.y, n.x, n.y) < 27 ** 2 || s.zombies.some(z => dist2(z.x, z.y, n.x, n.y) < 26 ** 2))) {
         log(s, 'The doorway is occupied. Step clear before closing it.', 'warn'); return false;
       }
-      s.tiles[n.value] = s.tiles[n.value] === 6 ? 7 : 6; noise(s, n.x, n.y, 55, 0.5); return true;
+      s.tiles[n.value] = s.tiles[n.value] === 6 ? 7 : 6; noise(s, n.x, n.y, 55, 0.5);
+      if (Sirens.Effects) Sirens.Effects.emit(s, 'door');
+      return true;
     }
     if (n.type === 'radio') {
       if (s.goal.complete) { log(s, 'The radio mission is complete. Free survival continues.', 'info'); return true; }
@@ -545,7 +551,7 @@
       if (!c.items[id]) delete c.items[id]; else skipped.push(items[id].name.toLowerCase());
     }
     c.looted = Object.keys(c.items).length === 0;
-    if (took.length) log(s, 'Collected ' + took.join(', ') + '.', 'good');
+    if (took.length) { log(s, 'Collected ' + took.join(', ') + '.', 'good'); if (Sirens.Effects) Sirens.Effects.emit(s, 'loot'); }
     if (skipped.length) log(s, 'Pack is nearly full (' + weight(p.inventory).toFixed(1) + '/' + carryCapacity(s) + '). Left ' + skipped.join(', ') + ' here. Room for mission parts stays reserved. Use, drop, craft, or build to make space.', 'warn');
     return took.length > 0;
   }
@@ -568,6 +574,7 @@
       const weapon = weaponInfo(p.weapon), w = weapon.kind === 'melee' ? weapon : weaponInfo('bat');
       if (p.stamina < w.staminaCost) { p.cooldown = 0.35; log(s, 'Catch your breath before swinging again.', 'warn'); return false; }
       p.stamina = Math.max(0, p.stamina - w.staminaCost); p.cooldown = w.cooldown;
+      if (Sirens.Effects) Sirens.Effects.attack(s, actualWeapon, 'melee', w.cooldown, p.angle);
       noise(s, p.x, p.y, w.noise, 1); particles(s, p.x + dx * 40, p.y + dy * 40, 5, '#dedab2');
       const targets = s.zombies.concat(Sirens.Actors ? (s.humans || []).filter(h => h.health > 0) : []).filter(z => {
         const zd = Math.hypot(z.x - p.x, z.y - p.y);
@@ -580,6 +587,7 @@
         move(s, z, (z.x - p.x) / zd * 16, (z.y - p.y) / zd * 16, 10);
         particles(s, z.x, z.y, 5, '#8da487');
       }
+      if (targets.length && Sirens.Effects) Sirens.Effects.emit(s, 'impact');
       if (Sirens.Destruction) Sirens.Destruction.hit(s, aimX, aimY, actualWeapon);
     } else {
       const id = weaponInfo(p.weapon).kind === 'firearm' ? p.weapon : 'pistol', w = weaponInfo(id);
@@ -587,6 +595,7 @@
       const loaded = p.ammo;
       if (loaded <= 0) { p.cooldown = 0.35; log(s, 'Empty magazine. Press R to reload from reserve rounds.', 'warn'); return false; }
       p.magazines[id] = loaded - 1; p.ammo = loaded - 1; p.stamina = Math.max(0, p.stamina - finite(w.staminaCost, 0)); p.cooldown = w.cooldown; noise(s, p.x, p.y, w.noise, 2.4);
+      if (Sirens.Effects) Sirens.Effects.attack(s, actualWeapon, 'firearm', w.cooldown, p.angle);
       particles(s, p.x + dx * 18, p.y + dy * 18, 5, '#f6cb70');
       let target = null, nearest = w.range;
       for (const z of s.zombies.concat(Sirens.Actors ? (s.humans || []).filter(h => h.health > 0) : [])) {
@@ -594,6 +603,7 @@
         if (along >= 0 && along < nearest && side < 18 && hasLOS(s, p.x, p.y, z.x, z.y)) { target = z; nearest = along; }
       }
       if (target) {
+        if (Sirens.Effects) Sirens.Effects.emit(s, 'impact');
         if (target.faction && Sirens.Actors) Sirens.Actors.hit(s, target, w.damage, true);
         else { target.health -= w.damage; target._stun = 0.7; target.windup = 0; }
         particles(s, target.x, target.y, 9, '#a5b496');
@@ -698,7 +708,9 @@
       const rounds = Math.min(w.clipSize - loaded, inv[ammoId] || 0);
       if (!rounds) { log(s, 'No reserve rounds. Search for ammunition or recover rounds from salvage.', 'warn'); return false; }
       p.ammo = loaded + rounds; p.magazines[id] = p.ammo; inv[ammoId] -= rounds; if (!inv[ammoId]) delete inv[ammoId];
-      p.cooldown = Math.max(p.cooldown, 0.85); log(s, 'Reloaded ' + rounds + ' rounds.', 'good'); return true;
+      p.cooldown = Math.max(p.cooldown, 0.85); log(s, 'Reloaded ' + rounds + ' rounds.', 'good');
+      if (Sirens.Effects) Sirens.Effects.emit(s, 'reload');
+      return true;
     }
     if (name === 'rest') {
       p.resting = !p.resting;

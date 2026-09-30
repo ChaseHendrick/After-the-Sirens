@@ -442,6 +442,161 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
 (function () {
   'use strict';
+  const Sirens = window.Sirens = window.Sirens || {};
+  // Presentation is transient, separate from saves and the simulation RNG.
+  const runs = new WeakMap();
+  function record(s) {
+    let r = runs.get(s);
+    if (!r) { r = { events: [], attack: null, stride: 0, step: 0 }; runs.set(s, r); }
+    return r;
+  }
+  function emit(s, type, detail) {
+    const events = record(s).events;
+    events.push(Object.assign({ type }, detail || {}));
+    if (events.length > 64) events.shift();
+  }
+  function drain(s) { return record(s).events.splice(0); }
+  function attack(s, weapon, kind, duration, angle) {
+    record(s).attack = { weapon, kind, duration: Math.min(.42, duration * .85), start: s.elapsed, angle };
+    emit(s, kind === 'melee' ? 'swing' : 'shot', { weapon });
+  }
+  function walk(s, distance, sprint, sneak) {
+    if (!(distance > 0)) return;
+    const r = record(s); r.stride += distance / 26 * Math.PI; r.step += distance; r.lastWalk = s.elapsed;
+    if (r.step >= (sprint ? 31 : 26)) {
+      r.step %= sprint ? 31 : 26;
+      const tx = Math.floor(s.player.x / s.tileSize), ty = Math.floor(s.player.y / s.tileSize);
+      emit(s, 'step', { surface: s.tiles[ty * s.width + tx], quiet: !!sneak });
+    }
+  }
+  function pose(s) {
+    const r = record(s), a = r.attack;
+    const progress = a ? Math.max(0, (s.elapsed - a.start) / a.duration) : 1;
+    return { stride: s.elapsed - r.lastWalk < .06 ? r.stride : 0, attack: a && progress < 1 ? Object.assign({ progress }, a) : null };
+  }
+
+  let context = null, master = null, compressor = null, analyser = null, noiseBuffer = null;
+  let enabled = true, active = false, loops = null, lastState = null, lastGrowl = -10;
+  const voices = new Set(), played = {}, MAX_VOICES = 40;
+  function unlock() {
+    if (!enabled) return;
+    try {
+      if (!context) {
+        const Audio = window.AudioContext || window.webkitAudioContext;
+        if (!Audio) return;
+        context = new Audio(); master = context.createGain(); master.gain.value = .48;
+        compressor = context.createDynamicsCompressor(); analyser = context.createAnalyser(); analyser.fftSize = 256;
+        master.connect(compressor); compressor.connect(analyser); analyser.connect(context.destination);
+        noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
+        const samples = noiseBuffer.getChannelData(0); let n = 0x5a17c9;
+        for (let i = 0; i < samples.length; i++) { n ^= n << 13; n ^= n >>> 17; n ^= n << 5; samples[i] = (n >>> 0) / 2147483648 - 1; }
+      }
+      if (context.state === 'suspended') context.resume().catch(function () {});
+    } catch (_) { /* Audio is optional; unavailable devices never stop play. */ }
+  }
+  function setEnabled(on) {
+    enabled = !!on;
+    if (master) { master.gain.cancelScheduledValues(context.currentTime); master.gain.setTargetAtTime(enabled ? .48 : 0, context.currentTime, .01); }
+    if (!enabled) stopLoops();
+  }
+  function stopLoops() {
+    if (!loops) return;
+    for (const v of loops) { try { v.source.stop(); } catch (_) {} v.source.disconnect(); v.filter.disconnect(); v.gain.disconnect(); }
+    loops = null;
+  }
+  function voice(options) {
+    if (!enabled || !context || context.state !== 'running' || voices.size >= MAX_VOICES) return;
+    const now = context.currentTime + (options.delay || 0), duration = options.duration || .12;
+    const source = options.noise ? context.createBufferSource() : context.createOscillator();
+    const filter = context.createBiquadFilter(), gain = context.createGain();
+    if (options.noise) source.buffer = noiseBuffer;
+    else {
+      source.type = options.wave || 'sine'; source.frequency.setValueAtTime(options.frequency || 130, now);
+      source.frequency.exponentialRampToValueAtTime(Math.max(12, options.end || options.frequency || 130), now + duration);
+    }
+    filter.type = options.filter || 'lowpass'; filter.frequency.value = options.cutoff || 2500; filter.Q.value = options.q || .7;
+    gain.gain.setValueAtTime(.0001, now); gain.gain.linearRampToValueAtTime(options.gain || .1, now + .006);
+    gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    source.connect(filter); filter.connect(gain); gain.connect(master); voices.add(source);
+    source.onended = function () { voices.delete(source); source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    source.start(now); source.stop(now + duration + .02);
+  }
+  function play(event) {
+    if (!enabled || !context || context.state !== 'running') return;
+    played[event.type] = (played[event.type] || 0) + 1;
+    switch (event.type) {
+      case 'swing':
+        voice({ noise: true, filter: 'bandpass', cutoff: /knife|dagger/.test(event.weapon) ? 2300 : 1100, duration: .18, gain: .13 }); break;
+      case 'shot':
+        voice({ noise: true, cutoff: 5200, duration: /shotgun/.test(event.weapon) ? .34 : .21, gain: .5 });
+        voice({ frequency: 110, end: 28, duration: .2, gain: .3, wave: 'triangle' }); break;
+      case 'impact':
+        voice({ frequency: 150, end: 42, duration: .14, gain: .2, wave: 'triangle', delay: .045 });
+        voice({ noise: true, cutoff: 1200, duration: .1, gain: .12, delay: .045 }); break;
+      case 'wood': case 'stone':
+        voice({ noise: true, cutoff: event.type === 'wood' ? 1500 : 3500, duration: event.broken ? .3 : .12, gain: .25, delay: .04 });
+        voice({ frequency: event.type === 'wood' ? 210 : 75, end: 40, duration: .14, gain: .17, delay: .04 }); break;
+      case 'glass':
+        voice({ noise: true, filter: 'highpass', cutoff: 3300, duration: event.broken ? .55 : .12, gain: .22, delay: .04 });
+        [2100, 3300, 4700].forEach((frequency, i) => voice({ frequency, end: frequency * .85, duration: .24, gain: .025, delay: .05 + i * .028 })); break;
+      case 'step':
+        voice({ noise: true, cutoff: [1, 2, 7].includes(event.surface) ? 700 : 1600, duration: .075, gain: event.quiet ? .025 : .085 });
+        voice({ frequency: 95, end: 50, duration: .07, gain: event.quiet ? .015 : .055 }); break;
+      case 'door': case 'vehicle':
+        voice({ noise: true, cutoff: 750, duration: .15, gain: .15 });
+        voice({ wave: 'triangle', frequency: 220, end: 65, duration: .18, gain: .1 }); break;
+      case 'reload':
+        voice({ noise: true, filter: 'highpass', cutoff: 1700, duration: .055, gain: .18 });
+        voice({ noise: true, cutoff: 1900, duration: .09, gain: .19, delay: .25 }); break;
+      case 'loot': case 'climb':
+        voice({ noise: true, filter: 'bandpass', cutoff: 1700, duration: .28, gain: .12 }); break;
+      case 'hurt':
+        voice({ frequency: 100, end: 35, wave: 'sawtooth', cutoff: 450, duration: .22, gain: .12 }); break;
+      case 'growl':
+        voice({ frequency: 62, end: 43, wave: 'sawtooth', cutoff: 330, duration: .65, gain: .09 });
+        voice({ noise: true, filter: 'bandpass', cutoff: 260, duration: .7, gain: .06 }); break;
+      default: voice({ frequency: 440, end: 260, duration: .08, gain: .035 });
+    }
+  }
+  function startLoops() {
+    if (loops || !context || context.state !== 'running') return;
+    loops = [false, true].map(engine => {
+      const source = engine ? context.createOscillator() : context.createBufferSource();
+      if (engine) { source.type = 'sawtooth'; source.frequency.value = 35; } else { source.buffer = noiseBuffer; source.loop = true; }
+      const filter = context.createBiquadFilter(), gain = context.createGain();
+      filter.type = 'lowpass'; filter.frequency.value = engine ? 500 : 750; gain.gain.value = 0;
+      source.connect(filter); filter.connect(gain); gain.connect(master); source.start();
+      return { source, filter, gain };
+    });
+  }
+  function updateAudio(s, playing) {
+    const events = drain(s);
+    active = !!playing;
+    if (lastState !== s) { stopLoops(); lastState = s; lastGrowl = s.elapsed; }
+    events.forEach(play);
+    if (!active || !enabled || !context || context.state !== 'running') { stopLoops(); return; }
+    startLoops();
+    const rain = /rain|storm/.test(typeof s.weather === 'string' ? s.weather : (s.weather || {}).type);
+    const now = context.currentTime, car = (s.vehicles || []).find(v => v.id === s.player.vehicleId);
+    loops[0].gain.gain.setTargetAtTime(rain ? .055 : .012, now, .2);
+    loops[0].filter.frequency.setTargetAtTime(rain ? 2600 : 650, now, .2);
+    const running = car && car.fuel > 0 && car.condition > 0;
+    loops[1].gain.gain.setTargetAtTime(running ? .04 + Math.abs(car.speed) / 4000 : 0, now, .06);
+    if (running) loops[1].source.frequency.setTargetAtTime(35 + Math.abs(car.speed) * .48, now, .06);
+    if (s.elapsed - lastGrowl > 4.5 && (s.zombies || []).some(z => z.health > 0 && Math.hypot(z.x - s.player.x, z.y - s.player.y) < 240)) {
+      play({ type: 'growl' }); lastGrowl = s.elapsed;
+    }
+  }
+  function metrics() {
+    let peak = 0;
+    if (analyser) { const data = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data); for (const v of data) peak = Math.max(peak, Math.abs(v)); }
+    return { enabled, active, context: context ? context.state : 'locked', voices: voices.size, loops: loops ? loops.length : 0, peak, played: Object.assign({}, played) };
+  }
+  Sirens.Effects = Object.freeze({ emit, drain, attack, walk, pose, audio: Object.freeze({ unlock, setEnabled, update: updateAudio, metrics }) });
+})();
+
+(function () {
+  'use strict';
   const S = window.Sirens = window.Sirens || {};
   const T = 32, TAU = Math.PI * 2;
   const types = [
@@ -478,12 +633,13 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (Math.abs(v.speed) > 18) { log(s, 'Brake before getting out.', 'warn'); return false; }
       for (const a of [v.angle + Math.PI / 2, v.angle - Math.PI / 2, v.angle + Math.PI, v.angle]) {
         const x = v.x + Math.cos(a) * 42, y = v.y + Math.sin(a) * 42;
-        if (clearFoot(s, x, y)) { p.x = x; p.y = y; p.vehicleId = null; v.speed = 0; log(s, 'Left the ' + v.name + '.'); return true; }
+        if (clearFoot(s, x, y)) { p.x = x; p.y = y; p.vehicleId = null; v.speed = 0; if (S.Effects) S.Effects.emit(s, 'vehicle'); log(s, 'Left the ' + v.name + '.'); return true; }
       }
       log(s, 'No clear space beside this car. Move to an open area.', 'warn'); return false;
     }
     if (v.condition <= 0) { log(s, 'This car is wrecked.', 'warn'); return false; }
     p.vehicleId = v.id; p.x = v.x; p.y = v.y; p.resting = false;
+    if (S.Effects) S.Effects.emit(s, 'vehicle');
     log(s, 'Driving: W accelerates, S brakes and reverses, A/D steer, V exits.', 'good'); return true;
   }
   function refuel(s, itemId) {
@@ -514,7 +670,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const x = v.x + Math.cos(v.angle) * v.speed * dt / steps, y = v.y + Math.sin(v.angle) * v.speed * dt / steps;
       if (clear(s, x, y, v.angle)) { v.x = x; v.y = y; }
       else {
-        if (Math.abs(v.speed) > 35) { v.condition = Math.max(0, v.condition - Math.abs(v.speed) * 0.035); log(s, 'Collision damaged the car.', 'warn'); }
+        if (Math.abs(v.speed) > 35) { v.condition = Math.max(0, v.condition - Math.abs(v.speed) * 0.035); log(s, 'Collision damaged the car.', 'warn'); if (S.Effects) S.Effects.emit(s, 'stone'); }
         v.speed = 0; break;
       }
     }
@@ -523,6 +679,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       s._vehicleHits = s._vehicleHits || {};
       for (const z of s.zombies) if (z.health > 0 && Math.hypot(z.x - v.x, z.y - v.y) < 31 && (s._vehicleHits[z.id] || -10) < s.elapsed - 0.7) {
         s._vehicleHits[z.id] = s.elapsed; z.health -= Math.abs(v.speed) * 0.65; z._stun = 0.6; v.condition = Math.max(0, v.condition - 0.35);
+        if (S.Effects) S.Effects.emit(s, 'impact');
         if (z.health <= 0) p.kills++;
       }
       s.zombies = s.zombies.filter(z => z.health > 0);
@@ -738,6 +895,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     if (tile === 6) {
       const before = Number.isFinite(s._doorHealth[index]) ? s._doorHealth[index] : 65;
       s._doorHealth[index] = Math.max(-20, before - damage);
+      if (Sirens.Effects) Sirens.Effects.emit(s, 'wood', { broken: s._doorHealth[index] <= 0 });
       if (s._doorHealth[index] <= 0) { s.tiles[index] = 7; fragments(s, tx, ty, '#bba181'); log(s, 'The door gives way. The route is open.', 'good'); }
       else log(s, 'Door damaged: ' + Math.ceil(s._doorHealth[index]) + ' strength remaining.', 'info');
       noise(s, (tx + 0.5) * TILE, (ty + 0.5) * TILE, Math.max(150, stats.noise || 0));
@@ -747,6 +905,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const before = Number.isFinite(terrain[index]) ? terrain[index] : maximum;
     const remaining = Math.max(0, before - damage);
     terrain[index] = remaining;
+    if (Sirens.Effects) Sirens.Effects.emit(s, tile === 5 ? 'wood' : tile === 3 ? 'stone' : 'glass', { broken: remaining === 0 });
     noise(s, (tx + 0.5) * TILE, (ty + 0.5) * TILE, tile === 8 || tile === 9 ? 270 : Math.max(130, stats.noise || 0));
     if (remaining > 0) { log(s, (tile === 5 ? 'Tree' : tile === 3 ? 'Wall' : 'Window') + ' damaged: ' + Math.ceil(remaining) + ' strength remaining.', 'info'); return true; }
     if (tile === 5) {
@@ -802,6 +961,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const terrain = health(s), broken = tile === 9 && terrain[index] === 0;
     if (tile === 8) { s.tiles[index] = 9; if (terrain[index] === undefined) terrain[index] = limits.windowHealth; }
     s.player.x = landingX; s.player.y = landingY; s.player.resting = false;
+    if (Sirens.Effects) Sirens.Effects.emit(s, 'climb');
     s.player.invulnerable = Math.max(s.player.invulnerable || 0, 0.3);
     noise(s, cx, cy, broken ? 85 : 55);
     const item = Sirens.Catalog && Sirens.Catalog.items[s.player.equipment && s.player.equipment.clothing];
@@ -1928,7 +2088,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     if (p.health < 30) speed *= 0.87;
     if (p.resting) speed = 0;
     const driving = !!(Sirens.Vehicles && Sirens.Vehicles.update(s, dt, input));
-    if (!driving) move(s, p, mx * speed * dt, my * speed * dt, 10);
+    if (!driving) {
+      const oldX = p.x, oldY = p.y;
+      move(s, p, mx * speed * dt, my * speed * dt, 10);
+      if (Sirens.Effects) Sirens.Effects.walk(s, Math.hypot(p.x - oldX, p.y - oldY), sprint, p._sneaking);
+    }
     const shift = s.world && !(s.stories && s.stories.floor > 0) ? Sirens.World.maybeRecenter(s) : { shiftX: 0, shiftY: 0 };
     if (shift.blocked) log(s, shift.blocked, 'warn');
     const ax = clamp(finite(input.aimX, p.x + Math.cos(p.angle) * 80 + shift.shiftX) - shift.shiftX, 0, s.width * TILE);
@@ -2032,7 +2196,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (s.tiles[n.value] === 7 && (dist2(p.x, p.y, n.x, n.y) < 27 ** 2 || s.zombies.some(z => dist2(z.x, z.y, n.x, n.y) < 26 ** 2))) {
         log(s, 'The doorway is occupied. Step clear before closing it.', 'warn'); return false;
       }
-      s.tiles[n.value] = s.tiles[n.value] === 6 ? 7 : 6; noise(s, n.x, n.y, 55, 0.5); return true;
+      s.tiles[n.value] = s.tiles[n.value] === 6 ? 7 : 6; noise(s, n.x, n.y, 55, 0.5);
+      if (Sirens.Effects) Sirens.Effects.emit(s, 'door');
+      return true;
     }
     if (n.type === 'radio') {
       if (s.goal.complete) { log(s, 'The radio mission is complete. Free survival continues.', 'info'); return true; }
@@ -2063,7 +2229,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (!c.items[id]) delete c.items[id]; else skipped.push(items[id].name.toLowerCase());
     }
     c.looted = Object.keys(c.items).length === 0;
-    if (took.length) log(s, 'Collected ' + took.join(', ') + '.', 'good');
+    if (took.length) { log(s, 'Collected ' + took.join(', ') + '.', 'good'); if (Sirens.Effects) Sirens.Effects.emit(s, 'loot'); }
     if (skipped.length) log(s, 'Pack is nearly full (' + weight(p.inventory).toFixed(1) + '/' + carryCapacity(s) + '). Left ' + skipped.join(', ') + ' here. Room for mission parts stays reserved. Use, drop, craft, or build to make space.', 'warn');
     return took.length > 0;
   }
@@ -2086,6 +2252,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const weapon = weaponInfo(p.weapon), w = weapon.kind === 'melee' ? weapon : weaponInfo('bat');
       if (p.stamina < w.staminaCost) { p.cooldown = 0.35; log(s, 'Catch your breath before swinging again.', 'warn'); return false; }
       p.stamina = Math.max(0, p.stamina - w.staminaCost); p.cooldown = w.cooldown;
+      if (Sirens.Effects) Sirens.Effects.attack(s, actualWeapon, 'melee', w.cooldown, p.angle);
       noise(s, p.x, p.y, w.noise, 1); particles(s, p.x + dx * 40, p.y + dy * 40, 5, '#dedab2');
       const targets = s.zombies.concat(Sirens.Actors ? (s.humans || []).filter(h => h.health > 0) : []).filter(z => {
         const zd = Math.hypot(z.x - p.x, z.y - p.y);
@@ -2098,6 +2265,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         move(s, z, (z.x - p.x) / zd * 16, (z.y - p.y) / zd * 16, 10);
         particles(s, z.x, z.y, 5, '#8da487');
       }
+      if (targets.length && Sirens.Effects) Sirens.Effects.emit(s, 'impact');
       if (Sirens.Destruction) Sirens.Destruction.hit(s, aimX, aimY, actualWeapon);
     } else {
       const id = weaponInfo(p.weapon).kind === 'firearm' ? p.weapon : 'pistol', w = weaponInfo(id);
@@ -2105,6 +2273,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const loaded = p.ammo;
       if (loaded <= 0) { p.cooldown = 0.35; log(s, 'Empty magazine. Press R to reload from reserve rounds.', 'warn'); return false; }
       p.magazines[id] = loaded - 1; p.ammo = loaded - 1; p.stamina = Math.max(0, p.stamina - finite(w.staminaCost, 0)); p.cooldown = w.cooldown; noise(s, p.x, p.y, w.noise, 2.4);
+      if (Sirens.Effects) Sirens.Effects.attack(s, actualWeapon, 'firearm', w.cooldown, p.angle);
       particles(s, p.x + dx * 18, p.y + dy * 18, 5, '#f6cb70');
       let target = null, nearest = w.range;
       for (const z of s.zombies.concat(Sirens.Actors ? (s.humans || []).filter(h => h.health > 0) : [])) {
@@ -2112,6 +2281,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         if (along >= 0 && along < nearest && side < 18 && hasLOS(s, p.x, p.y, z.x, z.y)) { target = z; nearest = along; }
       }
       if (target) {
+        if (Sirens.Effects) Sirens.Effects.emit(s, 'impact');
         if (target.faction && Sirens.Actors) Sirens.Actors.hit(s, target, w.damage, true);
         else { target.health -= w.damage; target._stun = 0.7; target.windup = 0; }
         particles(s, target.x, target.y, 9, '#a5b496');
@@ -2216,7 +2386,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const rounds = Math.min(w.clipSize - loaded, inv[ammoId] || 0);
       if (!rounds) { log(s, 'No reserve rounds. Search for ammunition or recover rounds from salvage.', 'warn'); return false; }
       p.ammo = loaded + rounds; p.magazines[id] = p.ammo; inv[ammoId] -= rounds; if (!inv[ammoId]) delete inv[ammoId];
-      p.cooldown = Math.max(p.cooldown, 0.85); log(s, 'Reloaded ' + rounds + ' rounds.', 'good'); return true;
+      p.cooldown = Math.max(p.cooldown, 0.85); log(s, 'Reloaded ' + rounds + ' rounds.', 'good');
+      if (Sirens.Effects) Sirens.Effects.emit(s, 'reload');
+      return true;
     }
     if (name === 'rest') {
       p.resting = !p.resting;
@@ -2551,9 +2723,6 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.lastFloor = 0;
       this.clock = 0; this.lastTime = 0; this.lastMini = -1000;
       this.minimapState = null; this.miniTerrain = null;
-      this.darkness = surface(1, 1);
-      this.darkCtx = this.darkness.getContext('2d');
-      this.visibility = new Map();
       this.grassSprites = []; this.floorSprites = []; this.waterSprites = []; this.treeSprites = [];
       this.createArt();
       this.resize = this.resize.bind(this);
@@ -2616,11 +2785,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         }
         this.treeSprites.push(tree);
       }
-      this.fireLight = surface(190, 190);
-      const f = this.fireLight.getContext('2d');
-      const halo = f.createRadialGradient(95, 95, 4, 95, 95, 95);
-      halo.addColorStop(0, '#000000d0'); halo.addColorStop(1, '#00000000');
-      f.fillStyle = halo; f.fillRect(0, 0, 190, 190);
+
     }
 
     resize() {
@@ -2631,10 +2796,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.canvas.width = Math.round(this.width * this.dpr);
       this.canvas.height = Math.round(this.height * this.dpr);
       this.ctx.imageSmoothingEnabled = false;
-      this.darkness.width = this.width; this.darkness.height = this.height;
       const v = this.ctx.createRadialGradient(this.width / 2, this.height / 2, Math.min(this.width, this.height) * .16,
         this.width / 2, this.height / 2, Math.max(this.width, this.height) * .66);
-      v.addColorStop(0, '#07131400'); v.addColorStop(.62, '#07131410'); v.addColorStop(1, '#061517cc');
+      v.addColorStop(0, '#07131400'); v.addColorStop(.62, '#07131405'); v.addColorStop(1, '#06151718');
       this.vignette = v;
       if (this.minimap) {
         const miniRect = this.minimap.getBoundingClientRect();
@@ -2665,15 +2829,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const floor = state.stories && Number(state.stories.floor) || 0;
       if (this.lastDrawState !== state || !this.camera.ready) {
         this.camera.x = state.player.x; this.camera.y = state.player.y; this.camera.ready = true;
-        this.lastDrawState = state; this.visibility.clear(); this.lastMini = -1000;
+        this.lastDrawState = state; this.lastMini = -1000;
       } else if (originX !== this.lastOriginX || originY !== this.lastOriginY) {
         this.camera.x -= (originX - this.lastOriginX) * state.tileSize;
         this.camera.y -= (originY - this.lastOriginY) * state.tileSize;
-        this.visibility.clear(); this.lastMini = -1000;
+        this.lastMini = -1000;
       } else if (revision !== this.lastRevision) {
-        this.visibility.clear(); this.lastMini = -1000;
+        this.lastMini = -1000;
       }
-      if (floor !== this.lastFloor) { this.visibility.clear(); this.lastMini = -1000; }
+      if (floor !== this.lastFloor) { this.lastMini = -1000; }
       this.lastOriginX = originX; this.lastOriginY = originY; this.lastRevision = revision;
       this.lastFloor = floor;
     }
@@ -2692,9 +2856,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
 
     known(state, x, y) {
-      if (!state.discovered) return true;
       const tx = Math.floor(x / state.tileSize), ty = Math.floor(y / state.tileSize);
-      return tx >= 0 && ty >= 0 && tx < state.width && ty < state.height && !!state.discovered[ty * state.width + tx];
+      return tx >= 0 && ty >= 0 && tx < state.width && ty < state.height;
     }
 
     inView(x, y, margin) {
@@ -2733,9 +2896,6 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       }
       for (const human of state.humans || []) {
         if (human.health <= 0 || !this.inView(human.x, human.y, 35) || !this.known(state, human.x, human.y)) continue;
-        const dx = human.x - p.x, dy = human.y - p.y;
-        if (dx * dx + dy * dy > 480 * 480) continue;
-        if (Sirens.Engine && typeof Sirens.Engine.hasLOS === 'function' && !Sirens.Engine.hasLOS(state, p.x, p.y, human.x, human.y)) continue;
         entities.push({ y: human.y, kind: 'human', data: human });
       }
       for (const container of state.containers || []) {
@@ -2746,16 +2906,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       }
       for (const zombie of state.zombies || []) {
         if (zombie.health <= 0 || !this.inView(zombie.x, zombie.y, 30) || !this.known(state, zombie.x, zombie.y)) continue;
-        const dx = zombie.x - p.x, dy = zombie.y - p.y;
-        if (dx * dx + dy * dy > 480 * 480) continue;
-        const old = this.visibility.get(zombie.id);
-        let visible;
-        if (old && now - old.time < 90 && Math.abs(old.px - p.x) + Math.abs(old.py - p.y) < 20 && Math.abs(old.zx - zombie.x) + Math.abs(old.zy - zombie.y) < 20) visible = old.visible;
-        else {
-          visible = Sirens.Engine && typeof Sirens.Engine.hasLOS === 'function' ? Sirens.Engine.hasLOS(state, p.x, p.y, zombie.x, zombie.y) : true;
-          this.visibility.set(zombie.id, { time: now, visible, px: p.x, py: p.y, zx: zombie.x, zy: zombie.y });
-        }
-        if (visible) entities.push({ y: zombie.y, kind: 'zombie', data: zombie });
+        entities.push({ y: zombie.y, kind: 'zombie', data: zombie });
       }
       entities.push({ y: p.y, kind: 'player', data: p });
       for (const tree of this.visibleTrees) entities.push({ y: tree.y + 14, kind: 'tree', data: tree });
@@ -2777,7 +2928,6 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.drawWeather(state);
       ctx.fillStyle = this.vignette; ctx.fillRect(0, 0, this.width, this.height);
       this.drawMinimap(state, now);
-      if (this.visibility.size > (state.zombies || []).length + 64) this.visibility.clear();
     }
 
     drawTerrain(state) {
@@ -2790,12 +2940,6 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         const index = y * state.width + x;
         if (upstairs && !(state.buildings || []).some((building) => x >= building.x && y >= building.y && x < building.x + building.w && y < building.y + building.h)) {
           ctx.fillStyle = '#0c1c20'; ctx.fillRect(x * s, y * s, s, s); continue;
-        }
-        if (state.discovered && !state.discovered[index]) {
-          ctx.fillStyle = (x + y) % 3 === 0 ? '#0b1e1e' : COLORS.fog;
-          ctx.fillRect(x * s, y * s, s, s);
-          if (noise(x + this.lastOriginX, y + this.lastOriginY, state.seed) > .87) { ctx.fillStyle = '#142929'; ctx.fillRect(x * s + 14, y * s + 14, 2, 2); }
-          continue;
         }
         const gx = x + this.lastOriginX, gy = y + this.lastOriginY;
         const tile = state.tiles[index], variant = Math.floor(noise(gx, gy, state.seed) * 12);
@@ -2931,7 +3075,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       for (const b of state.buildings || []) {
         const x = b.x * s, y = b.y * s, w = b.w * s, h = b.h * s;
         if (!this.inView(x + w / 2, y + h / 2, Math.max(w, h)) || !this.known(state, x + w / 2, y + h / 2)) continue;
-        c.save(); this.clipExploredBuilding(state, b);
+        c.save();
         c.fillStyle = '#374c3866'; c.fillRect(x + s + 4, y + s + 6, Math.max(8, w - s * 2 - 8), Math.max(8, h - s * 2 - 12));
         const name = String(b.name || '').toLowerCase();
         if (/warehouse|workshop|depot|barn/i.test(name)) {
@@ -2966,18 +3110,6 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       }
     }
 
-    clipExploredBuilding(state, building) {
-      if (!state.discovered) return;
-      const c = this.ctx, s = state.tileSize;
-      c.beginPath();
-      for (let yy = building.y; yy < building.y + building.h; yy++) {
-        for (let xx = building.x; xx < building.x + building.w; xx++) {
-          if (state.discovered[yy * state.width + xx]) c.rect(xx * s, yy * s, s, s);
-        }
-      }
-      c.clip();
-    }
-
     drawStairs(state) {
       const c = this.ctx, s = state.tileSize;
       for (const building of state.buildings || []) {
@@ -2994,34 +3126,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
 
     drawRoofs(state) {
-      const c = this.ctx, s = state.tileSize, p = state.player;
+      const c = this.ctx, s = state.tileSize;
       for (const b of state.buildings || []) {
         const x = b.x * s, y = b.y * s, w = b.w * s, h = b.h * s;
         if (x > this.right + 60 || x + w < this.left - 60 || y > this.bottom + 60 || y + h < this.top - 60) continue;
-        // A roof cuts away before the player reaches its door.
-        const dx = Math.max(x - p.x, 0, p.x - x - w), dy = Math.max(y - p.y, 0, p.y - y - h);
-        if (dx * dx + dy * dy < 90 * 90) continue;
-        const discover = this.known(state, x + w / 2, y + h / 2);
-        if (!discover) continue;
-        c.save(); this.clipExploredBuilding(state, b);
-        c.fillStyle = '#101f2266'; c.fillRect(x + 11, y + 13, w, h);
-        c.fillStyle = '#28383e'; c.fillRect(x - 3, y - 3, w + 6, h + 5);
-        const industrial = /warehouse|depot|workshop/i.test(b.name || ''), rural = /barn|farm/i.test(b.name || '');
-        c.fillStyle = industrial ? '#67746c' : rural ? '#7a6750' : '#465759'; c.fillRect(x, y, w, h / 2);
-        c.fillStyle = industrial ? '#4c615b' : rural ? '#5c5546' : '#34464a'; c.fillRect(x, y + h / 2, w, h / 2);
-        c.strokeStyle = '#546363'; c.lineWidth = 1;
-        for (let row = 10; row < h; row += 12) {
-          c.beginPath(); c.moveTo(x + 3, y + row); c.lineTo(x + w - 3, y + row); c.stroke();
-          c.strokeStyle = row < h / 2 ? '#35454a' : '#293b41';
-          for (let col = (row % 24 ? 4 : 17); col < w; col += 27) { c.beginPath(); c.moveTo(x + col, y + row - 10); c.lineTo(x + col, y + row); c.stroke(); }
-          c.strokeStyle = '#546363';
-        }
-        c.fillStyle = '#899189'; c.fillRect(x - 2, y + h / 2 - 3, w + 4, 4);
-        c.fillStyle = '#c0b997'; c.fillRect(x - 2, y + h / 2 - 3, w + 4, 1);
-        c.fillStyle = '#263639'; c.fillRect(x + w - 44, y + 22, 21, 25);
-        c.fillStyle = '#717c73'; c.fillRect(x + w - 46, y + 18, 21, 23);
-        c.fillStyle = '#454c46'; c.fillRect(x + w - 43, y + 21, 15, 15);
-        c.fillStyle = '#949a83'; c.fillRect(x + w - 46, y + 18, 21, 3);
+        // Always cut away roofs so nearby interiors and actors remain visible.
+        c.save();
         // Small hand-painted sign labels help make the town navigable.
         if (w > 100 && b.name) {
           const label = String(b.name).toUpperCase();
@@ -3113,9 +3223,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
     drawPlayer(player, state) {
       const c = this.ctx, x = Math.floor(player.x), y = Math.floor(player.y), angle = player.angle || 0;
+      const pose = Sirens.Effects ? Sirens.Effects.pose(state) : { stride: 0, attack: null };
+      const attack = pose.attack;
+      const id = attack ? attack.weapon : player.weapon;
       const items = Sirens.Engine && Sirens.Engine.items || {};
-      const weapon = items[player.weapon] && items[player.weapon].weapon;
-      const firearm = weapon ? weapon.kind === 'firearm' : player.weapon === 'pistol';
+      const weapon = items[id] && items[id].weapon;
+      const firearm = weapon ? weapon.kind === 'firearm' : id === 'pistol';
       const equipment = player.equipment || {};
       const clothing = items[equipment.clothing], backpack = items[equipment.backpack];
       const vehicle = (state.vehicles || []).find((car) => car.id === player.vehicleId);
@@ -3123,37 +3236,50 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         c.strokeStyle = '#e4d08d99'; c.lineWidth = 1; c.beginPath(); c.ellipse(vehicle.x, vehicle.y, 29, 19, vehicle.angle || 0, 0, TAU); c.stroke();
         return;
       }
+      const phase = attack ? attack.progress : 0;
+      const stroke = Math.sin(phase * Math.PI), stride = Math.sin(pose.stride) * 3;
+      const relativeAim = attack ? attack.angle - angle : 0;
+      const sweep = attack && !firearm ? -1.5 + phase * 3 : -.65;
+      const thrust = /spear|knife|dagger/.test(id);
+      const recoil = attack && firearm ? Math.max(0, 1 - phase * 3) * 5 : 0;
       ellipse(c, x + 1, y + 6, 12, 6, '#091d2490');
       c.save(); c.translate(x, y); c.rotate(angle);
       c.strokeStyle = '#d9d39b40'; c.lineWidth = 1; c.setLineDash([3, 6]);
       c.beginPath(); c.moveTo(19, 0); c.lineTo(firearm ? 100 : 43, 0); c.stroke(); c.setLineDash([]);
-      c.fillStyle = '#1b343a'; c.fillRect(-6, -9, 9, 6); c.fillRect(-6, 4, 9, 6);
+      if (attack && !firearm && !thrust) {
+        c.save(); c.rotate(relativeAim); c.strokeStyle = '#f3e6b0'; c.globalAlpha = stroke * .45; c.lineWidth = 4;
+        c.beginPath(); c.arc(10, 2, Math.min(54, (weapon && weapon.range || 70) * .55), sweep - .65, sweep); c.stroke(); c.restore();
+      }
+      c.fillStyle = '#1b343a'; c.fillRect(-6 + stride, -9, 9, 6); c.fillRect(-6 - stride, 4, 9, 6);
       c.fillStyle = clothing && clothing.color || '#a99b69'; c.fillRect(-8, -8, 13, 16);
       c.fillStyle = clothing ? '#d9ddac85' : '#d5bd75'; c.fillRect(-8, -8, 13, 4); c.fillRect(-5, -3, 13, 6);
       c.fillStyle = backpack && backpack.color || '#6c6e47'; c.fillRect(-10, -5, backpack ? 8 : 5, 10);
-      c.fillStyle = '#d6b78a'; c.fillRect(5, -7, 9, 4); c.fillRect(5, 3, 10, 4);
+      c.fillStyle = '#d6b78a'; c.fillRect(5 - recoil, -7, 9, 4);
+      c.save(); c.translate(10 - recoil + (thrust ? stroke * 12 : 0), 3); c.rotate(relativeAim + (firearm || thrust ? 0 : sweep));
+      c.fillStyle = '#d6b78a'; c.fillRect(-4, -2, 11, 4);
       if (firearm) {
         const length = weapon && weapon.range > 300 ? 21 : 11;
-        c.fillStyle = '#142b32'; c.fillRect(12, -4, length, 4); c.fillRect(14, -2, 4, 6);
-        c.fillStyle = '#a4b0a2'; c.fillRect(16, -5, Math.max(6, length - 5), 1);
-      } else if (weapon && weapon.range < 55) {
-        c.fillStyle = '#8b744b'; c.fillRect(12, 0, 8, 4);
-        c.fillStyle = '#d2dbbb'; c.fillRect(18, -1, 9, 3);
+        c.fillStyle = '#142b32'; c.fillRect(3, -4, length, 4); c.fillRect(5, -2, 4, 6);
+        c.fillStyle = '#a4b0a2'; c.fillRect(7, -5, Math.max(6, length - 5), 1);
+        if (attack && phase < .32) {
+          c.fillStyle = '#ffe19b'; c.beginPath(); c.moveTo(length + 3, -2); c.lineTo(length + 15, -7); c.lineTo(length + 10, -2); c.lineTo(length + 15, 3); c.closePath(); c.fill();
+        }
       } else {
-        c.save(); c.translate(13, 2); c.rotate(-.65);
-        c.fillStyle = '#766e4c'; c.fillRect(-3, -1, 24, 4);
-        const length = weapon && weapon.range > 100 ? 29 : 16;
-        c.fillStyle = '#d6c28c'; c.fillRect(8, -2, length, 6);
-        c.fillStyle = '#e9d7a3'; c.fillRect(9, -2, 14, 1); c.restore();
+        const length = weapon && weapon.range > 100 ? 37 : weapon && weapon.range < 55 ? 16 : 27;
+        c.fillStyle = '#766e4c'; c.fillRect(2, -1, length, 4);
+        if (/axe|hatchet/.test(id)) { c.fillStyle = '#d1d9bf'; c.fillRect(length - 5, -8, 9, 14); c.fillStyle = '#eef1d3'; c.fillRect(length + 2, -7, 2, 12); }
+        else if (/hammer|pickaxe/.test(id)) { c.fillStyle = '#a9b5ae'; c.fillRect(length - 4, -7, 10, 13); }
+        else if (/machete|katana|knife|dagger/.test(id)) { c.fillStyle = '#d5dec4'; c.fillRect(9, -3, length - 6, 6); c.fillStyle = '#f3f2d3'; c.fillRect(10, -3, length - 8, 1); }
+        else if (thrust) { c.fillStyle = '#d5dec4'; c.beginPath(); c.moveTo(length + 8, 1); c.lineTo(length - 2, -3); c.lineTo(length - 2, 5); c.closePath(); c.fill(); }
+        else { c.fillStyle = '#d6c28c'; c.fillRect(10, -2, length - 5, 6); c.fillStyle = '#e9d7a3'; c.fillRect(11, -2, length - 7, 1); }
       }
+      c.restore();
       c.fillStyle = '#593f2d'; c.fillRect(-6, -6, 12, 12);
       c.fillStyle = '#b99064'; c.fillRect(0, -4, 8, 8);
       c.fillStyle = '#ddbc88'; c.fillRect(6, -3, 3, 6);
       c.fillStyle = '#382e26'; c.fillRect(-5, -6, 8, 5); c.fillRect(-6, -2, 3, 6);
       c.restore();
-      if (player.bleeding > 0) {
-        c.fillStyle = '#b96753'; c.fillRect(x - 2, y + 14, 3, 2);
-      }
+      if (player.bleeding > 0) { c.fillStyle = '#b96753'; c.fillRect(x - 2, y + 14, 3, 2); }
       c.strokeStyle = '#e4d08d'; c.lineWidth = 1; c.beginPath();
       c.arc(x, y, 17, angle + .7, angle + 2.4); c.arc(x, y, 17, angle + 3.85, angle + 5.55); c.stroke();
     }
@@ -3276,33 +3402,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
     drawLighting(state) {
       const hour = ((Number(state.time) || 8) % 24 + 24) % 24;
-      let darkness;
-      if (hour >= 8 && hour <= 17) darkness = .045;
-      else if (hour > 17 && hour < 21) darkness = .045 + (hour - 17) / 4 * .63;
-      else if (hour >= 5 && hour < 8) darkness = .68 - (hour - 5) / 3 * .635;
-      else darkness = .68;
-      const c = this.ctx, d = this.darkCtx;
-      if (darkness > .06) {
-        const px = state.player.x - this.left, py = state.player.y - this.top;
-        d.globalCompositeOperation = 'source-over'; d.clearRect(0, 0, this.width, this.height);
-        d.fillStyle = '#061521'; d.fillRect(0, 0, this.width, this.height);
-        d.globalCompositeOperation = 'destination-out';
-        const light = d.createRadialGradient(px, py, 36, px, py, 210);
-        light.addColorStop(0, '#000000e8'); light.addColorStop(.45, '#000000ba'); light.addColorStop(1, '#00000000');
-        d.fillStyle = light; d.fillRect(px - 210, py - 210, 420, 420);
-        const angle = state.player.angle || 0;
-        d.fillStyle = '#00000050'; d.beginPath(); d.moveTo(px, py);
-        d.arc(px, py, 265, angle - .35, angle + .35); d.closePath(); d.fill();
-        // Campfires share the lighting pass and are limited to the visible viewport.
-        for (const structure of state.structures || []) if (structure.type === 'campfire' && this.inView(structure.x, structure.y, 80)) {
-          const sx = structure.x - this.left, sy = structure.y - this.top;
-          d.drawImage(this.fireLight, sx - 95, sy - 95);
-        }
-        d.globalCompositeOperation = 'source-over';
-        c.globalAlpha = darkness; c.drawImage(this.darkness, 0, 0); c.globalAlpha = 1;
-      } else {
-        c.fillStyle = '#d8ba6910'; c.fillRect(0, 0, this.width, this.height);
-      }
+      const night = hour < 6 || hour >= 20 ? 1 : hour >= 17 ? (hour - 17) / 3 : hour < 8 ? (8 - hour) / 2 : 0;
+      // A gentle uniform night tint keeps the entire viewport readable.
+      const c = this.ctx;
+      c.fillStyle = night > 0 ? 'rgba(17, 30, 54, ' + (night * .14) + ')' : '#d8ba6908';
+      c.fillRect(0, 0, this.width, this.height);
     }
 
     drawWeather(state) {
@@ -3323,7 +3427,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (!this.miniCtx) return;
       const c = this.miniCtx, w = this.miniWidth, h = this.miniHeight;
       const ground = this.lastFloor > 0 && Sirens.Stories && typeof Sirens.Stories.groundView === 'function' ? Sirens.Stories.groundView(state) || state : state;
-      const mapTiles = ground.tiles || state.tiles, mapDiscovered = ground.discovered || state.discovered;
+      const mapTiles = ground.tiles || state.tiles;
       if (this.minimapState !== state || now - this.lastMini > 240) {
         if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) this.miniTerrain = surface(state.width, state.height);
         const m = this.miniTerrain.getContext('2d');
@@ -3331,7 +3435,6 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         m.fillStyle = '#102a29'; m.fillRect(0, 0, state.width, state.height);
         for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) {
           const i = y * state.width + x;
-          if (mapDiscovered && !mapDiscovered[i]) continue;
           m.fillStyle = tileColors[mapTiles[i]] || '#35513d'; m.fillRect(x, y, 1, 1);
         }
         this.minimapState = state; this.lastMini = now;
@@ -3364,7 +3467,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
     destroy() {
       window.removeEventListener('resize', this.resize);
-      this.visibility.clear();
+
       this.grassSprites.length = 0; this.floorSprites.length = 0; this.treeSprites.length = 0; this.waterSprites.length = 0;
     }
   }
@@ -3973,10 +4076,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   const SAVE_KEY = 'after-the-sirens-save-v1';
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
-  let soundOn = true;
   let debugOn = false;
-  let audioContext = null;
-  let lastAudioTime = 0;
   let screen = 'title';
   let hasWarnedStorage = false;
   let lastFrame = performance.now();
@@ -3988,34 +4088,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   const keys = new Set();
   const pointer = { x: innerWidth / 2, y: innerHeight / 2, down: false, shoot: false, used: false };
 
-  function unlockAudio() {
-    if (!soundOn) return;
-    try {
-      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioContext.state === 'suspended') audioContext.resume().catch(function () {});
-    } catch (_) { soundOn = false; }
-  }
-
-  function tone(frequency, duration, type, gain, endFrequency) {
-    if (!soundOn || !audioContext || audioContext.state !== 'running') return;
-    const now = audioContext.currentTime;
-    if (now - lastAudioTime < 0.035) return;
-    lastAudioTime = now;
-    try {
-      const oscillator = audioContext.createOscillator();
-      const envelope = audioContext.createGain();
-      oscillator.type = type || 'sine';
-      oscillator.frequency.setValueAtTime(frequency, now);
-      oscillator.frequency.exponentialRampToValueAtTime(endFrequency || frequency, now + duration);
-      envelope.gain.setValueAtTime(gain || 0.025, now);
-      envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-      oscillator.connect(envelope);
-      envelope.connect(audioContext.destination);
-      oscillator.start(now);
-      oscillator.stop(now + duration);
-      oscillator.onended = function () { oscillator.disconnect(); envelope.disconnect(); };
-    } catch (_) { /* Sound failures never stop the simulation. */ }
-  }
+  function unlockAudio() { S.Effects.audio.unlock(); }
 
   function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; }
 
@@ -4055,7 +4128,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     unlockAudio();
     setScreen('playing');
     ui.update(state, frameInfo);
-    tone(440, 0.22, 'sine', 0.025, 220);
+    S.Effects.emit(state, 'ready');
   }
 
   function continueRun() {
@@ -4092,7 +4165,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     if (!active || state.ended) return;
     const result = S.Engine.action(state, name);
     if (state.conversation) clearInput();
-    if (result) tone(340, 0.08, 'triangle', 0.015, 450);
+    if (result && name !== 'reload') S.Effects.emit(state, 'ui');
     ui.update(state, frameInfo);
   }
 
@@ -4144,7 +4217,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     dropItem: function (id) { applyAction('drop:' + id); },
     craft: function (id) { if (active && !state.ended) { S.Engine.craft(state, id); ui.update(state, frameInfo); } },
     build: function (type) { if (active && !state.ended) { S.Engine.build(state, type); ui.update(state, frameInfo); } },
-    setSound: function (on) { soundOn = !!on; if (soundOn) unlockAudio(); },
+    setSound: function (on) { S.Effects.audio.setEnabled(on); if (on) unlockAudio(); },
     setDebug: function (on) { debugOn = !!on; debug.hidden = !debugOn; }
   });
   setScreen('title');
@@ -4175,7 +4248,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     keys.add(event.code);
     unlockAudio();
     if (event.code === 'KeyE') {
-      if (S.Engine.interact(state)) tone(660, 0.12, 'triangle', 0.02, 880);
+      S.Engine.interact(state);
       if (state.conversation) clearInput();
       ui.update(state, frameInfo);
     } else if (event.code === 'Digit1') applyAction('eat');
@@ -4243,19 +4316,16 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       accumulator += elapsed;
       while (accumulator >= 1 / 60) {
         const oldHealth = state.player.health;
-        const oldKills = state.player.kills;
-        const oldAmmo = state.player.ammo;
         S.Engine.update(state, 1 / 60, inputSnapshot());
         accumulator -= 1 / 60;
-        if (state.player.health < oldHealth - 0.2) tone(85, 0.18, 'sawtooth', 0.018, 35);
-        else if (state.player.ammo < oldAmmo) tone(130, 0.12, 'square', 0.035, 25);
-        else if (state.player.kills > oldKills) tone(160, 0.1, 'triangle', 0.025, 55);
+        if (state.player.health < oldHealth - 0.2) S.Effects.emit(state, 'hurt');
         if (state.ended) break;
       }
       autoSaveTime += elapsed;
       if (autoSaveTime >= 30) { save(true); autoSaveTime = 0; }
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
+    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !state.ended && !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
     if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); uiTime = 0; }
@@ -4270,7 +4340,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
-    getScreen: function () { return screen; } };
+    getScreen: function () { return screen; }, getAudioMetrics: S.Effects.audio.metrics };
 })();
 </script>
 </body>
