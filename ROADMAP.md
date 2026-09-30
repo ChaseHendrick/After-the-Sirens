@@ -38,4 +38,4 @@ AAA quality is a longer production target, not a label for this early playable r
 
 ## Current multiplayer and AI boundaries
 
-Local 20-player hosting, public listings, private invites and bounded neural-assisted AI play are implemented. Remaining work includes long public-internet sessions, guest-targeting parity, independent far-away regions, PvP, anti-cheat hardening, automatic NAT traversal and an operated discovery service. The small local network is validated as an implementation; superior gameplay performance needs comparative playtesting.
+Local 20-player hosting, public listings, private invites, text chat, proximity voice, owner commands and bounded neural-assisted AI play are implemented. Remaining work includes long public-internet sessions, guest-targeting parity, independent far-away regions, PvP, account-based moderation, voice relay support, anti-cheat hardening, automatic NAT traversal and an operated discovery service. The small local network is validated as an implementation; superior gameplay performance needs comparative playtesting.

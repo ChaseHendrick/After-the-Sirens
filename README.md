@@ -18,7 +18,7 @@ Choose **Open world** to explore and survive freely. The optional radio mission 
 
 Chrome is tested. Other modern desktop browsers may work, but have not all been validated. Keyboard and mouse are required; mobile-sized layout checks do not establish touch play support.
 
-Local autosave and Continue are available. **Export save** keeps a portable JSON copy. Export regularly, especially when using local files, because browsers can restrict or clear local storage.
+Singleplayer autosaves every five seconds of play and on page exit. Continue restores the saved run. **Export save** keeps a portable JSON copy. Export regularly, especially when using local files, because browsers can restrict or clear local storage.
 
 ![Searchable original item catalogue](docs/catalogue.png)
 
@@ -44,6 +44,16 @@ Guests use the host computer's LAN address, such as `ws://192.168.1.20:8787/game
 **Browse public servers** reads the site's curated list, or another compatible directory address. A public host exposes its own `/servers` listing; private hosts return an empty list. The included optional directory service accepts authorized registration heartbeats and expires listings after three minutes. See [the complete hosting and directory guide](docs/MULTIPLAYER.md). The shipped curated list starts empty until real hosts are submitted. The website serves the game; it does not keep anyone's world server running.
 
 This first multiplayer implementation supports the **ground floor and one shared loaded region**. Players who leave that region rejoin its anchor. Enemy decisions focus on the anchor survivor; guest contact damage is separately checked on the host. Upper floors, independent far-away regions, player-versus-player combat and public internet load testing remain future work. Twenty loopback protocol clients and two real browser players are tested separately.
+
+## Chat, proximity voice and world commands
+
+Press **T** or **Enter** during play to open chat and commands. **World** text chat reaches the server; **Nearby** reaches players within 20 tiles. Names and owner badges come from the host. Opening chat stops your controls while the multiplayer world continues. Messages are plain text, rate limited and bounded; nearby messages do not enter the shared world history.
+
+In multiplayer, choose **Enable proximity voice**, grant microphone access, then hold **N** or the talk button to transmit. Nearby voices become quieter with distance. Mute, deafen and turn-off controls are available. Joining does not request microphone access. Voice uses direct WebRTC audio between consenting nearby players; the local host handles signaling and does not record audio. Microphone access needs localhost or HTTPS. Plain HTTP LAN guest addresses need a secure setup; voice across different networks may need a shared VPN. No external voice relay is configured.
+
+Type **/help** for available commands. Singleplayer includes `/save`, `/time 18`, `/weather rain`, `/difficulty hard`, `/give me machete 1`, `/heal`, `/where`, `/items machete` and `/tp me X Y`. Teleports use global tile coordinates and require clear ground inside the loaded region. Item commands respect pack and stack limits. These are optional world controls, rather than supplies granted by the item catalogue.
+
+The multiplayer terminal prints a separate **owner key**. Enter it under **World owner access** when joining to enable world controls and `/kick`, `/ban`, `/unban`, `/bans` and `/announce`. The first connected player is a simulation anchor; owner powers require this key. Guest invites and saved client preferences exclude it. Set `SIRENS_OWNER_TOKEN` to keep the owner key across restarts. Identity bans survive host restarts; they are not account or IP bans. See [hosting, voice setup and the complete command reference](docs/MULTIPLAYER.md).
 
 ## AI play and its local neural controller
 
@@ -213,7 +223,9 @@ Then open `http://localhost:8000`. CI runs the build, simulation checks, save va
 | `src/ui.js`, `src/ui.css` | Menus, inventory, dialogue and HUD |
 | `src/neural.js`, `src/autoplay.js` | Local learned steering and constrained AI play |
 | `src/multiplayer.js`, `src/lobbies.js`, `src/network-ui.js` | Shared-world client, public listings and private invites |
+| `src/commands.js`, `src/social.js` | Singleplayer console, bounded chat and proximity WebRTC audio |
 | `server/index.cjs`, `server/directory.cjs` | Local authoritative world host and optional public directory |
+| `server/social.cjs` | Owner authorization, moderation, world commands and nearby voice signaling |
 | `src/main.js` | Input, fixed-step loop, presentation integration and browser storage |
 
 Each module registers once under `window.Sirens`. [Architecture](ARCHITECTURE.md), [validation](VALIDATION.md), [release notes](CHANGELOG.md), and [contribution instructions](CONTRIBUTING.md) describe the implementation and its limits.

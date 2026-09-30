@@ -6,8 +6,8 @@
   "license": "MIT",
   "scripts": {
     "build": "python3 build.py",
-    "test": "node tests/engine.cjs && node tests/survival.cjs && node tests/open-world.cjs && node tests/world-integrity.cjs && node tests/expansion.cjs && node tests/destruction.cjs && node tests/effects.cjs && node tests/progression.cjs && node tests/settlement.cjs && node tests/living-world.cjs && node tests/autoplay.cjs && node tests/multiplayer.cjs && python3 tests/build.py",
-    "test:browser": "node tests/browser.cjs && node tests/expansion-browser.cjs && node tests/destruction-browser.cjs && node tests/effects-browser.cjs && node tests/progression-browser.cjs && node tests/community-browser.cjs && node tests/multiplayer-browser.cjs && node tests/autoplay-browser.cjs && node tests/lobbies-browser.cjs",
+    "test": "node tests/engine.cjs && node tests/survival.cjs && node tests/open-world.cjs && node tests/world-integrity.cjs && node tests/expansion.cjs && node tests/destruction.cjs && node tests/effects.cjs && node tests/progression.cjs && node tests/settlement.cjs && node tests/living-world.cjs && node tests/autoplay.cjs && node tests/commands.cjs && node tests/social.cjs && node tests/multiplayer.cjs && python3 tests/build.py",
+    "test:browser": "node tests/browser.cjs && node tests/expansion-browser.cjs && node tests/destruction-browser.cjs && node tests/effects-browser.cjs && node tests/progression-browser.cjs && node tests/community-browser.cjs && node tests/multiplayer-browser.cjs && node tests/autoplay-browser.cjs && node tests/lobbies-browser.cjs && node tests/social-browser.cjs",
     "host": "node server/index.cjs",
     "directory": "node server/directory.cjs"
   },
