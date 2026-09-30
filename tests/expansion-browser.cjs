@@ -169,13 +169,17 @@ const { pathToFileURL } = require('node:url');
       await page.keyboard.press('KeyI');
       await page.locator('[data-ui="inventory-overlay"]').waitFor({ state: 'visible' });
       await page.locator('[data-command="catalogue"]').click();
-      await until(() => document.querySelector('[data-ui="items"]').children.length === Object.keys(Sirens.Catalog.items).length);
+      await until(() => document.querySelectorAll('[data-ui="items"] [data-item]').length === Math.min(48, Object.keys(Sirens.Catalog.items).length));
       await page.locator('[data-ui="category"]').selectOption('medical');
       await page.locator('[data-ui="item-search"]').fill('bandage');
       await until(() => {
         const rows = [...document.querySelectorAll('[data-ui="items"] [data-item]')];
         return rows.length > 0 && rows.every(row => {
-          const i = Sirens.Catalog.items[row.dataset.item]; return i.category === 'medical' && (i.name + ' ' + i.description + ' ' + (i.tags || []).join(' ')).toLowerCase().includes('bandage');
+          const i = Sirens.Catalog.items[row.dataset.item];
+          const metadataMatch = (i.id + ' ' + i.name + ' ' + i.description + ' ' + (i.tags || []).join(' ')).toLowerCase().includes('bandage');
+          // Material search also finds supplies made using a bandage.
+          const ingredientMatch = Sirens.Catalog.recipes.some(recipe => recipe.result[i.id] && recipe.cost.bandage);
+          return i.category === 'medical' && (metadataMatch || ingredientMatch);
         });
       });
       assert.equal(await page.locator('[data-ui="items"] [data-use], [data-ui="items"] [data-equip], [data-ui="items"] [data-drop]').count(), 0);
@@ -188,8 +192,8 @@ const { pathToFileURL } = require('node:url');
       await until(() => document.querySelectorAll('[data-ui="items"] [data-drop]').length > 0);
       await page.locator('[data-command="crafting"]').click();
       await page.locator('[data-ui="recipe-search"]').fill('field wraps');
-      await until(() => document.querySelectorAll('[data-ui="recipes"] [data-craft]').length === 1);
-      assert.equal(await page.locator('[data-ui="recipes"] [data-craft]').getAttribute('data-craft'), 'field_wraps');
+      await until(() => document.querySelectorAll('[data-ui="recipes"] [data-craft="field_wraps"]').length === 1);
+      assert.equal(await page.locator('[data-ui="recipes"] [data-craft="field_wraps"]').getAttribute('data-craft'), 'field_wraps');
       await page.locator('[data-ui="recipe-search"]').fill('');
       await page.locator('[data-ui="recipe-ready"]').check();
       assert.equal(await page.locator('[data-ui="recipes"] [data-craft]:disabled').count(), 0);

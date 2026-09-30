@@ -16,7 +16,7 @@
     const id = typeof weapon === 'string' ? weapon : weapon && weapon.id || '';
     const item = typeof weapon === 'string' ? Sirens.Catalog && Sirens.Catalog.items[id] : weapon;
     const stats = item && item.weapon || item;
-    return { id, stats };
+    return { id, stats, item };
   }
   function surface(s, tx, ty) {
     const x = clamp(s.player.x, tx * TILE, (tx + 1) * TILE), y = clamp(s.player.y, ty * TILE, (ty + 1) * TILE);
@@ -79,6 +79,8 @@
     else if (tile === 5 && resolved.id === 'machete') damage *= 1.3;
     if (tile === 3 && ['sledgehammer', 'pickaxe'].includes(resolved.id)) damage *= 3;
     if (tile === 6 && ['hatchet', 'fire_axe', 'crowbar'].includes(resolved.id)) damage *= 1.25;
+    const work = resolved.item && resolved.item[tile === 5 ? 'treeDamage' : tile === 3 ? 'wallDamage' : tile === 6 ? 'doorDamage' : ''];
+    if (Number.isFinite(work) && work > 0) damage *= clamp(work, .25, 4);
     if (tile === 6) {
       const before = Number.isFinite(s._doorHealth[index]) ? s._doorHealth[index] : 65;
       s._doorHealth[index] = Math.max(-20, before - damage);

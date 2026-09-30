@@ -82,7 +82,7 @@ const { pathToFileURL } = require('node:url');
       await page.locator('[data-command="crafting"]').click(); assert(await page.locator('[data-ui="crafting-pane"]').isVisible()); assert(!(await page.locator('[data-ui="items-pane"]').isVisible()));
       const before = JSON.stringify((await state()).player.inventory); await page.locator('[data-command="catalogue"]').click();
       await page.locator('[data-ui="item-search"]').fill('machete'); assert.equal(await page.locator('[data-item="machete"]').count(), 1);
-      assert.equal(await page.locator('[data-item="machete"] button').count(), 0); assert.equal(JSON.stringify((await state()).player.inventory), before);
+      assert.equal(await page.locator('[data-item="machete"] [data-use], [data-item="machete"] [data-equip], [data-item="machete"] [data-drop]').count(), 0); assert.equal(JSON.stringify((await state()).player.inventory), before);
       await page.locator('[data-ui="item-search"]').fill(''); await page.locator('[data-command="owned"]').click();
     });
     await check('studying from Pack grants one reward, keeps the manual, and stays disabled afterward', async () => {

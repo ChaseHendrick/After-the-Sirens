@@ -28,6 +28,11 @@
   function gain(s, amount) { if (S.Progression) S.Progression.gain(s, 'craft', amount); }
   function increment(base, stat, amount) { base.stats[stat] = Math.min(1000000, base.stats[stat] + amount); }
   function metadata(id) { return S.Catalog && Object.hasOwn(S.Catalog.items, id) ? S.Catalog.items[id] : null; }
+  function miningPower(id) {
+    if (damage[id]) return damage[id];
+    const item = metadata(id), power = item && item.miningDamage;
+    return Number.isFinite(power) && power > 0 ? Math.round(clamp(power, 1, 72)) : 0;
+  }
   function weight(inv) { return S.Engine.inventoryWeight(inv); }
   function fits(inv, result, capacity) {
     const next = Object.assign({}, inv);
@@ -80,7 +85,7 @@
     s.containers.push(added); return added;
   }
   function mine(s, node, tool, target) {
-    const base = ensure(s), hit = damage[tool]; if (!hit || !metadata(tool)) return false;
+    const base = ensure(s), hit = miningPower(tool); if (!hit || !metadata(tool)) return false;
     if (!Object.hasOwn(base.nodes, node.id) && Object.keys(base.nodes).length >= limits.nodes) { write(s, 'The mining record is full. Explore other supplies instead.'); return false; }
     const remaining = Object.hasOwn(base.nodes, node.id) ? base.nodes[node.id] : deposits[node.type].health;
     if (remaining <= 0) return false;
@@ -98,7 +103,7 @@
     gain(s, 5); write(s, 'Mined ' + deposits[node.type].amount + ' ' + metadata(deposits[node.type].item).name.toLowerCase() + (target === base.stock ? ' into the base stockpile.' : ' from a surface deposit.')); return true;
   }
   function strike(s, aimX, aimY, weaponId) {
-    if (!s || s.ended || !onGround(s) || s.player.vehicleId || !damage[weaponId] || !(s.player.inventory[weaponId] > 0) || ![aimX, aimY].every(Number.isFinite)) return false;
+    if (!s || s.ended || !onGround(s) || s.player.vehicleId || !miningPower(weaponId) || !(s.player.inventory[weaponId] > 0) || ![aimX, aimY].every(Number.isFinite)) return false;
     const item = metadata(weaponId), range = item && item.weapon && item.weapon.range || 60;
     const dx = aimX - s.player.x, dy = aimY - s.player.y, len = Math.hypot(dx, dy); if (len < .001) return false;
     const tx = Math.floor(s.player.x / T), ty = Math.floor(s.player.y / T);
@@ -184,7 +189,7 @@
         if (!Object.hasOwn(base.jobs, match[1]) && Object.keys(base.jobs).length >= limits.records) missing.push('The companion work record is full');
         if (!Object.hasOwn(base.moods, match[1]) && Object.keys(base.moods).length >= limits.records) missing.push('The companion morale record is full');
         if (q.role !== 'follow' && !base.home) missing.push('Claim a base first');
-        if (q.role === 'gather' && !(base.stock.stone_pick > 0 || base.stock.iron_pick > 0)) missing.push('Store a mining pick at your base');
+        if (q.role === 'gather' && !stockTool(base)) missing.push('Store a mining pick at your base');
       }
     } else missing.push('Unknown base action');
     for (const [id, n] of Object.entries(cost)) if (!metadata(id) || (inv[id] || 0) < n) missing.push('Need ' + n + ' ' + (metadata(id) ? metadata(id).name.toLowerCase() : id));
@@ -212,7 +217,10 @@
   function interact(s) { const near = nearestPlot(s); if (!near || s.ended || s.player.vehicleId) return false; return action(s, near.plot.progress >= limits.growthTime ? 'harvest' : 'water'); }
   function activeCompanion(s, h) { return h && h.health > 0 && h.faction === 'survivor' && h.following && onGround(s); }
   function combatMultiplier(s, h) { return activeCompanion(s, h) ? .7 + .5 * (Object.hasOwn(ensure(s).moods, h.id) ? ensure(s).moods[h.id] : 60) / 100 : 1; }
-  function stockTool(base) { return base.stock.iron_pick > 0 ? 'iron_pick' : base.stock.stone_pick > 0 ? 'stone_pick' : null; }
+  function stockTool(base) {
+    return Object.keys(base.stock).filter(id => base.stock[id] > 0 && (id === 'iron_pick' || id === 'stone_pick' || metadata(id) && metadata(id).miningDamage > 0))
+      .sort((a, b) => miningPower(b) - miningPower(a) || a.localeCompare(b))[0] || null;
+  }
   function destination(s, h) {
     const base = ensure(s), job = base.jobs[h.id]; if (!activeCompanion(s, h) || !job || job.role === 'follow' || !base.home) return null;
     const home = localPoint(s, base.home); if (!inScene(s, home)) return null;
