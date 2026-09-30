@@ -6,3 +6,7 @@ __pycache__/
 .DS_Store
 releases/*.zip
 server-data/
+*.key
+*.pem
+*.p12
+*.pfx

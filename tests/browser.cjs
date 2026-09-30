@@ -68,6 +68,22 @@ const fs=require('node:fs');
       await page.locator('[data-command="continue"]').click();await page.waitForTimeout(180);
       const after=await state();assert.equal(after.player.x,before.player.x);assert.equal(after.player.y,before.player.y);assert.deepEqual(after.player.inventory,before.player.inventory);assert.deepEqual(after.structures,before.structures);
     });
+    await check('singleplayer automatically backs up a running world without a Save click',async()=>{
+      const savedBefore=await page.evaluate(()=>JSON.parse(localStorage.getItem('after-the-sirens-save-v1')).state.elapsed);
+      await page.waitForFunction(before=>JSON.parse(localStorage.getItem('after-the-sirens-save-v1')).state.elapsed>before+2,savedBefore,{timeout:15000});
+      const backup=await page.evaluate(()=>localStorage.getItem('after-the-sirens-save-v1'));
+      assert(JSON.parse(backup).state.elapsed>savedBefore+2);
+    });
+    await check('page exit preserves a just-issued singleplayer item command before the next periodic backup',async()=>{
+      await page.keyboard.press('KeyT');
+      await page.locator('[data-social="text"]').fill('/give me ammo 2');await page.keyboard.press('Enter');
+      await page.waitForFunction(()=>document.querySelector('[data-social="history"]').textContent.includes('Added 2'));
+      const expected=(await state()).player.inventory.ammo;
+      assert((await page.evaluate(()=>JSON.parse(localStorage.getItem('after-the-sirens-save-v1')).state.player.inventory.ammo))<expected,'fixture reached periodic save before unload');
+      await page.reload();await page.locator('[data-command="continue"]').click();
+      await page.waitForFunction(()=>Sirens.App.getScreen()==='playing');
+      assert.equal((await state()).player.inventory.ammo,expected);
+    });
     await check('export produces a valid portable save and invalid import is caught',async()=>{
       await page.keyboard.press('Escape');
       const downloadEvent=page.waitForEvent('download');await page.locator('[data-command="exportSave"]').click();

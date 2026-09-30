@@ -4,7 +4,7 @@ Validated September 30, 2026 for version 0.4. This is an original early playable
 
 ## Production simulation and saves
 
-**165 grouped Node checks** passed, plus the Python module/build reproducibility guard. The suites use production updates, actions and validated save APIs. Controlled fixtures are labeled separately from natural generated-world play.
+**194 grouped Node checks** passed, plus the Python module/build reproducibility guard. The suites use production updates, actions and validated save APIs. Controlled fixtures are labeled separately from natural generated-world play.
 
 Coverage includes reachable towns across 20 seeds, three standard-difficulty automated rescue playthroughs, four normal sector crossings, deterministic full worlds and RNG continuation, all 219 items and 65 recipes, exact consumption/crafting/building costs, terrain destruction, windows, drivable cars, floor persistence and malformed-save rejection. The three automated rescue runs finish at approximately 195 simulation seconds with 33, 35 and 37 zombie kills and full health in this run. These are ideal automated controls, not human difficulty measurements.
 
@@ -20,15 +20,25 @@ Seven real browser groups run a fresh seed-zero world without injected gameplay 
 
 ## Browser integration
 
-**92 grouped integrated browser checks** passed in installed headless Chrome 154.0.8037.59. Singleplayer opens the actual assembled offline file; multiplayer suites run temporary real HTTP/WebSocket hosts. Tests include normal generated play and explicitly labeled fixtures.
+**104 grouped integrated browser checks** passed in installed headless Chrome 154.0.8037.59. Singleplayer opens the actual assembled offline file; multiplayer suites run temporary real HTTP/WebSocket hosts. Tests include normal generated play and explicitly labeled fixtures.
 
-The four original suites contribute 38 groups: real keyboard/pointer movement, loot, crafting, builds, quick-action focus, save/export/import, screens and finite input stress; driving/refueling, survivor dialogue/recruitment, upper floors and catalogue filters; door/tree/wall/glass destruction; and actual pixel differences, weapon poses and nonzero Web Audio waveforms. Mute produces silence, pause stops ambience, and sound queues/voices remain bounded. Audio quality across hardware has not been reviewed.
+The four original suites contribute 40 groups: real keyboard/pointer movement, loot, crafting, builds, quick-action focus, save/export/import, screens and finite input stress; driving/refueling, survivor dialogue/recruitment, upper floors and catalogue filters; door/tree/wall/glass destruction; and actual pixel differences, weapon poses and nonzero Web Audio waveforms. Two added persistence checks verify automatic backups and page-exit preservation of a just-issued command before the next periodic backup. Mute produces silence, pause stops ambience, and sound queues/voices remain bounded. Audio quality across hardware has not been reviewed.
 
 Seventeen progression groups exercise real insight/project costs, separate Pack panes, manuals, requests/trust, sleep, repairs, rain collection, escaped journal text, pointer/keyboard map markers, save restoration, settings, zoom-correct aiming and layouts at narrow/short sizes. Eleven community groups cover home, planting/watering, one-item stock transfers, job requirement messages and visible assigned work, changed appearance pixels, pet care, alliances/support, horde HUD, durable state and keyboard dialogs. A labeled maximum-crowd fixture starts with 360 zombies and 128 humans; after 2.2 seconds of combat it retains 334 zombies and 128 humans with finite rendering. Its local result is approximately 60 FPS and 16.7 ms p95, not a cross-device benchmark.
 
 Ten multiplayer browser groups use two independent Chrome contexts and actual controls, with no gameplay-state injection: denial of a wrong key, separate peer names, simultaneous looting without duplication, server movement reaching a peer, moving world time behind menus, floor restrictions, rejection of a replayed real Drop command, opaque identity rejoin, disk save/host restart and HTTPS rejection of insecure ws addresses. Nine lobby groups browse and join a real public host without a key, display live player counts and 20-player capacity, exclude private listings, import actual private invites, remove secret-bearing URL fragments, omit keys from preferences and recover from malformed invites or unavailable directories at 390 pixels. The remaining seven groups are the AI checks above.
 
 Reports record no uncaught page or host errors. Solo suites record no HTTP asset requests; multiplayer and public browsing intentionally contact their local hosts. Screenshot captures use actual movement/looting/driving or clearly labeled fixtures. The main README screenshot is a normal generated run.
+
+## Chat, proximity voice and owner commands
+
+Eight Node groups exercise singleplayer command help, item lookup, global location, time/weather/difficulty round trips, exact item additions and capacity rejection, healing, collision-safe teleport bounds, local save callbacks, malformed input and the multiplayer authority guard. Twenty-one real WebSocket server groups exercise separately authenticated owner roles, host-issued chat identity, escaped literal content, spam and replay rejection, owner-only world commands, nearby routing, bilateral voice consent, bounded offer/answer/ICE payloads, kick/ban/unban, durable hashed bans and legacy save migration. Native HTTPS/WSS is tested with a temporary self-signed certificate and an explicit test-client trust exception; production certificate validation is not disabled.
+
+Input-rate regression checks queue 100 ordinary input packets and prove that only their newest controls affect one fixed 50 ms simulation step. A 250-packet flood is denied without affecting another survivor; refill and action limits are separately exercised. This fixes a legitimate disconnect caused by the previous shared arrival-rate bucket under event-loop backlog. Browser input also avoids adding movement packets to an already congested socket.
+
+Ten integrated browser groups use two independent real Chrome clients. They verify text-only markup, owner/guest permissions, typing without movement or attack, 390-pixel layout, no microphone request on join, native WebRTC negotiation, actual received RTP and a nonzero received audio waveform, hold-N transmission/release, microphone mute, deafen, blur stop, distance fading, removal beyond 640 pixels and reconnection on return. Leaving and delayed permission cancellation stop native microphone tracks and close audio/peer resources. The audio fixture is a generated 440 Hz WAV through Chromium's fake capture device; no physical microphone or user audio was recorded. In one recorded sample, received packets increased from 2 to 82 and received RMS from approximately 0.000014 to 0.016 while transmitting.
+
+Voice is direct and validated on loopback, not across arbitrary public-internet routers. LAN guests need a browser-trusted secure origin for the microphone. There is no configured external STUN/TURN relay. Bans protect saved survivor identities, not accounts or IP addresses. World chat history is bounded and session-local.
 
 ## Twenty-player host and public directory
 
