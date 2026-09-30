@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Expand the original catalogue to 3,455 items and 4,457 crafting and salvage recipes across 38 families. Add ingredient preparations, metal/timber/textile processing, material weapons and field tools, protective garments, carrying designs and ranged assemblies. Retain existing IDs and saved runs.
+- Give extension loot a bounded share of location-specific tables. Connect new tools to existing crafting and project prerequisites, mining, companion gathering and terrain destruction; retain kept tools after payment.
+- Page the catalogue and pack at 48 rows and crafting at 24. Add family/tier filters, exact-ID and material searches, acquiring instructions and recipe navigation, with cached indexes and stable idle rendering.
+- Add an original adaptive four-theme music score and independent music, effects and ambience switches/sliders, alongside master sound/volume. Persist settings and stop continuous audio immediately on menus, pause, hiding and leaving the game.
+- Add real generated-world item sampling, transaction/equipment regression checks, desktop/mobile catalogue testing, independent Web Audio waveform checks and a keyboard/mouse playthrough before publication.
+
 ## 0.4.0
 
 - Add World and Nearby text chat, an input-safe command console in singleplayer and multiplayer, and separate owner-key authorization for moderation and world controls. Persist survivor identity bans on the host.

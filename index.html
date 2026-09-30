@@ -248,6 +248,40 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   .as-journal-tabs{margin:12px 0 15px}
   .as-item-list,.as-recipe-list[data-ui="recipes"]{max-height:230px}
 }
+
+/* Bounded reference pages keep the expanding catalogue usable on small screens. */
+.as-reference-filters{display:grid;grid-template-columns:minmax(0,1fr) 160px auto;gap:8px;align-items:center;margin:10px 0}
+.as-reference-filters select{width:100%;min-width:0;height:36px;padding:6px 9px;font-size:11px}
+.as-ui .as-reference-filters button{min-height:36px;padding:7px 12px;font-size:11px;background:transparent;color:#c5d2b8}
+.as-pagination{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;gap:7px;align-items:center;margin-top:13px;border-top:1px solid var(--as-border);padding-top:12px}
+.as-ui .as-pagination button{min-height:34px;padding:7px 11px;font-size:10px}
+.as-pagination>span{text-align:center;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.6;color:#c8d4b8}
+.as-item-lineage{display:block;margin-top:5px;color:#adc5b7;font-size:10px;line-height:1.6}
+.as-item-origin{margin-top:8px;border-left:2px solid #bbcea230;padding-left:9px;color:#c0cdb4}
+.as-item-origin summary{font-size:10px;line-height:1.7;color:#d9c58b;cursor:pointer}
+.as-item-origin p{overflow-wrap:anywhere;margin-top:7px;font-size:10px;color:#c0cdb4}
+.as-item-make-path{margin-top:8px;padding-top:5px;border-top:1px solid #bbcea218}
+.as-ui .as-item-origin button{margin-top:6px;padding:6px 9px;font-size:10px;min-height:30px}
+.as-audio-channels{margin-top:19px;padding-top:17px;border-top:1px solid var(--as-border)}
+.as-audio-channel{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,.9fr);align-items:center;gap:15px;padding:9px 0}
+.as-audio-switch{display:flex;gap:9px;align-items:flex-start;color:#d4dfc7;font-size:12px;cursor:pointer}
+.as-audio-switch>input{margin-top:2px;flex-shrink:0}
+.as-audio-switch small{display:block;font-size:10px;color:#a7bb9a;margin-top:3px;line-height:1.6}
+.as-audio-level{display:grid;grid-template-columns:1fr auto;gap:5px 10px;font-size:10px;color:#bcccac}
+.as-audio-level output{color:#e2cc90;font:11px ui-monospace,SFMono-Regular,Consolas,monospace}
+.as-audio-level>input{grid-column:1/-1;min-width:0;width:100%;accent-color:var(--as-gold);cursor:pointer}
+@media(max-width:650px){
+  .as-reference-filters{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+  .as-reference-filters>select:first-child{grid-column:1/-1}
+  .as-reference-filters select,.as-ui .as-reference-filters button{font-size:10px}
+  .as-pagination{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  .as-pagination>span{grid-column:1/-1;grid-row:1;text-align:left;font-size:9px}
+  .as-ui .as-pagination button{font-size:9px;padding:7px 5px;min-height:35px}
+  .as-item-lineage,.as-item-origin summary{font-size:9px}
+  .as-audio-channel{grid-template-columns:1fr;gap:10px;padding:11px 0}
+  .as-audio-switch{font-size:11px}
+  .as-audio-level{padding-left:24px}
+}
 @media(prefers-reduced-motion:reduce){.as-ui *{scroll-behavior:auto!important}}
 
 .as-atlas-heading{font-size:14px!important;margin:20px 0 9px!important;color:#e1d198}
@@ -410,8 +444,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   const colors = Object.freeze({ materials: '#bc9c74', food: '#cbb36c', drinks: '#87b5c2', medical: '#d6a39c', tools: '#abb5a6', melee: '#bac59b', firearms: '#a0a7a0', ammo: '#d0b875', clothing: '#a5b4ab', containers: '#a8b889', electronics: '#9abbc2', books: '#c8b29f', utility: '#c3b88d' });
   function add(id, name, category, weight, description, extra) {
     if (items[id]) throw new Error('Duplicate catalogue item: ' + id);
-    const metadata = Object.assign({ id, name, category, weight, color: colors[category], description, tags: [category] }, extra || {});
+    const metadata = Object.assign({ id, name, category, weight, color: colors[category], description, tags: [category], family: category, tier: 0, rarity: 'common', sources: [] }, extra || {});
     metadata.tags = Object.freeze(metadata.tags.slice());
+    metadata.sources = Object.freeze(metadata.sources.slice());
+    if (metadata.toolTags) metadata.toolTags = Object.freeze(metadata.toolTags.slice());
     if (metadata.effect) metadata.effect = Object.freeze(Object.assign({}, metadata.effect));
     if (metadata.weapon) metadata.weapon = Object.freeze(Object.assign({}, metadata.weapon));
     items[id] = Object.freeze(metadata);
@@ -803,6 +839,330 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   loot.ranger = loot.camp;
   loot.depot = loot.warehouse;
   loot.fuel = entries([ ['fuel', 1, 4, 18], ['car_battery', 1, 1, 4], ['wrench', 1, 1, 5], ['repair_kit', 1, 1, 5], ['water', 1, 3, 9], ['food', 1, 2, 6], ['rubber', 1, 3, 7], ['tire_iron', 1, 1, 4] ]);
+
+  // Families are authored around actual survival roles. Material, preparation and
+  // design choices change useful statistics and have a connected ingredient graph.
+  // Advanced results are crafted; the additional scavenging pool is kept small.
+  const extensionLoot = Object.create(null);
+  const rounded = (n) => Math.round(n * 100) / 100;
+  const tierOf = (n) => Math.max(0, Math.min(5, Math.floor(n)));
+  const rarityOf = (tier) => tier < 2 ? 'common' : tier < 3 ? 'uncommon' : tier < 5 ? 'rare' : 'epic';
+  const title = (id) => id.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+  function stock(id, name, category, weight, description, family, tier, extra) {
+    add(id, name, category, rounded(weight), description, Object.assign({ family, tier: tierOf(tier), rarity: rarityOf(tier), tags: [category, family] }, extra || {}));
+  }
+  function queueLoot(id, tables, priority, min, max) {
+    tables.forEach((table) => {
+      if (!loot[table]) throw new Error('Unknown extension loot table: ' + table);
+      if (!extensionLoot[table]) extensionLoot[table] = [];
+      extensionLoot[table].push({ id, min: min || 1, max: max || 1, priority: priority || 1 });
+    });
+  }
+  function prepared(id, name, category, weight, effect, family, tier, cost, tools, station, description) {
+    stock(id, name, category, weight, description, family, tier, { effect, consume: true, tags: [category, family, 'consumable'] });
+    recipe('prepare_' + id, name, cost, { [id]: 1 }, description, tools || [], station);
+  }
+
+  const ingredients = [];
+  const ingredientSets = [
+    { family: 'Orchard and berry food', type: 'fruit', ids: 'apricot peach plum cherry nectarine quince persimmon pomegranate fig date mango papaya pineapple guava passionfruit lychee kiwi grapefruit lemon lime tangerine blackberry blueberry raspberry strawberry cranberry mulberry gooseberry currant elderberry', sources: ['farm', 'grocery', 'restaurant', 'house'], hunger: 10, thirst: 7, weight: .17 },
+    { family: 'Garden food', type: 'vegetable', ids: 'onion garlic leek shallot cabbage kale spinach chard lettuce broccoli cauliflower brussels_sprout turnip parsnip rutabaga beet radish celeriac cucumber zucchini pumpkin squash eggplant bell_pepper sweet_potato green_peas', sources: ['farm', 'grocery', 'restaurant', 'suburban'], hunger: 9, thirst: 6, weight: .23 },
+    { family: 'Grain and pulse food', type: 'grain', ids: 'barley rye millet buckwheat spelt sorghum cornmeal quinoa amaranth bulgur lentil chickpea split_pea mung_bean polenta semolina', sources: ['farm', 'grocery', 'restaurant', 'warehouse'], hunger: 13, thirst: -5, weight: .26 },
+    { family: 'Protein supplies', type: 'protein', ids: 'smoked_ham cured_sausage dried_salami tinned_chicken tinned_turkey tinned_duck tinned_tuna tinned_salmon tinned_sardine tinned_mackerel tinned_clam tinned_mussel tinned_crab tinned_shrimp dried_cod dried_anchovy dried_herring cured_beef cured_lamb smoked_venison smoked_rabbit smoked_pork hard_cheese dried_egg', sources: ['grocery', 'restaurant', 'house', 'camp'], hunger: 20, thirst: -4, weight: .2 }
+  ];
+  const preparations = {
+    fruit: [
+      ['salad', 'Salad', 1.35, 14, 3, .36, false, 'Fresh fruit preserves hydration while adding a modest meal.'],
+      ['compote', 'Camp Compote', 1.8, 18, 5, .44, true, 'A campfire fruit meal with more hunger recovery and useful water.'],
+      ['dried_slices', 'Dried Slices', 1.45, -4, 8, .12, true, 'A light travel snack that trades water for energy density.'],
+      ['fruit_leather', 'Fruit Leather', 1.65, -2, 10, .14, true, 'A compact cooked fruit strip with a strong stamina return.'],
+      ['preserve', 'Pantry Preserve', 1.7, 3, 11, .28, true, 'A sweet pantry meal that restores hunger and sprint energy.'],
+      ['grain_bowl', 'Grain Bowl', 2.55, 8, 7, .5, true, 'Fruit and dry grain make a substantial camp meal.'],
+      ['trail_mix', 'Trail Mix', 2.2, -3, 13, .23, false, 'A dense fruit-and-nut supply for long expeditions.']
+    ],
+    vegetable: [
+      ['camp_soup', 'Camp Soup', 2.5, 26, 5, .58, true, 'A water-rich cooked meal for recovering hunger and thirst together.'],
+      ['roast', 'Camp Roast', 2.1, 4, 7, .31, true, 'A simple cooked vegetable meal with useful stamina recovery.'],
+      ['pickle', 'Salted Pickle', 1.6, 7, 3, .24, false, 'A small prepared snack with moderate hydration.'],
+      ['crisp', 'Vegetable Crisp', 1.55, -4, 10, .13, true, 'A light cooked snack with less water and more travel energy.'],
+      ['porridge', 'Savory Porridge', 3.1, 17, 8, .54, true, 'Vegetables and oats make a filling, hydrating camp meal.'],
+      ['flatbread', 'Garden Flatbread', 2.9, -1, 10, .32, true, 'A substantial meal that is easier to carry than soup.'],
+      ['supper_packet', 'Supper Packet', 3.45, 4, 11, .42, false, 'A prepared vegetable, grain and protein ration for travel.']
+    ],
+    grain: [
+      ['flatbread', 'Camp Flatbread', 2.2, -2, 6, .31, true, 'A straightforward cooked grain meal.'],
+      ['porridge', 'Camp Porridge', 2.7, 22, 7, .56, true, 'A filling water-rich breakfast cooked beside a campfire.'],
+      ['crackers', 'Field Crackers', 1.65, -6, 8, .15, true, 'Light dry food with a clear carrying advantage.'],
+      ['honey_cluster', 'Honey Cluster', 1.9, -2, 14, .2, false, 'A grain-and-honey ration with a strong stamina effect.'],
+      ['bean_bowl', 'Bean Bowl', 3.4, 10, 9, .61, true, 'A substantial grain-and-bean meal for a long recovery stop.'],
+      ['broth_dumplings', 'Broth Dumplings', 2.8, 24, 7, .59, true, 'Cooked grain in broth restores both hunger and thirst.'],
+      ['travel_biscuit', 'Travel Biscuit', 2.5, -4, 12, .22, true, 'A compact grain ration made with nuts and a little sugar.']
+    ],
+    protein: [
+      ['stew', 'Camp Stew', 1.9, 15, 7, .62, true, 'Protein and vegetables make a substantial hydrating camp meal.'],
+      ['skillet', 'Skillet Meal', 1.65, 1, 9, .41, true, 'A compact cooked meal with more energy than water.'],
+      ['jerky', 'Trail Jerky', 1.35, -8, 10, .13, true, 'Very light travel protein; carry water alongside it.'],
+      ['smoked_ration', 'Smoked Ration', 1.55, -5, 12, .2, true, 'A dense cooked protein ration for a long expedition.'],
+      ['sandwich', 'Field Sandwich', 2.1, 1, 8, .36, false, 'Protein and bread make a meal without a cooking stop.'],
+      ['broth_bowl', 'Broth Bowl', 1.55, 29, 5, .64, true, 'A lighter water-rich recovery meal.'],
+      ['meal_packet', 'Travel Meal Packet', 2.35, -2, 13, .39, false, 'A grain-and-protein ration with strong hunger and stamina recovery.']
+    ]
+  };
+  ingredientSets.forEach((set) => set.ids.split(' ').forEach((id, index) => {
+    const name = title(id), hunger = set.hunger + index % 7, thirst = set.thirst + index % 5;
+    const ingredient = { id, name, type: set.type, hunger, thirst, index };
+    ingredients.push(ingredient);
+    stock(id, name, 'food', set.weight + (index % 5 - 2) * .015, 'Scavenge this food from ' + set.sources.map(title).join(', ') + '. Eat it directly or use it in seven distinct meal preparations.', set.family, 0, { effect: { hunger, thirst, stamina: 1 + index % 4 }, consume: true, tags: ['food', 'ingredient', set.type] });
+    queueLoot(id, set.sources, 1.4, 1, 3);
+    preparations[set.type].forEach((form, formIndex) => {
+      const output = id + '_' + form[0], cost = { [id]: 2 }, tools = form[6] ? ['cooking_pot'] : [];
+      if (form[6]) { cost.wood = 1; cost.water = 1; }
+      if (['preserve', 'honey_cluster', 'fruit_leather'].includes(form[0])) cost.honey = 1;
+      if (['grain_bowl', 'flatbread', 'meal_packet', 'supper_packet'].includes(form[0])) cost.rice = 1;
+      if (['trail_mix', 'travel_biscuit'].includes(form[0])) cost.nuts = 1;
+      if (form[0] === 'pickle' || form[0] === 'jerky') cost.salt = 1;
+      if (form[0] === 'porridge' && set.type === 'vegetable') cost.oats = 1;
+      if (form[0] === 'bean_bowl') cost.canned_beans = 1;
+      if (form[0] === 'broth_dumplings' || form[0] === 'broth_bowl') cost.broth = 1;
+      if (form[0] === 'sandwich') cost.bread = 1;
+      if (form[0] === 'supper_packet') cost.canned_fish = 1;
+      prepared(output, name + ' ' + form[1], 'food', form[5] + index % 4 * .01, { hunger: Math.min(58, Math.round(hunger * form[2])), thirst: form[3] + index % 3, stamina: form[4] + index % 4 }, 'Prepared ' + set.type + ' meals', formIndex > 4 ? 2 : 1, cost, tools, form[6] ? 'campfire' : undefined, form[7]);
+    });
+  }));
+
+  const herbIds = 'meadow_mint lemon_balm marsh_mallow plantain_leaf chamomile hibiscus rosehip juniper_tip elderflower raspberry_leaf nettle_leaf rosemary thyme sage lavender fennel_seed anise_seed coriander_seed cumin_seed ginger_piece turmeric_piece cinnamon_bark clove_bud licorice_root'.split(' ');
+  herbIds.forEach((id, index) => {
+    stock(id, title(id), 'utility', .04 + index % 5 * .008, 'An ingredient for four drinks and six dressing preparations. Recovery effects use the abstract game meters.', 'Herbs and spices', index > 15 ? 1 : 0, { tags: ['utility', 'ingredient', 'herb'] });
+    queueLoot(id, index < 15 ? ['forest', 'river', 'farm', 'cabin', 'camp'] : ['grocery', 'restaurant', 'pharmacy', 'house'], 1, 1, 3);
+  });
+  const beverageBases = ingredients.filter((entry) => entry.type === 'fruit' || entry.type === 'vegetable').concat(herbIds.map((id, index) => ({ id, name: title(id), type: 'herb', index })));
+  beverageBases.forEach((base) => {
+    const forms = base.type === 'fruit' ? [ ['juice', 'Pressed Juice', 35, 6, 3, false], ['infusion', 'Fruit Infusion', 31, 2, 8, true], ['recovery_drink', 'Recovery Drink', 51, 4, 15, false], ['cordial', 'Camp Cordial', 27, 9, 18, true] ] : base.type === 'vegetable' ? [ ['pressed_drink', 'Garden Drink', 32, 8, 4, false], ['broth', 'Garden Broth', 41, 11, 7, true], ['salted_broth', 'Travel Broth', 48, 8, 13, true], ['oat_drink', 'Savory Oat Drink', 28, 20, 10, true] ] : [ ['infusion', 'Herbal Infusion', 29, 0, 8, true], ['cold_brew', 'Cold Brew', 34, 0, 5, false], ['honey_brew', 'Honey Brew', 26, 8, 18, true], ['recovery_drink', 'Herbal Recovery Drink', 49, 2, 14, false] ];
+    forms.forEach((form, formIndex) => {
+      const cost = { [base.id]: 1, water: 1 };
+      if (form[5]) cost.wood = 1;
+      if (form[0].includes('recovery') || form[0] === 'salted_broth') { cost.salt = 1; cost.sugar = 1; }
+      if (form[0] === 'cordial' || form[0] === 'honey_brew') cost.honey = 1;
+      if (form[0] === 'oat_drink') cost.oats = 1;
+      const effect = { thirst: form[2] + base.index % 4, hunger: form[3], stamina: form[4] + base.index % 3 };
+      prepared(base.id + '_' + form[0], base.name + ' ' + form[1], 'drinks', .28 + formIndex * .055 + base.index % 3 * .01, effect, base.type === 'herb' ? 'Herbal drinks' : base.type === 'fruit' ? 'Fruit drinks' : 'Vegetable drinks', formIndex > 1 ? 2 : 1, cost, form[5] ? ['cooking_pot'] : ['funnel'], form[5] ? 'campfire' : undefined, 'Prepare a drink that restores ' + effect.thirst + ' thirst and ' + effect.stamina + ' stamina in the game. Ingredient units are abstract.');
+    });
+  });
+  const dressingForms = [
+    ['compress', 'Field Compress', 7, 25, 3, .12, ['cloth', 'water']],
+    ['poultice', 'Packed Poultice', 11, 35, 5, .17, ['cloth', 'honey']],
+    ['clean_wrap', 'Clean Wrap', 9, 65, 8, .16, ['gauze', 'soap']],
+    ['care_tonic', 'Recovery Tonic', 8, 0, 6, .3, ['water', 'sugar']],
+    ['field_dressing', 'Reinforced Dressing', 17, 100, 10, .23, ['bandage', 'antiseptic']],
+    ['recovery_kit', 'Recovery Kit', 28, 100, 16, .48, ['emergency_dressing', 'antiseptic', 'cloth']]
+  ];
+  herbIds.forEach((id, index) => dressingForms.forEach((form, formIndex) => {
+    const cost = { [id]: 2 }; form[6].forEach((ingredient) => { cost[ingredient] = 1; });
+    const effect = { health: form[2] + index % 3, bleeding: form[3], infection: form[4] + index % 4 };
+    if (formIndex === 3) { effect.thirst = 18; effect.stamina = 10 + index % 5; }
+    prepared(id + '_' + form[0], title(id) + ' ' + form[1], 'medical', form[5] + index % 3 * .01, effect, 'Prepared field care', formIndex < 2 ? 1 : formIndex < 4 ? 2 : 3, cost, formIndex < 3 ? ['mortar', 'needle'] : ['mortar', 'first_aid_manual'], undefined, 'A one-use preparation for the simplified health, bleeding and infection meters. The ingredient name does not assert real medical treatment.');
+  }));
+
+  // Toughness, density and workability make each stock a different compromise.
+  const metals = [
+    ['mild_steel', 'Mild Steel', 1, 1, 1, 1], ['wrought_iron', 'Wrought Iron', .9, 1.02, .94, 1],
+    ['carbon_steel', 'Carbon Steel', 1.1, 1.02, 1.03, 2], ['stainless_steel', 'Stainless Steel', 1.04, 1.06, .98, 2],
+    ['spring_steel', 'Spring Steel', 1.07, .98, 1.13, 3], ['tool_steel', 'Tool Steel', 1.2, 1.13, .93, 3],
+    ['nickel_steel', 'Nickel Steel', 1.13, 1.08, 1.07, 3], ['manganese_steel', 'Manganese Steel', 1.15, 1.15, .91, 3],
+    ['boron_steel', 'Boron Steel', 1.17, 1.04, 1.08, 4], ['chrome_steel', 'Chrome Steel', 1.19, 1.1, 1.02, 4],
+    ['aluminum', 'Aluminum', .72, .48, 1.16, 1], ['bronze', 'Bronze', .84, 1.14, 1.07, 1],
+    ['brass', 'Brass', .78, 1.12, 1.1, 1], ['copper', 'Copper', .67, 1.16, 1.14, 1],
+    ['titanium', 'Titanium', 1.12, .62, .96, 4], ['nickel_alloy', 'Nickel Alloy', 1.16, 1.18, 1.04, 4],
+    ['cobalt_alloy', 'Cobalt Alloy', 1.25, 1.22, .88, 5], ['cast_iron', 'Cast Iron', .88, 1.17, .85, 1],
+    ['zinc_alloy', 'Zinc Alloy', .7, .86, 1.15, 1], ['pewter', 'Pewter', .64, .96, 1.19, 1]
+  ].map((row) => ({ id: row[0], name: row[1], strength: row[2], density: row[3], speed: row[4], tier: row[5] }));
+  const timbers = [
+    ['ash', .82, 1.03], ['beech', .95, .98], ['birch', .73, 1], ['cedar', .54, .8], ['cherrywood', .84, .92], ['elm', .89, .99], ['hickory', 1.08, 1.16],
+    ['maple', .98, 1.06], ['oak', 1.12, 1.11], ['pine', .62, .79], ['poplar', .59, .76], ['spruce', .55, .82], ['walnut', .88, 1.02], ['yew', .91, 1.12]
+  ].map((row) => ({ id: row[0], name: title(row[0]), density: row[1], strength: row[2] }));
+  const fabrics = [
+    ['linen', .58, .78, 0], ['hemp_canvas', .84, .92, 1], ['cotton_twill', .66, .84, 0], ['denim', .88, .95, 1],
+    ['oilskin', .82, .89, 1], ['wool_felt', .97, 1.02, 1], ['plain_canvas', .86, .96, 1], ['corduroy', .78, .87, 0],
+    ['burlap', .67, .73, 0], ['ripstop', .53, 1.06, 2], ['leather_suede', 1.13, 1.1, 2], ['waxed_canvas', .94, 1.05, 2],
+    ['nylon_webbing', .59, 1.13, 2], ['sailcloth', .85, 1.14, 2], ['quilted_cotton', 1.05, 1.18, 2], ['duckcloth', .92, 1.08, 1],
+    ['seatbelt_weave', .96, 1.31, 3], ['fleece', .76, .88, 0], ['neoprene', .84, 1.16, 2], ['aramid', .7, 1.48, 4],
+    ['ballistic_nylon', .91, 1.41, 3], ['felt_blend', .87, 1.04, 1], ['firecloth', 1.08, 1.35, 3], ['laminated_mesh', .77, 1.44, 4]
+  ].map((row) => ({ id: row[0], name: title(row[0]), density: row[1], strength: row[2], tier: row[3] }));
+  metals.forEach((metal) => {
+    const root = metal.id + '_stock';
+    stock(root, metal.name + ' Stock', 'materials', .58 * metal.density, 'Salvaged material for billets, fittings, weapons and tools. Toughness and density shape the resulting equipment statistics.', 'Metal stock', metal.tier);
+    queueLoot(root, ['industrial', 'hardware', 'garage', 'warehouse'], 1 / (1 + metal.tier), 1, 2);
+    const forms = [ ['billet', 'Billet', .78, { [root]: 2, charcoal: 1 }, ['hammer'], 'campfire'], ['plate', 'Plate', .55, { [metal.id + '_billet']: 1 }, ['hammer', 'tin_snips']], ['bar', 'Bar', .46, { [metal.id + '_billet']: 1 }, ['file']], ['edge', 'Edged Blank', .31, { [metal.id + '_bar']: 1, cloth: 1 }, ['file', 'sharpening_stone']], ['hinge', 'Hinge Set', .19, { [metal.id + '_plate']: 1, wire: 1 }, ['pliers']], ['mechanism', 'Mechanism', .4, { [metal.id + '_bar']: 1, spring: 1, screws: 1 }, ['wrench', 'file']] ];
+    forms.forEach((form) => {
+      const id = metal.id + '_' + form[0];
+      stock(id, metal.name + ' ' + form[1], 'materials', form[2] * metal.density, 'A shaped ' + metal.name.toLowerCase() + ' component used by equipment assemblies. Processing is an abstract game recipe.', 'Worked metal', Math.min(5, metal.tier + 1));
+      recipe('form_' + id, 'Shape ' + metal.name + ' ' + form[1], form[3], { [id]: 1 }, 'Prepare an equipment component from salvaged stock; the process uses the simplified game crafting model.', form[4], form[5]);
+    });
+  });
+  timbers.forEach((timber, index) => {
+    const root = timber.id + '_timber';
+    stock(root, timber.name + ' Timber', 'materials', .72 * timber.density, 'Specific wood stock for grips, shafts, frame supports and slats. It feeds field equipment and carrying designs.', 'Timber stock', index % 4);
+    queueLoot(root, ['forest', 'cabin', 'farm', 'camp'], 1, 1, 3);
+    [ ['grip', 'Grip', .16, 2, ['kitchen_knife']], ['shaft', 'Shaft', .48, 1, ['saw']], ['frame', 'Frame', .7, 1, ['saw', 'hammer']], ['slat', 'Slats', .24, 2, ['saw']] ].forEach((form) => {
+      const id = timber.id + '_' + form[0];
+      stock(id, timber.name + ' ' + form[1], 'materials', form[2] * timber.density, 'A shaped wood component for crafted tools, weapons and carrying frames.', 'Worked timber', 1);
+      recipe('form_' + id, 'Shape ' + timber.name + ' ' + form[1], { [root]: 1 }, { [id]: form[3] }, 'Work specific timber into useful equipment components.', form[4]);
+    });
+  });
+  fabrics.forEach((fabric) => {
+    const root = fabric.id + '_textile';
+    stock(root, fabric.name + ' Textile', 'materials', .37 * fabric.density, 'Scavenged fabric stock for panels, cords, padding and reinforcement. Stronger fabric improves carrying and protection at a different weight cost.', 'Textile stock', fabric.tier);
+    queueLoot(root, ['clothing', 'warehouse', 'house', 'suburban'], 1 / (1 + fabric.tier), 1, 3);
+    [ ['panel', 'Panel', .31, ['needle']], ['cord', 'Cord', .08, ['needle']], ['padding', 'Padding', .4, ['sewing_kit']], ['reinforcement', 'Reinforcement', .3, ['sewing_kit', 'tailoring_manual']] ].forEach((form) => {
+      const id = fabric.id + '_' + form[0], cost = { [root]: 1, thread: 1 };
+      if (form[0] === 'padding') cost.cloth = 1;
+      if (form[0] === 'reinforcement') cost.duct_tape = 1;
+      stock(id, fabric.name + ' ' + form[1], 'materials', form[2] * fabric.density, 'A prepared textile component for protective clothing or carrying gear.', 'Worked textiles', Math.min(5, fabric.tier + 1));
+      recipe('form_' + id, 'Prepare ' + fabric.name + ' ' + form[1], cost, { [id]: 1 }, 'Prepare flexible components for garment and bag assembly.', form[3]);
+    });
+  });
+
+  // Profiles describe different physical roles, rather than quality suffixes.
+  const meleeForms = [
+    ['combat_knife', 'Combat Knife', .27, 22, 47, .3, 5, 42, 'edge'], ['kukri', 'Forward-Curved Knife', .56, 32, 56, .43, 9, 61, 'edge'],
+    ['cutlass', 'Camp Cutlass', .92, 38, 72, .53, 12, 82, 'edge'], ['sabre', 'Scout Sabre', .78, 32, 79, .42, 10, 74, 'edge'],
+    ['shortsword', 'Short Sword', .68, 31, 65, .4, 8, 59, 'edge'], ['longsword', 'Long Sword', 1.45, 47, 93, .76, 19, 92, 'edge'],
+    ['hand_axe', 'Hand Axe', .88, 35, 62, .52, 12, 105, 'axe'], ['camp_axe', 'Camp Axe', 1.38, 44, 77, .68, 17, 121, 'axe'],
+    ['boarding_axe', 'Boarding Axe', 1.77, 51, 82, .8, 21, 132, 'axe'], ['poleaxe', 'Long Poleaxe', 2.45, 55, 109, 1.02, 27, 142, 'axe'],
+    ['war_hammer', 'Impact Hammer', 1.94, 49, 73, .84, 20, 146, 'impact'], ['maul', 'Heavy Maul', 3.8, 65, 90, 1.22, 31, 183, 'impact'],
+    ['mace', 'Field Mace', 1.47, 43, 71, .72, 16, 115, 'impact'], ['flanged_mace', 'Ribbed Mace', 1.63, 46, 74, .8, 18, 122, 'impact'],
+    ['war_pick', 'Hooked Impact Pick', 1.64, 47, 72, .84, 19, 128, 'pick'], ['spear', 'Socket Spear', 1.23, 36, 107, .67, 13, 70, 'reach'],
+    ['partisan', 'Broad Spear', 1.73, 43, 113, .85, 18, 87, 'reach'], ['halberd', 'Guard Halberd', 2.21, 50, 115, .98, 24, 111, 'reach'],
+    ['glaive', 'Long Glaive', 1.82, 45, 114, .88, 20, 89, 'reach'], ['hook_spear', 'Hook Spear', 1.52, 39, 110, .78, 16, 82, 'reach'],
+    ['pry_baton', 'Pry Baton', 1.37, 31, 70, .54, 11, 109, 'pry'], ['chain_morningstar', 'Linked Impact Club', 2.19, 51, 85, 1.05, 25, 153, 'impact'],
+    ['trench_club', 'Weighted Field Club', 1.42, 36, 77, .58, 13, 118, 'impact'], ['guard_baton', 'Guard Baton', .79, 26, 74, .42, 8, 86, 'impact'],
+    ['sickle', 'Harvest Sickle', .53, 25, 58, .4, 7, 55, 'edge'], ['cleaver', 'Camp Cleaver', .49, 30, 52, .43, 8, 69, 'edge']
+  ];
+  metals.forEach((metal, metalIndex) => meleeForms.forEach((form, formIndex) => {
+    const id = metal.id + '_' + form[0], timber = timbers[(metalIndex + formIndex) % timbers.length], reach = form[8] === 'reach' || form[0] === 'poleaxe';
+    const weight = rounded(form[2] * metal.density + .09 * timber.density), damage = Math.round(form[3] * metal.strength);
+    const cooldown = rounded(form[5] / metal.speed), staminaCost = Math.max(3, Math.round(form[6] * (.75 + metal.density * .25)));
+    const extra = { weapon: { kind: 'melee', damage, range: form[4], cooldown, staminaCost, noise: Math.round(form[7] * (.8 + metal.density * .2)) }, tags: ['melee', 'weapon', metal.id, form[8]] };
+    if (['combat_knife', 'kukri', 'cleaver'].includes(form[0])) extra.toolTags = ['kitchen_knife'];
+    if (form[8] === 'axe') { extra.toolTags = ['hatchet']; extra.treeDamage = 1.5; extra.doorDamage = 1.25; }
+    if (form[8] === 'pry') { extra.toolTags = ['crowbar']; extra.doorDamage = 1.25; }
+    if (form[8] === 'pick' || form[0] === 'maul') extra.wallDamage = 2.5;
+    const tier = Math.min(5, metal.tier + (reach || form[0] === 'maul' ? 1 : 0));
+    stock(id, metal.name + ' ' + form[1], 'melee', weight, 'A ' + metal.name.toLowerCase() + ' ' + form[1].toLowerCase() + ' on ' + timber.name.toLowerCase() + ' fittings. ' + damage + ' damage, ' + form[4] + ' reach and ' + staminaCost + ' stamina per swing define its combat role.', 'Material melee weapons', tier, extra);
+    const cost = { [metal.id + '_bar']: 1, [metal.id + (form[8] === 'impact' ? '_billet' : '_edge')]: 1, [timber.id + (reach ? '_shaft' : '_grip')]: 1, bolts: 1 };
+    if (form[0] === 'chain_morningstar') cost[metal.id + '_hinge'] = 2;
+    recipe('assemble_' + id, 'Assemble ' + metal.name + ' ' + form[1], cost, { [id]: 1 }, 'Combine shaped material and timber into a weapon with its own damage, reach, recovery, weight and stamina tradeoffs.', ['wrench', 'file']);
+    if (metalIndex < 4 && [0, 6, 20, 24].includes(formIndex)) queueLoot(id, ['hardware', 'garage', 'warehouse'], .55);
+    if (weight >= .9) recipe('recover_' + id, 'Recover ' + metal.name + ' Stock', { [id]: 1 }, { [metal.id + '_stock']: 1 }, 'Dismantle this weapon to recover part of its material; grips and processing supplies are lost.', ['wrench']);
+  }));
+
+  const toolForms = [
+    ['claw_hammer', 'Claw Hammer', .91, 27, 57, .52, 9, 100, ['hammer']], ['joiner_mallet', 'Joiner Mallet', 1.16, 26, 62, .64, 10, 69, ['hammer']],
+    ['tack_hammer', 'Tack Hammer', .43, 17, 50, .36, 5, 61, ['hammer']], ['cabinet_saw', 'Cabinet Saw', .64, 18, 57, .43, 7, 63, ['saw']],
+    ['field_file', 'Field File', .28, 13, 44, .3, 4, 39, ['file', 'sharpening_stone']], ['piercing_awl', 'Piercing Awl', .12, 12, 40, .25, 3, 31, ['needle']],
+    ['hinge_wrench', 'Hinge Wrench', .75, 25, 59, .5, 8, 86, ['wrench']], ['flat_driver', 'Flat Driver', .19, 14, 43, .29, 4, 33, ['screwdriver']],
+    ['grip_pliers', 'Grip Pliers', .34, 16, 45, .37, 5, 45, ['pliers']], ['wire_shear', 'Wire Shear', .41, 17, 47, .39, 6, 48, ['wire_cutters']],
+    ['sheet_cutter', 'Sheet Cutter', .51, 19, 49, .42, 7, 55, ['tin_snips']], ['hand_borer', 'Hand Borer', .83, 19, 52, .48, 8, 59, ['drill']],
+    ['camp_pot', 'Camp Pot', .97, 21, 59, .53, 9, 132, ['cooking_pot', 'frying_pan']], ['herb_mortar', 'Herb Mortar', .67, 20, 44, .51, 8, 79, ['mortar']],
+    ['chipping_pick', 'Chipping Pick', 1.73, 34, 77, .86, 19, 142, ['pickaxe']], ['demolition_hammer', 'Demolition Hammer', 3.12, 58, 85, 1.11, 28, 170, ['sledgehammer']]
+  ];
+  metals.forEach((metal, metalIndex) => toolForms.forEach((form, formIndex) => {
+    const id = metal.id + '_' + form[0], timber = timbers[(metalIndex * 3 + formIndex) % timbers.length];
+    const weight = rounded(form[2] * metal.density + .04 * timber.density), extra = { toolTags: form[8], weapon: { kind: 'melee', damage: Math.round(form[3] * metal.strength), range: form[4], cooldown: rounded(form[5] / metal.speed), staminaCost: Math.max(2, Math.round(form[6] * (.78 + metal.density * .22))), noise: Math.round(form[7] * (.85 + metal.density * .15)) }, tags: ['tools', 'weapon', metal.id, 'reusable'] };
+    if (form[0] === 'chipping_pick') { extra.miningDamage = Math.round(38 * metal.strength / Math.sqrt(metal.density)); extra.wallDamage = 2.5; }
+    if (form[0] === 'demolition_hammer') { extra.miningDamage = Math.round(18 * metal.strength); extra.wallDamage = 3; }
+    const tier = Math.min(5, metal.tier + (formIndex > 10 ? 1 : 0));
+    stock(id, metal.name + ' ' + form[1], 'tools', weight, 'A reusable ' + form[1].toLowerCase() + ' that satisfies ' + form[8].map((tag) => items[tag].name.toLowerCase()).join(' and ') + ' recipe requirements. It can also be equipped for melee' + (extra.miningDamage ? ' and mines deposits for ' + extra.miningDamage + ' damage' : '') + '.', 'Material field tools', tier, extra);
+    const cost = { [metal.id + '_bar']: 1, [metal.id + (formIndex === 12 ? '_plate' : formIndex === 11 ? '_mechanism' : formIndex < 3 || formIndex > 12 ? '_billet' : '_edge')]: 1, [timber.id + (formIndex > 13 ? '_shaft' : '_grip')]: 1, screws: 1 };
+    recipe('assemble_' + id, 'Assemble ' + metal.name + ' ' + form[1], cost, { [id]: 1 }, 'Make a reusable material-specific tool for existing crafting and survival actions.', ['file', 'wrench']);
+    if (metalIndex < 5 && [0, 3, 6, 7, 14].includes(formIndex)) queueLoot(id, ['hardware', 'workshop', 'garage'], .8);
+    if (weight >= .7) recipe('recover_' + id, 'Recover ' + metal.name + ' Tool Stock', { [id]: 1 }, { [metal.id + '_stock']: 1 }, 'Recover part of this reusable tool as stock for a different assembly.', ['wrench']);
+  }));
+
+  const garmentForms = [
+    ['utility_vest', 'Utility Vest', .5, .07, 2, false], ['work_smock', 'Work Smock', .7, .09, 3, false], ['quilted_coat', 'Quilted Coat', 1.46, .18, 4, true],
+    ['patrol_coat', 'Patrol Coat', 1.3, .16, 4, true], ['reinforced_jacket', 'Reinforced Jacket', 1.64, .24, 5, true], ['trail_tunic', 'Trail Tunic', .57, .08, 2, false],
+    ['mechanic_apron', 'Mechanic Apron', .96, .13, 3, false], ['guard_tabard', 'Guard Tabard', 1.4, .22, 4, true], ['scout_wrap', 'Scout Wrap', .36, .05, 2, false],
+    ['forester_coat', 'Forester Coat', 1.1, .15, 4, false], ['knee_guard', 'Knee Guard', .32, .06, 2, false], ['arm_wrap', 'Arm Wrap', .24, .04, 2, false],
+    ['shoulder_mantle', 'Shoulder Mantle', .65, .1, 3, false], ['salvager_overall', 'Salvager Overall', 1.28, .2, 4, true], ['breacher_vest', 'Breacher Vest', 2.38, .31, 5, true],
+    ['patchwork_poncho', 'Patchwork Poncho', .83, .11, 3, false], ['padded_helmet', 'Padded Helmet', .55, .12, 2, true], ['courier_jerkin', 'Courier Jerkin', .75, .14, 3, true]
+  ];
+  fabrics.forEach((fabric, fabricIndex) => garmentForms.forEach((form, formIndex) => {
+    const id = fabric.id + '_' + form[0], armor = rounded(Math.min(.52, form[3] * fabric.strength)), weight = rounded(form[2] * fabric.density + (form[5] ? .14 : 0));
+    stock(id, fabric.name + ' ' + form[1], 'clothing', weight, 'A ' + fabric.name.toLowerCase() + ' protective design with ' + Math.round(armor * 100) + '% damage reduction at ' + weight + ' kg. Uses the single protective clothing slot; insulation and specialized body slots are not simulated.', 'Protective garment designs', Math.min(5, fabric.tier + (form[5] ? 1 : 0)), { armor, tags: ['clothing', 'protective', fabric.id] });
+    const cost = { [fabric.id + '_panel']: form[4], [fabric.id + '_cord']: 1, [fabric.id + '_padding']: form[5] ? 2 : 1, thread: 1 };
+    if (form[5]) cost[fabric.id + '_reinforcement'] = 1;
+    if (form[0] === 'breacher_vest') cost[metals[fabricIndex % metals.length].id + '_plate'] = 1;
+    recipe('assemble_' + id, 'Sew ' + fabric.name + ' ' + form[1], cost, { [id]: 1 }, 'Choose a protective garment whose textile and design balance weight against damage reduction.', form[5] ? ['sewing_kit', 'tailoring_manual'] : ['sewing_kit']);
+    if (fabricIndex < 7 && [0, 1, 8, 15].includes(formIndex)) queueLoot(id, ['clothing', 'house', 'warehouse'], .65);
+    recipe('recover_' + id, 'Recover ' + fabric.name + ' Fabric', { [id]: 1 }, { [fabric.id + '_textile']: 1 }, 'Cut this garment back into one supply of textile stock; padding and assembly supplies are lost.', ['kitchen_knife']);
+  }));
+  const bagForms = [
+    ['hip_satchel', 'Hip Satchel', .3, 3, 2, false], ['roll_pack', 'Roll Pack', .49, 6, 3, false], ['tool_roll', 'Tool Roll', .4, 4, 2, false],
+    ['medical_satchel', 'Medical Satchel', .52, 5, 3, false], ['forager_sling', 'Forager Sling', .35, 4, 2, false], ['water_carrier', 'Supply Carrier', .61, 7, 4, false],
+    ['shoulder_pack', 'Shoulder Pack', .59, 8, 4, false], ['rucksack', 'Trail Rucksack', .86, 11, 5, false], ['hauler_bag', 'Hauler Bag', 1.09, 13, 6, false],
+    ['frame_rig', 'Frame Rig', 1.41, 15, 5, true], ['expedition_pack', 'Expedition Pack', 1.58, 17, 6, true], ['wideframe_pack', 'Wide Frame Pack', 1.89, 19, 7, true]
+  ];
+  fabrics.forEach((fabric, fabricIndex) => bagForms.forEach((form, formIndex) => {
+    const id = fabric.id + '_' + form[0], timber = timbers[(fabricIndex + formIndex) % timbers.length], metal = metals[(fabricIndex * 2 + formIndex) % metals.length];
+    const capacity = Math.min(25, Math.max(2, Math.round(form[3] * (.58 + fabric.strength * .42)))), weight = rounded(form[2] * fabric.density + (form[5] ? .32 * timber.density + .14 * metal.density : 0));
+    stock(id, fabric.name + ' ' + form[1], 'containers', weight, 'A carrying design that adds ' + capacity + ' kg capacity at a ' + weight + ' kg weight cost. Uses the existing backpack slot; the named design does not restrict which supplies fit inside.', 'Carrying equipment designs', Math.min(5, fabric.tier + (form[5] ? 1 : 0)), { capacity, tags: ['containers', 'backpack', fabric.id] });
+    const cost = { [fabric.id + '_panel']: form[4], [fabric.id + '_cord']: form[5] ? 3 : 2, [fabric.id + '_padding']: 1, thread: 1 };
+    if (form[5]) { cost[fabric.id + '_reinforcement'] = 1; cost[timber.id + '_frame'] = 1; cost[metal.id + '_hinge'] = 1; }
+    if (form[0] === 'hauler_bag') cost[timber.id + '_slat'] = 2;
+    recipe('assemble_' + id, 'Sew ' + fabric.name + ' ' + form[1], cost, { [id]: 1 }, 'Choose fabric strength and frame design for carrying capacity, assembly cost and pack weight.', form[5] ? ['sewing_kit', 'saw', 'woodcraft_manual'] : ['sewing_kit']);
+    if (fabricIndex < 7 && [0, 1, 6].includes(formIndex)) queueLoot(id, ['clothing', 'house', 'camp', 'warehouse'], .7);
+    recipe('recover_' + id, 'Recover ' + fabric.name + ' Pack Fabric', { [id]: 1 }, { [fabric.id + '_textile']: 1, thread: 1 }, 'Recover a little textile and thread by dismantling this carrying item.', ['kitchen_knife']);
+  }));
+
+  const receivers = [
+    ['harbor', 'Harbor', .97, 1.03, 1.01, .92], ['wayfarer', 'Wayfarer', .91, .95, 1.12, .78], ['outpost', 'Outpost', 1.04, .99, .95, 1.08],
+    ['switchyard', 'Switchyard', 1, 1.08, .92, 1.13], ['highland', 'Highland', 1.06, 1.13, .84, 1.17], ['orchard', 'Orchard', .95, 1.04, 1.04, .9],
+    ['breakwater', 'Breakwater', 1.1, .92, .88, 1.2], ['cinder', 'Cinder', 1.02, .96, 1.15, 1.04], ['ridgeway', 'Ridgeway', 1.07, 1.16, .8, 1.24],
+    ['lanternworks', 'Lanternworks', .93, 1.02, 1.09, .85]
+  ].map((row) => ({ id: row[0], name: row[1], damage: row[2], reach: row[3], speed: row[4], density: row[5] }));
+  const firearmForms = [
+    ['courier_pistol', 'Courier Pistol', .81, 55, 480, .28, 8, 'ammo', 620, 2], ['watch_revolver', 'Watch Revolver', 1.02, 68, 550, .47, 6, 'magnum_round', 610, 2],
+    ['street_carbine', 'Street Carbine', 2.18, 39, 610, .21, 18, 'ammo', 650, 3], ['patrol_rifle', 'Patrol Rifle', 2.82, 55, 760, .34, 20, 'rifle_round', 760, 3],
+    ['ranger_rifle', 'Ranger Rifle', 3.21, 82, 920, .88, 5, 'rifle_round', 800, 4], ['breach_shotgun', 'Breach Shotgun', 3.46, 90, 345, .86, 6, 'shotgun_shell', 880, 3],
+    ['heavy_marksman', 'Heavy Marksman', 4.12, 108, 1120, 1.23, 5, 'heavy_round', 960, 5], ['quiet_bolt_launcher', 'Quiet Bolt Launcher', 2.36, 65, 580, 1.24, 1, 'crossbow_bolt', 78, 3]
+  ];
+  receivers.forEach((receiver, receiverIndex) => {
+    const component = receiver.id + '_receiver';
+    stock(component, receiver.name + ' Receiver Assembly', 'materials', .46 * receiver.density, 'A recovered equipment assembly used by eight ranged designs. Receiver balance changes damage, range, weight and shot recovery.', 'Ranged equipment components', 2);
+    queueLoot(component, ['gunshop', 'police', 'warehouse', 'garage'], .6);
+    firearmForms.forEach((form, formIndex) => {
+      const id = receiver.id + '_' + form[0], metal = metals[(receiverIndex + formIndex + 2) % metals.length], timber = timbers[(receiverIndex * 2 + formIndex) % timbers.length];
+      const weapon = { kind: 'firearm', damage: Math.round(form[3] * receiver.damage), range: Math.round(form[4] * receiver.reach), cooldown: rounded(form[5] / receiver.speed), staminaCost: 2, clipSize: form[6] + (form[6] > 8 ? receiverIndex % 3 - 1 : 0), ammoId: form[7], noise: Math.round(form[8] * (.9 + receiver.density * .1)) };
+      stock(id, receiver.name + ' ' + form[1], 'firearms', form[2] * receiver.density, 'A ranged design with ' + weapon.damage + ' damage, ' + weapon.range + ' range and a ' + weapon.clipSize + '-shot load using ' + items[weapon.ammoId].name.toLowerCase() + '. Shots follow the existing single-target ranged simulation.', 'Receiver ranged designs', form[9], { weapon, tags: ['firearms', 'weapon', receiver.id, form[7]] });
+      const cost = { [component]: 1, [metal.id + '_mechanism']: formIndex > 3 ? 2 : 1, [metal.id + '_bar']: 1, [timber.id + '_slat']: 1, [timber.id + '_grip']: 1, spring: 1, screws: 2 };
+      recipe('assemble_' + id, 'Assemble ' + receiver.name + ' ' + form[1], cost, { [id]: 1 }, 'An abstract game equipment assembly using recovered components. Compatible ammunition is unchanged.', ['wrench', 'file', 'reloading_manual']);
+      if (receiverIndex < 3 && formIndex < 2) queueLoot(id, ['gunshop', 'police'], .45);
+      recipe('recover_' + id, 'Recover ' + receiver.name + ' Assembly', { [id]: 1 }, { [component]: 1, scrap: 1 }, 'Dismantle the ranged item to recover its receiver and a little metal. Other assembled components are lost.', ['wrench']);
+    });
+  });
+
+  // Normalize each extension pool to a twelve-percent weight budget. Existing
+  // food, water, rescue parts and all other legacy rows retain their exact weights.
+  Object.entries(extensionLoot).forEach(([table, rows]) => {
+    const baseline = loot[table], originalWeight = baseline.reduce((sum, row) => sum + row.weight, 0);
+    const totalPriority = rows.reduce((sum, row) => sum + row.priority, 0);
+    const extraRows = rows.map((row) => Object.freeze({ id: row.id, min: row.min, max: row.max, weight: originalWeight * .12 * row.priority / totalPriority }));
+    loot[table] = Object.freeze(baseline.concat(extraRows));
+  });
+  loot.market = loot.grocery;
+  loot.ranger = loot.camp;
+  loot.depot = loot.warehouse;
+
+  // Derive honest acquisition hints from the final data, including table aliases.
+  const sourceTables = Object.create(null);
+  Object.entries(loot).forEach(([table, rows]) => rows.forEach((row) => {
+    if (!sourceTables[row.id]) sourceTables[row.id] = new Set();
+    sourceTables[row.id].add(table);
+  }));
+  Object.keys(items).forEach((id) => {
+    items[id] = Object.freeze(Object.assign({}, items[id], { sources: Object.freeze(Array.from(sourceTables[id] || []).sort()) }));
+  });
   // Freeze all exported data so one UI or recipe handler cannot silently alter balancing globally.
   Sirens.Catalog = Object.freeze({ items: Object.freeze(items), recipes: Object.freeze(recipes), loot: Object.freeze(loot) });
 }());
@@ -850,6 +1210,19 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   let context = null, master = null, compressor = null, analyser = null, noiseBuffer = null;
   let enabled = true, volume = .7, active = false, loops = null, lastState = null, lastGrowl = -10, lastWildlife = -20;
+  const channels = {
+    effects: { enabled: true, volume: 1 },
+    ambience: { enabled: true, volume: .7 },
+    music: { enabled: true, volume: .35 }
+  };
+  const musicVoices = new Set();
+  let musicNext = 0, musicStep = 0, musicTheme = '', musicNotes = 0;
+  const musicThemes = Object.freeze({
+    dawn: { name: 'Morrow at Dawn', beat: .9, chords: [[50, 57, 65], [46, 53, 62], [48, 55, 64], [45, 52, 60]], melody: [74, 77, 76, 69, 72, 74, 77, 81] },
+    night: { name: 'Empty Streets', beat: 1.05, chords: [[45, 52, 60], [43, 50, 59], [41, 48, 57], [40, 47, 55]], melody: [69, 72, 71, 67, 64, 69, 67, 64] },
+    danger: { name: 'Under the Sirens', beat: .68, chords: [[38, 45, 53], [39, 46, 54], [38, 45, 53], [41, 48, 56]], melody: [74, 75, 69, 70, 74, 77, 75, 69] },
+    road: { name: 'The Road Beyond', beat: .82, chords: [[48, 55, 64], [50, 57, 65], [45, 52, 60], [43, 50, 59]], melody: [72, 76, 79, 77, 74, 72, 69, 67] }
+  });
   const voices = new Set(), played = {}, MAX_VOICES = 40;
   function unlock() {
     if (!enabled) return;
@@ -860,6 +1233,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         context = new Audio(); master = context.createGain(); master.gain.value = .48 * volume;
         compressor = context.createDynamicsCompressor(); analyser = context.createAnalyser(); analyser.fftSize = 256;
         master.connect(compressor); compressor.connect(analyser); analyser.connect(context.destination);
+        for (const layer of Object.values(channels)) {
+          layer.gain = context.createGain(); layer.gain.gain.value = layer.enabled ? layer.volume : 0;
+          layer.analyser = context.createAnalyser(); layer.analyser.fftSize = 256;
+          layer.samples = new Float32Array(256);
+          layer.gain.connect(layer.analyser); layer.analyser.connect(master);
+        }
         noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
         const samples = noiseBuffer.getChannelData(0); let n = 0x5a17c9;
         for (let i = 0; i < samples.length; i++) { n ^= n << 13; n ^= n >>> 17; n ^= n << 5; samples[i] = (n >>> 0) / 2147483648 - 1; }
@@ -870,19 +1249,69 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   function setEnabled(on) {
     enabled = !!on;
     if (master) { master.gain.cancelScheduledValues(context.currentTime); master.gain.setTargetAtTime(enabled ? .48 * volume : 0, context.currentTime, .01); }
-    if (!enabled) stopLoops();
+    if (!enabled) { stopLoops(); stopMusic(); }
   }
   function setVolume(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) return;
     volume = Math.max(0, Math.min(1, value)); setEnabled(enabled);
+  }
+  function setChannel(name, on, value) {
+    const layer = Object.prototype.hasOwnProperty.call(channels, name) && channels[name];
+    if (!layer) return;
+    if (typeof on === 'boolean') layer.enabled = on;
+    if (typeof value === 'number' && Number.isFinite(value)) layer.volume = Math.max(0, Math.min(1, value));
+    if (layer.gain) {
+      layer.gain.gain.cancelScheduledValues(context.currentTime);
+      layer.gain.gain.setTargetAtTime(layer.enabled ? layer.volume : 0, context.currentTime, .01);
+    }
+    if (name === 'music' && (!layer.enabled || !layer.volume)) stopMusic();
+    if (!channels.effects.enabled && !channels.ambience.enabled) stopLoops();
+  }
+  function stopMusic() {
+    for (const source of musicVoices) { try { source.stop(); } catch (_) {} }
+    musicVoices.clear(); musicNext = 0;
+  }
+  function musicVoice(note, duration, strength) {
+    if (musicVoices.size >= 12) return;
+    const now = context.currentTime + .01, source = context.createOscillator(), filter = context.createBiquadFilter(), gain = context.createGain();
+    source.type = 'triangle'; source.frequency.value = 440 * 2 ** ((note - 69) / 12);
+    filter.type = 'lowpass'; filter.frequency.value = note < 65 ? 800 : 1600;
+    gain.gain.setValueAtTime(.0001, now); gain.gain.linearRampToValueAtTime(strength, now + .12);
+    gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    source.connect(filter); filter.connect(gain); gain.connect(channels.music.gain); musicVoices.add(source);
+    source.onended = function () { musicVoices.delete(source); source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    source.start(now); source.stop(now + duration + .02); musicNotes++;
+  }
+  function updateMusic(s) {
+    if (!channels.music.enabled || !channels.music.volume) { stopMusic(); return; }
+    const now = context.currentTime;
+    if (musicNext && now < musicNext) return;
+    // Schedule only the current beat. Background throttling never queues missed music.
+    const danger = (s.zombies || []).some(z => z.health > 0 && Math.hypot(z.x - s.player.x, z.y - s.player.y) < 210);
+    const key = danger ? 'danger' : s.player.vehicleId ? 'road' : s.time < 6 || s.time >= 19 ? 'night' : 'dawn';
+    const theme = musicThemes[key];
+    if (musicTheme !== key) { stopMusic(); musicTheme = key; musicStep = 0; }
+    if (musicStep % 4 === 0) {
+      const chord = theme.chords[Math.floor(musicStep / 4) % theme.chords.length];
+      for (const note of chord) musicVoice(note, theme.beat * 3.8, .07);
+    }
+    if (musicStep % 2 === 0) musicVoice(theme.melody[Math.floor(musicStep / 2) % theme.melody.length], theme.beat * 1.8, .095);
+    musicStep = (musicStep + 1) % 32; musicNext = now + theme.beat;
   }
   function stopLoops() {
     if (!loops) return;
     for (const v of loops) { try { v.source.stop(); } catch (_) {} v.source.disconnect(); v.filter.disconnect(); v.gain.disconnect(); }
     loops = null;
   }
+  function suspendAudio() {
+    active = false; stopLoops(); stopMusic();
+    for (const source of voices) { try { source.stop(); } catch (_) {} }
+    voices.clear();
+    if (lastState) drain(lastState);
+  }
   function voice(options) {
-    if (!enabled || !context || context.state !== 'running' || voices.size >= MAX_VOICES) return;
+    const layer = channels[options.channel || 'effects'];
+    if (!enabled || !layer || !layer.enabled || !layer.volume || !context || context.state !== 'running' || voices.size >= MAX_VOICES) return;
     const now = context.currentTime + (options.delay || 0), duration = options.duration || .12;
     const source = options.noise ? context.createBufferSource() : context.createOscillator();
     const filter = context.createBiquadFilter(), gain = context.createGain();
@@ -894,88 +1323,95 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     filter.type = options.filter || 'lowpass'; filter.frequency.value = options.cutoff || 2500; filter.Q.value = options.q || .7;
     gain.gain.setValueAtTime(.0001, now); gain.gain.linearRampToValueAtTime(options.gain || .1, now + .006);
     gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    source.connect(filter); filter.connect(gain); gain.connect(master); voices.add(source);
+    source.connect(filter); filter.connect(gain); gain.connect(layer.gain); voices.add(source);
     source.onended = function () { voices.delete(source); source.disconnect(); filter.disconnect(); gain.disconnect(); };
     source.start(now); source.stop(now + duration + .02);
   }
   function play(event) {
-    if (!enabled || !context || context.state !== 'running') return;
+    const channel = ['bird', 'nightLife'].includes(event.type) ? 'ambience' : 'effects';
+    if (!enabled || !channels[channel].enabled || !channels[channel].volume || !context || context.state !== 'running') return;
+    const sound = options => voice(Object.assign({ channel }, options));
     played[event.type] = (played[event.type] || 0) + 1;
     switch (event.type) {
       case 'swing':
-        voice({ noise: true, filter: 'bandpass', cutoff: /knife|dagger/.test(event.weapon) ? 2300 : 1100, duration: .18, gain: .13 }); break;
+        sound({ noise: true, filter: 'bandpass', cutoff: /knife|dagger/.test(event.weapon) ? 2300 : 1100, duration: .18, gain: .13 }); break;
       case 'shot':
-        voice({ noise: true, cutoff: 5200, duration: /shotgun/.test(event.weapon) ? .34 : .21, gain: .5 });
-        voice({ frequency: 110, end: 28, duration: .2, gain: .3, wave: 'triangle' }); break;
+        sound({ noise: true, cutoff: 5200, duration: /shotgun/.test(event.weapon) ? .34 : .21, gain: .5 });
+        sound({ frequency: 110, end: 28, duration: .2, gain: .3, wave: 'triangle' }); break;
       case 'impact':
-        voice({ frequency: 150, end: 42, duration: .14, gain: .2, wave: 'triangle', delay: .045 });
-        voice({ noise: true, cutoff: 1200, duration: .1, gain: .12, delay: .045 }); break;
+        sound({ frequency: 150, end: 42, duration: .14, gain: .2, wave: 'triangle', delay: .045 });
+        sound({ noise: true, cutoff: 1200, duration: .1, gain: .12, delay: .045 }); break;
       case 'wood': case 'stone':
-        voice({ noise: true, cutoff: event.type === 'wood' ? 1500 : 3500, duration: event.broken ? .3 : .12, gain: .25, delay: .04 });
-        voice({ frequency: event.type === 'wood' ? 210 : 75, end: 40, duration: .14, gain: .17, delay: .04 }); break;
+        sound({ noise: true, cutoff: event.type === 'wood' ? 1500 : 3500, duration: event.broken ? .3 : .12, gain: .25, delay: .04 });
+        sound({ frequency: event.type === 'wood' ? 210 : 75, end: 40, duration: .14, gain: .17, delay: .04 }); break;
       case 'glass':
-        voice({ noise: true, filter: 'highpass', cutoff: 3300, duration: event.broken ? .55 : .12, gain: .22, delay: .04 });
-        [2100, 3300, 4700].forEach((frequency, i) => voice({ frequency, end: frequency * .85, duration: .24, gain: .025, delay: .05 + i * .028 })); break;
+        sound({ noise: true, filter: 'highpass', cutoff: 3300, duration: event.broken ? .55 : .12, gain: .22, delay: .04 });
+        [2100, 3300, 4700].forEach((frequency, i) => sound({ frequency, end: frequency * .85, duration: .24, gain: .025, delay: .05 + i * .028 })); break;
       case 'step':
-        voice({ noise: true, cutoff: [1, 2, 7].includes(event.surface) ? 700 : 1600, duration: .075, gain: event.quiet ? .025 : .085 });
-        voice({ frequency: 95, end: 50, duration: .07, gain: event.quiet ? .015 : .055 }); break;
+        sound({ noise: true, cutoff: [1, 2, 7].includes(event.surface) ? 700 : 1600, duration: .075, gain: event.quiet ? .025 : .085 });
+        sound({ frequency: 95, end: 50, duration: .07, gain: event.quiet ? .015 : .055 }); break;
       case 'door': case 'vehicle':
-        voice({ noise: true, cutoff: 750, duration: .15, gain: .15 });
-        voice({ wave: 'triangle', frequency: 220, end: 65, duration: .18, gain: .1 }); break;
+        sound({ noise: true, cutoff: 750, duration: .15, gain: .15 });
+        sound({ wave: 'triangle', frequency: 220, end: 65, duration: .18, gain: .1 }); break;
       case 'reload':
-        voice({ noise: true, filter: 'highpass', cutoff: 1700, duration: .055, gain: .18 });
-        voice({ noise: true, cutoff: 1900, duration: .09, gain: .19, delay: .25 }); break;
+        sound({ noise: true, filter: 'highpass', cutoff: 1700, duration: .055, gain: .18 });
+        sound({ noise: true, cutoff: 1900, duration: .09, gain: .19, delay: .25 }); break;
       case 'loot': case 'climb':
-        voice({ noise: true, filter: 'bandpass', cutoff: 1700, duration: .28, gain: .12 }); break;
+        sound({ noise: true, filter: 'bandpass', cutoff: 1700, duration: .28, gain: .12 }); break;
       case 'hurt':
-        voice({ frequency: 100, end: 35, wave: 'sawtooth', cutoff: 450, duration: .22, gain: .12 }); break;
+        sound({ frequency: 100, end: 35, wave: 'sawtooth', cutoff: 450, duration: .22, gain: .12 }); break;
       case 'growl':
-        voice({ frequency: 62, end: 43, wave: 'sawtooth', cutoff: 330, duration: .65, gain: .09 });
-        voice({ noise: true, filter: 'bandpass', cutoff: 260, duration: .7, gain: .06 }); break;
+        sound({ frequency: 62, end: 43, wave: 'sawtooth', cutoff: 330, duration: .65, gain: .09 });
+        sound({ noise: true, filter: 'bandpass', cutoff: 260, duration: .7, gain: .06 }); break;
       case 'bird':
-        voice({ frequency: 1850, end: 2900, wave: 'sine', duration: .09, gain: .025 });
-        voice({ frequency: 2500, end: 1650, wave: 'sine', duration: .13, gain: .021, delay: .15 }); break;
+        sound({ frequency: 1850, end: 2900, wave: 'sine', duration: .09, gain: .025 });
+        sound({ frequency: 2500, end: 1650, wave: 'sine', duration: .13, gain: .021, delay: .15 }); break;
       case 'nightLife':
-        for (let i = 0; i < 3; i++) voice({ frequency: 3700, end: 3450, wave: 'triangle', duration: .055, gain: .012, delay: i * .11 }); break;
+        for (let i = 0; i < 3; i++) sound({ frequency: 3700, end: 3450, wave: 'triangle', duration: .055, gain: .012, delay: i * .11 }); break;
       case 'petDog':
-        voice({ frequency: 220, end: 108, wave: 'sawtooth', cutoff: 900, duration: .13, gain: .12 });
-        voice({ frequency: 170, end: 92, wave: 'sawtooth', cutoff: 750, duration: .11, gain: .09, delay: .17 });
-        voice({ noise: true, filter: 'bandpass', cutoff: 450, duration: .1, gain: .035 }); break;
+        sound({ frequency: 220, end: 108, wave: 'sawtooth', cutoff: 900, duration: .13, gain: .12 });
+        sound({ frequency: 170, end: 92, wave: 'sawtooth', cutoff: 750, duration: .11, gain: .09, delay: .17 });
+        sound({ noise: true, filter: 'bandpass', cutoff: 450, duration: .1, gain: .035 }); break;
       case 'petCat':
-        voice({ frequency: 720, end: 1050, wave: 'triangle', cutoff: 2100, duration: .14, gain: .065 });
-        voice({ frequency: 1050, end: 540, wave: 'triangle', cutoff: 1700, duration: .23, gain: .06, delay: .12 }); break;
-      default: voice({ frequency: 440, end: 260, duration: .08, gain: .035 });
+        sound({ frequency: 720, end: 1050, wave: 'triangle', cutoff: 2100, duration: .14, gain: .065 });
+        sound({ frequency: 1050, end: 540, wave: 'triangle', cutoff: 1700, duration: .23, gain: .06, delay: .12 }); break;
+      default: sound({ frequency: 440, end: 260, duration: .08, gain: .035 });
     }
   }
   function startLoops() {
-    if (loops || !context || context.state !== 'running') return;
+    if (loops || !context || context.state !== 'running' || !channels.effects.enabled && !channels.ambience.enabled) return;
     loops = [false, true].map(engine => {
       const source = engine ? context.createOscillator() : context.createBufferSource();
       if (engine) { source.type = 'sawtooth'; source.frequency.value = 35; } else { source.buffer = noiseBuffer; source.loop = true; }
       const filter = context.createBiquadFilter(), gain = context.createGain();
       filter.type = 'lowpass'; filter.frequency.value = engine ? 500 : 750; gain.gain.value = 0;
-      source.connect(filter); filter.connect(gain); gain.connect(master); source.start();
+      source.connect(filter); filter.connect(gain); gain.connect(channels[engine ? 'effects' : 'ambience'].gain); source.start();
       return { source, filter, gain };
     });
   }
-  function updateAudio(s, playing) {
+  function updateAudio(s, playing, visible) {
     const events = drain(s);
-    active = !!playing;
-    if (lastState !== s) { stopLoops(); lastState = s; lastGrowl = s.elapsed; lastWildlife = s.elapsed; }
-    events.forEach(play);
-    if (!active || !enabled || !context || context.state !== 'running') { stopLoops(); return; }
+    active = !!playing && visible !== false;
+    if (lastState !== s) { stopLoops(); stopMusic(); musicTheme = ''; lastState = s; lastGrowl = s.elapsed; lastWildlife = s.elapsed; }
+    if (visible !== false) events.forEach(play);
+    if (!active || !enabled || !context || context.state !== 'running') { stopLoops(); stopMusic(); return; }
+    updateMusic(s);
     startLoops();
     const rain = /rain|storm/.test(typeof s.weather === 'string' ? s.weather : (s.weather || {}).type);
     const now = context.currentTime, car = (s.vehicles || []).find(v => v.id === s.player.vehicleId);
-    loops[0].gain.gain.setTargetAtTime(rain ? .055 : .012, now, .2);
-    loops[0].filter.frequency.setTargetAtTime(rain ? 2600 : 650, now, .2);
+    if (loops) {
+      loops[0].gain.gain.setTargetAtTime(rain ? .055 : .012, now, .2);
+      loops[0].filter.frequency.setTargetAtTime(rain ? 2600 : 650, now, .2);
+    }
     const outdoors = s.tiles[Math.floor(s.player.y / s.tileSize) * s.width + Math.floor(s.player.x / s.tileSize)] !== 2;
     if (outdoors && !car && !rain && s.elapsed - lastWildlife > 16 && !(s.zombies || []).some(z => z.health > 0 && Math.hypot(z.x - s.player.x, z.y - s.player.y) < 180)) {
       play({ type: s.time >= 6 && s.time < 19 ? 'bird' : 'nightLife' }); lastWildlife = s.elapsed;
     }
     const running = car && car.fuel > 0 && car.condition > 0;
-    loops[1].gain.gain.setTargetAtTime(running ? .04 + Math.abs(car.speed) / 4000 : 0, now, .06);
-    if (running) loops[1].source.frequency.setTargetAtTime(35 + Math.abs(car.speed) * .48, now, .06);
+    if (loops) {
+      loops[1].gain.gain.setTargetAtTime(running ? .04 + Math.abs(car.speed) / 4000 : 0, now, .06);
+      if (running) loops[1].source.frequency.setTargetAtTime(35 + Math.abs(car.speed) * .48, now, .06);
+    }
     if (s.elapsed - lastGrowl > 4.5 && (s.zombies || []).some(z => z.health > 0 && Math.hypot(z.x - s.player.x, z.y - s.player.y) < 240)) {
       play({ type: 'growl' }); lastGrowl = s.elapsed;
     }
@@ -983,9 +1419,16 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   function metrics() {
     let peak = 0;
     if (analyser) { const data = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data); for (const v of data) peak = Math.max(peak, Math.abs(v)); }
-    return { enabled, volume, active, context: context ? context.state : 'locked', voices: voices.size, loops: loops ? loops.length : 0, peak, played: Object.assign({}, played) };
+    const layers = {};
+    for (const [name, layer] of Object.entries(channels)) {
+      let channelPeak = 0;
+      if (layer.analyser) { layer.analyser.getFloatTimeDomainData(layer.samples); for (const value of layer.samples) channelPeak = Math.max(channelPeak, Math.abs(value)); }
+      layers[name] = { enabled: layer.enabled, volume: layer.volume, peak: channelPeak };
+    }
+    return { enabled, volume, active, context: context ? context.state : 'locked', voices: voices.size, loops: loops ? loops.length : 0, peak, played: Object.assign({}, played), channels: layers,
+      music: { theme: musicThemes[musicTheme] && musicThemes[musicTheme].name || '', voices: musicVoices.size, notes: musicNotes } };
   }
-  Sirens.Effects = Object.freeze({ emit, drain, attack, walk, pose, transfer, advance, audio: Object.freeze({ unlock, setEnabled, setVolume, update: updateAudio, metrics }) });
+  Sirens.Effects = Object.freeze({ emit, drain, attack, walk, pose, transfer, advance, audio: Object.freeze({ unlock, setEnabled, setVolume, setChannel, suspend: suspendAudio, update: updateAudio, metrics }) });
 })();
 
 (function () {
@@ -1038,7 +1481,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     for (const prev of node.prerequisites) if (!known(s, prev)) missing.push('Learn ' + projects.find(n => n.id === prev).name);
     if (p.insight < node.insight) missing.push('Need ' + (node.insight - p.insight) + ' more insight');
     for (const [item, n] of Object.entries(node.cost)) if ((inv[item] || 0) < n) missing.push('Need ' + (n - (inv[item] || 0)) + ' ' + S.Catalog.items[item].name.toLowerCase());
-    for (const item of node.tools) if (!(inv[item] > 0)) missing.push('Keep ' + S.Catalog.items[item].name.toLowerCase() + ' in your pack');
+    for (const item of node.tools) if (!S.Engine.ownedTool(s, item)) missing.push('Keep ' + S.Catalog.items[item].name.toLowerCase() + ' or a compatible tool in your pack');
     return { node, can: !s.ended && missing.length === 0, missing, cost: node.cost, insight: node.insight };
   }
   function loot(s, container) {
@@ -1102,7 +1545,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       result.car = nearCar(s); cost.scrap = 3;
       if (!result.car) missing.push('Stand beside a car');
       else if (Math.abs(result.car.speed) > 1 || result.car.condition >= 100) missing.push('Car must be stopped and damaged');
-      if (!(inv.hammer > 0)) missing.push('Keep a claw hammer');
+      if (!S.Engine.ownedTool(s, 'hammer')) missing.push('Keep a claw hammer or a compatible tool');
     } else if (id === 'rain') {
       if (!known(s, 'water')) missing.push('Learn Rain collection'); cost.empty_bottle = 1;
       if (s.weather !== 'rain' || s.tiles[Math.floor(s.player.y / T) * s.width + Math.floor(s.player.x / T)] === 2 || s.stories && s.stories.floor > 0) missing.push('Stand outside during rain');
@@ -1273,6 +1716,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   function gain(s, amount) { if (S.Progression) S.Progression.gain(s, 'craft', amount); }
   function increment(base, stat, amount) { base.stats[stat] = Math.min(1000000, base.stats[stat] + amount); }
   function metadata(id) { return S.Catalog && Object.hasOwn(S.Catalog.items, id) ? S.Catalog.items[id] : null; }
+  function miningPower(id) {
+    if (damage[id]) return damage[id];
+    const item = metadata(id), power = item && item.miningDamage;
+    return Number.isFinite(power) && power > 0 ? Math.round(clamp(power, 1, 72)) : 0;
+  }
   function weight(inv) { return S.Engine.inventoryWeight(inv); }
   function fits(inv, result, capacity) {
     const next = Object.assign({}, inv);
@@ -1325,7 +1773,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     s.containers.push(added); return added;
   }
   function mine(s, node, tool, target) {
-    const base = ensure(s), hit = damage[tool]; if (!hit || !metadata(tool)) return false;
+    const base = ensure(s), hit = miningPower(tool); if (!hit || !metadata(tool)) return false;
     if (!Object.hasOwn(base.nodes, node.id) && Object.keys(base.nodes).length >= limits.nodes) { write(s, 'The mining record is full. Explore other supplies instead.'); return false; }
     const remaining = Object.hasOwn(base.nodes, node.id) ? base.nodes[node.id] : deposits[node.type].health;
     if (remaining <= 0) return false;
@@ -1343,7 +1791,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     gain(s, 5); write(s, 'Mined ' + deposits[node.type].amount + ' ' + metadata(deposits[node.type].item).name.toLowerCase() + (target === base.stock ? ' into the base stockpile.' : ' from a surface deposit.')); return true;
   }
   function strike(s, aimX, aimY, weaponId) {
-    if (!s || s.ended || !onGround(s) || s.player.vehicleId || !damage[weaponId] || !(s.player.inventory[weaponId] > 0) || ![aimX, aimY].every(Number.isFinite)) return false;
+    if (!s || s.ended || !onGround(s) || s.player.vehicleId || !miningPower(weaponId) || !(s.player.inventory[weaponId] > 0) || ![aimX, aimY].every(Number.isFinite)) return false;
     const item = metadata(weaponId), range = item && item.weapon && item.weapon.range || 60;
     const dx = aimX - s.player.x, dy = aimY - s.player.y, len = Math.hypot(dx, dy); if (len < .001) return false;
     const tx = Math.floor(s.player.x / T), ty = Math.floor(s.player.y / T);
@@ -1429,7 +1877,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         if (!Object.hasOwn(base.jobs, match[1]) && Object.keys(base.jobs).length >= limits.records) missing.push('The companion work record is full');
         if (!Object.hasOwn(base.moods, match[1]) && Object.keys(base.moods).length >= limits.records) missing.push('The companion morale record is full');
         if (q.role !== 'follow' && !base.home) missing.push('Claim a base first');
-        if (q.role === 'gather' && !(base.stock.stone_pick > 0 || base.stock.iron_pick > 0)) missing.push('Store a mining pick at your base');
+        if (q.role === 'gather' && !stockTool(base)) missing.push('Store a mining pick at your base');
       }
     } else missing.push('Unknown base action');
     for (const [id, n] of Object.entries(cost)) if (!metadata(id) || (inv[id] || 0) < n) missing.push('Need ' + n + ' ' + (metadata(id) ? metadata(id).name.toLowerCase() : id));
@@ -1457,7 +1905,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   function interact(s) { const near = nearestPlot(s); if (!near || s.ended || s.player.vehicleId) return false; return action(s, near.plot.progress >= limits.growthTime ? 'harvest' : 'water'); }
   function activeCompanion(s, h) { return h && h.health > 0 && h.faction === 'survivor' && h.following && onGround(s); }
   function combatMultiplier(s, h) { return activeCompanion(s, h) ? .7 + .5 * (Object.hasOwn(ensure(s).moods, h.id) ? ensure(s).moods[h.id] : 60) / 100 : 1; }
-  function stockTool(base) { return base.stock.iron_pick > 0 ? 'iron_pick' : base.stock.stone_pick > 0 ? 'stone_pick' : null; }
+  function stockTool(base) {
+    return Object.keys(base.stock).filter(id => base.stock[id] > 0 && (id === 'iron_pick' || id === 'stone_pick' || metadata(id) && metadata(id).miningDamage > 0))
+      .sort((a, b) => miningPower(b) - miningPower(a) || a.localeCompare(b))[0] || null;
+  }
   function destination(s, h) {
     const base = ensure(s), job = base.jobs[h.id]; if (!activeCompanion(s, h) || !job || job.role === 'follow' || !base.home) return null;
     const home = localPoint(s, base.home); if (!inScene(s, home)) return null;
@@ -2525,7 +2976,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const id = typeof weapon === 'string' ? weapon : weapon && weapon.id || '';
     const item = typeof weapon === 'string' ? Sirens.Catalog && Sirens.Catalog.items[id] : weapon;
     const stats = item && item.weapon || item;
-    return { id, stats };
+    return { id, stats, item };
   }
   function surface(s, tx, ty) {
     const x = clamp(s.player.x, tx * TILE, (tx + 1) * TILE), y = clamp(s.player.y, ty * TILE, (ty + 1) * TILE);
@@ -2588,6 +3039,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     else if (tile === 5 && resolved.id === 'machete') damage *= 1.3;
     if (tile === 3 && ['sledgehammer', 'pickaxe'].includes(resolved.id)) damage *= 3;
     if (tile === 6 && ['hatchet', 'fire_axe', 'crowbar'].includes(resolved.id)) damage *= 1.25;
+    const work = resolved.item && resolved.item[tile === 5 ? 'treeDamage' : tile === 3 ? 'wallDamage' : tile === 6 ? 'doorDamage' : ''];
+    if (Number.isFinite(work) && work > 0) damage *= clamp(work, .25, 4);
     if (tile === 6) {
       const before = Number.isFinite(s._doorHealth[index]) ? s._doorHealth[index] : 65;
       s._doorHealth[index] = Math.max(-20, before - damage);
@@ -3398,6 +3851,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     { id: 'recover_rounds', name: 'Recover ammunition', cost: { scrap: 4 }, result: { ammo: 8 }, description: 'Sort eight usable rounds from salvaged components.' },
     { id: 'collect_water', name: 'Collect clean water', cost: { wood: 2, scrap: 2 }, result: { water: 2 }, description: 'Build a small condenser beside a campfire. Requires a campfire within 100 pixels.' }
   ]);
+  const recipeIndex = new Map(recipes.map(recipe => [recipe.id, recipe]));
+  const toolAlternatives = new Map();
+  for (const item of Object.values(items)) for (const tag of item.toolTags || []) {
+    if (!toolAlternatives.has(tag)) toolAlternatives.set(tag, []);
+    toolAlternatives.get(tag).push(item.id);
+  }
 
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
   function finite(n, fallback) { return typeof n === 'number' && Number.isFinite(n) ? n : fallback; }
@@ -3461,9 +3920,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   }
   function weight(inventory) {
     let total = 0;
-    Object.keys(items).forEach(id => { total += (inventory[id] || 0) * items[id].weight; });
+    for (const id of Object.keys(inventory || {})) if (Object.prototype.hasOwnProperty.call(items, id)) total += (inventory[id] || 0) * items[id].weight;
     return total;
   }
+  function toolIn(inventory, id) {
+    if (!inventory || !Object.prototype.hasOwnProperty.call(items, id)) return null;
+    if (inventory[id] > 0) return id;
+    return (toolAlternatives.get(id) || []).find(candidate => inventory[candidate] > 0) || null;
+  }
+  function ownedTool(s, id) { return toolIn(s && s.player && s.player.inventory, id); }
   function carryCapacity(s) {
     const id = s.player.equipment && s.player.equipment.backpack;
     return CAPACITY + clamp(finite(items[id] && items[id].capacity, 0), 0, 100);
@@ -4172,15 +4637,16 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     return craftQuote(s, recipeId).can;
   }
   function craftQuote(s, recipeId) {
-    const r = typeof recipeId === 'object' ? recipeId : recipes.find(r => r.id === recipeId);
+    const r = typeof recipeId === 'object' ? recipeId : recipeIndex.get(recipeId);
     const missing = [];
     if (!r || !s || s.ended) return { can: false, missing: ['Recipe unavailable'] };
     const inv = s.player.inventory;
     for (const [id, n] of Object.entries(r.cost)) if ((inv[id] || 0) < n) missing.push('Need ' + (n - (inv[id] || 0)) + ' ' + items[id].name.toLowerCase());
-    for (const id of r.tools || []) if (!(inv[id] > 0)) missing.push('Keep ' + items[id].name.toLowerCase());
+    for (const id of r.tools || []) if (!toolIn(inv, id)) missing.push('Keep ' + items[id].name.toLowerCase() + ' or a compatible tool');
     if ((r.station === 'campfire' || r.id === 'collect_water') && !s.structures.some(b => b.type === 'campfire' && dist2(b.x, b.y, s.player.x, s.player.y) <= 100 ** 2)) missing.push('Stand beside a campfire');
     if (canAfford(inv, r.cost)) {
       const next = Object.assign({}, inv); pay(next, r.cost); for (const [id, n] of Object.entries(r.result)) next[id] = (next[id] || 0) + n;
+      for (const id of r.tools || []) if (toolIn(inv, id) && !toolIn(next, id)) missing.push('Keep ' + items[id].name.toLowerCase() + ' after crafting');
       const pack = s.player.equipment && s.player.equipment.backpack;
       const capacity = pack && !next[pack] ? CAPACITY : carryCapacity(s);
       if (weight(next) > capacity + .00001 || Object.values(next).some(n => n > 1000)) missing.push('Make room for the crafted supplies');
@@ -4189,7 +4655,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   }
   function craft(s, recipeId) {
     if (!s || s.ended) return false;
-    const recipe = recipes.find(r => r.id === recipeId);
+    const recipe = recipeIndex.get(recipeId);
     if (!recipe) return false;
     const quote = craftQuote(s, recipeId);
     if (!quote.can) { log(s, quote.missing.join('. ') + '.', 'warn'); return false; }
@@ -4476,7 +4942,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   }
 
   if (Sirens.World) Sirens.World.setTownFactory((seed, difficulty) => create(seed, difficulty, 'rescue'));
-  Sirens.Engine = Object.freeze({ create, update, stepParticipant, interact, attack, action, craft, canCraft, craftQuote, build, buildQuote, spawnWanderers, serialize, deserialize, isSolid, hasLOS, nearby, recipes, items, capacity: CAPACITY, inventoryWeight: weight, carryCapacity });
+  Sirens.Engine = Object.freeze({ create, update, stepParticipant, interact, attack, action, craft, canCraft, craftQuote, ownedTool, build, buildQuote, spawnWanderers, serialize, deserialize, isSolid, hasLOS, nearby, recipes, items, capacity: CAPACITY, inventoryWeight: weight, carryCapacity });
 }());
 
 (function () {
@@ -5897,6 +6363,38 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
   const number = (value) => Math.max(0, Number(value) || 0);
   const label = (value) => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const searchText = (value) => String(value || '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const matchesSearch = (text, query) => !query || searchText(query).split(' ').every((term) => text.includes(term));
+  const ITEM_PAGE_SIZE = 48, RECIPE_PAGE_SIZE = 24;
+  let referenceIndex;
+
+  function catalogueIndex() {
+    const items = Sirens.Engine && Sirens.Engine.items || Sirens.Catalog && Sirens.Catalog.items || {};
+    const recipes = Sirens.Engine && Sirens.Engine.recipes || Sirens.Catalog && Sirens.Catalog.recipes || [];
+    if (referenceIndex && referenceIndex.items === items && referenceIndex.recipes === recipes) return referenceIndex;
+    const names = (entries) => Object.keys(entries || {}).map((id) => `${id} ${items[id] && items[id].name || id}`).join(' ');
+    const makers = Object.create(null), uses = Object.create(null), recipesById = Object.create(null), itemsById = Object.create(null);
+    const recipeRows = recipes.map((recipe) => {
+      const results = Object.keys(recipe.result || {}).map((id) => items[id]).filter(Boolean);
+      const result = results.slice().sort((a, b) => number(b.tier) - number(a.tier))[0] || {};
+      const record = Object.freeze({ recipe, family: result.family || result.category || 'materials', tier: number(result.tier), search: searchText(`${recipe.id} ${recipe.name} ${recipe.description || ''} ${result.family || ''} ${names(recipe.cost)} ${names(recipe.result)} ${(recipe.tools || []).map((id) => `${id} ${items[id] && items[id].name || id}`).join(' ')} ${recipe.station || ''}`) });
+      recipesById[recipe.id] = record;
+      for (const id of Object.keys(recipe.result || {})) (makers[id] || (makers[id] = [])).push(record);
+      for (const id of new Set(Object.keys(recipe.cost || {}).concat(recipe.tools || []))) (uses[id] || (uses[id] = [])).push(record);
+      return record;
+    });
+    const itemRows = Object.entries(items).map(([id, item]) => {
+      const ingredients = (makers[id] || []).map(({ recipe }) => names(recipe.cost)).join(' ');
+      const record = Object.freeze({ id, item, category: item.category || 'materials', family: item.family || item.category || 'materials', tier: number(item.tier), search: searchText(`${id} ${item.name} ${item.description || ''} ${item.category || ''} ${item.family || ''} ${item.rarity || ''} ${(item.tags || []).join(' ')} ${(item.toolTags || []).join(' ')} ${(item.sources || []).join(' ')} ${ingredients}`) });
+      itemsById[id] = record;
+      return record;
+    });
+    for (const table of [makers, uses]) { for (const id of Object.keys(table)) Object.freeze(table[id]); Object.freeze(table); }
+    const byName = Object.freeze(itemRows.slice().sort((a, b) => a.item.name.localeCompare(b.item.name) || a.id.localeCompare(b.id)));
+    const byWeight = Object.freeze(byName.slice().sort((a, b) => number(b.item.weight) - number(a.item.weight)));
+    referenceIndex = Object.freeze({ items, recipes, byName, byWeight, recipesById: Object.freeze(recipesById), itemsById: Object.freeze(itemsById), recipeRows: Object.freeze(recipeRows), makers, uses });
+    return referenceIndex;
+  }
   const icon = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 26V44M17 44h14M24 26l-7 18M24 26l7 18M15 17a13 13 0 0 1 18 0M9 11a22 22 0 0 1 30 0"/><circle cx="24" cy="22" r="4"/></svg>';
   // These small catalogue symbols are drawn here so menus look the same offline on every platform.
   const itemSymbols = Object.freeze({
@@ -5932,9 +6430,22 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.sort = 'name';
       this.itemQuery = '';
       this.category = 'all';
+      this.family = 'all';
+      this.tier = 'all';
+      this.itemPage = 0;
+      this.itemPages = 1;
       this.itemView = 'owned';
       this.recipeQuery = '';
+      this.recipeFamily = 'all';
+      this.recipeTier = 'all';
+      this.recipePage = 0;
+      this.recipePages = 1;
       this.readyOnly = false;
+      this.itemMatches = null;
+      this.recipeMatches = null;
+      this.recipeQuoteSignature = '';
+      this.recipeQuotes = new Map();
+      this.reference = catalogueIndex();
       this.sound = true;
       this.debug = false;
       this.toastTimer = null;
@@ -6005,7 +6516,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
             <div class="as-kicker">TAKE A BREATH</div><h2 id="as-pause-title">Run paused</h2><p class="as-muted">The town waits while you plan your next move.</p>
             <div class="as-pause-actions"><button class="as-primary" data-command="resume">BACK TO THE TOWN <span>→</span></button><button class="as-secondary" data-command="save">SAVE RUN</button></div>
             <div class="as-save-actions"><button data-command="exportSave">Export save</button><label class="as-file-label">Import save<input type="file" data-ui="import" accept=".json,application/json"></label><button data-command="restart">New run</button></div>
-            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Procedural sound</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Sound volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label></div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
+            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Game audio</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Overall volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label></div><div class="as-audio-channels"><div class="as-section-heading">SOUND AND MUSIC</div>${this.audioPreferencesMarkup()}</div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
             ${this.controlsMarkup()}
             <p class="as-save-note">Saves stay in this browser. Export a file to keep a copy.</p>
           </section>
@@ -6018,14 +6529,16 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
             <div class="as-equipment-summary" data-ui="equipment">Bat equipped</div>
             <div class="as-inventory-tabs" role="group" aria-label="Pack sections"><button data-command="owned" aria-pressed="true">Your pack</button><button data-command="crafting" aria-pressed="false">Crafting & building</button><button data-command="catalogue" aria-pressed="false">Item catalogue</button></div>
             <div class="as-inventory-grid"><section data-ui="items-pane" aria-label="Items in your pack or catalogue">
-              <div class="as-filter-row"><input type="search" data-ui="item-search" placeholder="Search items" aria-label="Search items"><select data-ui="category" aria-label="Filter items by category"><option value="all">All categories</option></select></div>
-              <div class="as-section-heading as-result-count" data-ui="items-count">SUPPLIES</div>
+              <div class="as-filter-row"><input type="search" data-ui="item-search" placeholder="Search name, ID, family or material" aria-label="Search items"><select data-ui="category" aria-label="Filter items by category"><option value="all">All categories</option></select></div>
+              <div class="as-reference-filters"><select data-ui="item-family" aria-label="Filter items by family"><option value="all">All families</option></select><select data-ui="item-tier" aria-label="Filter items by tier"><option value="all">All tiers</option>${this.tierOptions()}</select><button data-clear-filters="items">Clear filters</button></div>
+              <div class="as-section-heading as-result-count" data-ui="items-count" role="status" aria-live="polite">SUPPLIES</div>
               <p class="as-catalogue-note" data-ui="catalogue-note" hidden>Original item reference. Browse definitions here; find or craft supplies in the world.</p>
-              <div class="as-item-list" data-ui="items"></div><div class="as-inventory-actions"><button data-action="eat">Eat</button><button data-action="drink">Drink</button><button data-action="bandage">Bandage</button><button data-action="rest">Rest</button></div></section>
+              <div class="as-item-list" data-ui="items"></div>${this.paginationMarkup('items', 'item')}<div class="as-inventory-actions"><button data-action="eat">Eat</button><button data-action="drink">Drink</button><button data-action="bandage">Bandage</button><button data-action="rest">Rest</button></div></section>
               <section data-ui="crafting-pane" aria-label="Crafting and building" hidden><div class="as-section-heading">MAKE SOMETHING USEFUL</div>
               <div class="as-recipe-filters"><input type="search" data-ui="recipe-search" placeholder="Search recipes" aria-label="Search recipes"><label><input type="checkbox" data-ui="recipe-ready"> Ready to craft</label></div>
-              <div class="as-result-count" data-ui="recipes-count"></div>
-              <div data-ui="recipes" class="as-recipe-list"></div><div class="as-section-heading as-build-heading">PLACE BESIDE YOU</div><div class="as-recipe-list">
+              <div class="as-reference-filters"><select data-ui="recipe-family" aria-label="Filter recipes by result family"><option value="all">All result families</option></select><select data-ui="recipe-tier" aria-label="Filter recipes by result tier"><option value="all">All result tiers</option>${this.tierOptions()}</select><button data-clear-filters="recipes">Clear filters</button></div>
+              <div class="as-result-count" data-ui="recipes-count" role="status" aria-live="polite"></div>
+              <div data-ui="recipes" class="as-recipe-list"></div>${this.paginationMarkup('recipes', 'recipe')}<div class="as-section-heading as-build-heading">PLACE BESIDE YOU</div><div class="as-recipe-list">
               <article class="as-recipe"><div><h3>Barricade</h3><p>Block a route and buy time. Aim toward a clear tile beside you.</p><span class="as-cost">3 wood + 1 scrap</span><small class="as-recipe-missing" data-ui="barricade-reason"></small></div><button data-build="barricade">Build</button></article>
               <article class="as-recipe"><div><h3>Campfire</h3><p>Rest and craft beside its light. Aim toward a clear tile beside you.</p><span class="as-cost">4 wood + 1 scrap</span><small class="as-recipe-missing" data-ui="campfire-reason"></small></div><button data-build="campfire">Build</button></article>
             </div></section></div>
@@ -6061,17 +6574,32 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       return `<div class="as-meter ${cls}"><div class="as-meter-label"><span>${label}</span><b data-meter-value="${id}">100</b></div><div class="as-meter-track" role="meter" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-meter="${id}"><span></span></div></div>`;
     }
 
+    tierOptions() { return Array.from({ length: 6 }, (_, tier) => `<option value="${tier}">Tier ${tier}</option>`).join(''); }
+
+    paginationMarkup(kind, singular) {
+      return `<nav class="as-pagination" data-ui="${kind}-pages" aria-label="${label(singular)} pages"><button data-page="${kind}" data-edge="first" aria-label="First ${singular} page">First</button><button data-page="${kind}" data-step="-1" aria-label="Previous ${singular} page">Previous</button><span data-ui="${kind}-page-status" role="status" aria-live="polite"></span><button data-page="${kind}" data-step="1" aria-label="Next ${singular} page">Next</button><button data-page="${kind}" data-edge="last" aria-label="Last ${singular} page">Last</button></nav>`;
+    }
+
+    audioPreferencesMarkup() {
+      return [['music', 'Music', 'An evolving score while you explore.', 35], ['effects', 'Sound effects', 'Strikes, shots and interactions.', 100], ['ambience', 'Ambience', 'Weather and sounds around the town.', 70]].map(([channel, name, description, volume]) => `<div class="as-audio-channel"><label class="as-audio-switch"><input type="checkbox" data-setting="${channel}" data-ui="setting-${channel}" checked><span>${name}<small>${description}</small></span></label><label class="as-audio-level" for="as-${channel}-volume">Volume <output data-ui="${channel}-volume-value" for="as-${channel}-volume">${volume}%</output><input id="as-${channel}-volume" type="range" aria-label="${name} volume" data-setting="${channel}Volume" data-ui="setting-${channel}Volume" min="0" max="100" step="5" value="${volume}"></label></div>`).join('');
+    }
+
     controlsMarkup() {
       return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause or close the current menu</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. The game uses a keyboard and mouse.</p></details>`;
     }
 
     refreshCategories() {
-      const items = Sirens.Engine && Sirens.Engine.items || Sirens.Catalog && Sirens.Catalog.items || {};
-      const categories = Array.from(new Set(Object.values(items).map((item) => item.category || 'materials'))).sort();
+      const items = this.reference.items;
+      const categories = Array.from(new Set(this.reference.byName.map((record) => record.category))).sort();
       const select = this.nodes.category;
       categories.forEach((category) => {
         const option = document.createElement('option'); option.value = category; option.textContent = label(category); select.append(option);
       });
+      for (const [node, families] of [[this.nodes['item-family'], this.reference.byName.map((record) => record.family)], [this.nodes['recipe-family'], this.reference.recipeRows.map((record) => record.family)]]) {
+        for (const family of Array.from(new Set(families)).sort()) {
+          const option = document.createElement('option'); option.value = family; option.textContent = label(family); node.append(option);
+        }
+      }
       this.nodes['catalogue-count'].textContent = String(Object.keys(items).length);
       this.nodes['recipe-count'].textContent = String((Sirens.Engine && Sirens.Engine.recipes || []).length);
     }
@@ -6104,6 +6632,24 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     onClick(event) {
       const button = event.target.closest('button');
       if (!button || !this.root.contains(button) || button.disabled) return;
+      if (button.dataset.page) {
+        const kind = button.dataset.page, field = kind === 'items' ? 'itemPage' : 'recipePage', pages = kind === 'items' ? this.itemPages : this.recipePages;
+        this[field] = clamp(button.dataset.edge === 'first' ? 0 : button.dataset.edge === 'last' ? pages - 1 : this[field] + Number(button.dataset.step), 0, pages - 1);
+        this.refreshInventory(true); this.nodes[kind].scrollTop = 0;
+        if (button.disabled && event.detail === 0) {
+          const available = this.nodes[kind + '-pages'].querySelector('button:not(:disabled)');
+          if (available) available.focus({ preventScroll: true });
+        }
+        return;
+      }
+      if (button.dataset.clearFilters) { this.clearReferenceFilters(button.dataset.clearFilters); return; }
+      if (button.dataset.showRecipe || button.dataset.recipeUses) {
+        this.inventoryPane = 'crafting'; this.recipeQuery = button.dataset.showRecipe || button.dataset.recipeUses;
+        this.recipeFamily = this.recipeTier = 'all'; this.readyOnly = false; this.recipePage = 0;
+        this.nodes['recipe-search'].value = this.recipeQuery; this.nodes['recipe-family'].value = this.nodes['recipe-tier'].value = 'all'; this.nodes['recipe-ready'].checked = false;
+        this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; this.nodes['recipe-search'].focus({ preventScroll: true });
+        return;
+      }
       if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.inventoryOpen) button.blur(); return; }
       if (button.dataset.use) { this.invoke('useItem', button.dataset.use); this.refreshInventory(true); return; }
       if (button.dataset.equip) { this.invoke('equipItem', button.dataset.equip); this.refreshInventory(true); return; }
@@ -6116,7 +6662,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         this.nodes.seed.value = seed;
         this.invoke('start', seed, this.nodes.difficulty.value, this.nodes.mode.value);
       } else if (command === 'owned' || command === 'catalogue' || command === 'crafting') {
-        this.inventoryPane = command; if (command !== 'crafting') this.itemView = command; this.refreshInventory(true);
+        this.inventoryPane = command; if (command !== 'crafting') { if (this.itemView !== command) this.itemPage = 0; this.itemView = command; } this.refreshInventory(true);
       } else if (command === 'inventory') {
         this.toggleInventory();
         if (event.detail > 0 && this.inventoryOpen) this.lastFocus = null;
@@ -6138,10 +6684,17 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (target.dataset.setting === 'sound') { this.sound = target.checked; this.invoke('setSound', this.sound); }
       if (target.dataset.setting === 'debug') { this.debug = target.checked; this.invoke('setDebug', this.debug); }
       if (target.dataset.setting === 'motion') this.invoke('setMotion', target.checked);
-      if (target === this.nodes.sort) { this.sort = target.value; this.refreshInventory(true); }
+      if (['music', 'effects', 'ambience'].includes(target.dataset.setting)) this.invoke('setAudioPreference', target.dataset.setting, target.checked);
+      if (target === this.nodes.sort) { this.sort = target.value; this.itemPage = 0; this.refreshInventory(true); }
       if (target === this.nodes.mode) this.refreshMode();
-      if (target === this.nodes.category) { this.category = target.value; this.refreshInventory(true); }
-      if (target === this.nodes['recipe-ready']) { this.readyOnly = target.checked; this.refreshInventory(true); }
+      if (target === this.nodes.category) { this.category = target.value; this.itemPage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['item-family']) { this.family = target.value; this.itemPage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['item-tier']) { this.tier = target.value; this.itemPage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['recipe-family']) { this.recipeFamily = target.value; this.recipePage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['recipe-tier']) { this.recipeTier = target.value; this.recipePage = 0; this.refreshInventory(true); }
+      if (target === this.nodes['recipe-ready']) { this.readyOnly = target.checked; this.recipePage = 0; this.refreshInventory(true); }
+      if ([this.nodes.sort, this.nodes.category, this.nodes['item-family'], this.nodes['item-tier']].includes(target)) this.nodes.items.scrollTop = 0;
+      if ([this.nodes['recipe-family'], this.nodes['recipe-tier'], this.nodes['recipe-ready']].includes(target)) this.nodes.recipes.scrollTop = 0;
       if (target === this.nodes.import && target.files && target.files[0]) {
         this.invoke('importSave', target.files[0]);
         target.value = '';
@@ -6149,10 +6702,22 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
 
     onInput(event) {
-      if (event.target === this.nodes['item-search']) { this.itemQuery = event.target.value.trim().toLowerCase(); this.refreshInventory(true); }
-      if (event.target === this.nodes['recipe-search']) { this.recipeQuery = event.target.value.trim().toLowerCase(); this.refreshInventory(true); }
+      if (event.target === this.nodes['item-search']) { this.itemQuery = event.target.value.trim().toLowerCase(); this.itemPage = 0; this.refreshInventory(true); this.nodes.items.scrollTop = 0; }
+      if (event.target === this.nodes['recipe-search']) { this.recipeQuery = event.target.value.trim().toLowerCase(); this.recipePage = 0; this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; }
       if (event.target.dataset.setting === 'volume') { const value = clamp(event.target.value, 0, 100); this.nodes['volume-value'].textContent = value + '%'; this.invoke('setVolume', value / 100); }
       if (event.target.dataset.setting === 'zoom') { const value = clamp(event.target.value, 70, 150); this.nodes['zoom-value'].textContent = value + '%'; this.invoke('setZoom', value / 100); }
+      for (const channel of ['music', 'effects', 'ambience']) if (event.target.dataset.setting === channel + 'Volume') { const value = clamp(event.target.value, 0, 100); this.nodes[channel + '-volume-value'].textContent = value + '%'; this.invoke('setAudioPreference', channel + 'Volume', value / 100); }
+    }
+
+    clearReferenceFilters(kind) {
+      if (kind === 'items') {
+        this.itemQuery = ''; this.category = this.family = this.tier = 'all'; this.itemPage = 0;
+        this.nodes['item-search'].value = ''; this.nodes.category.value = this.nodes['item-family'].value = this.nodes['item-tier'].value = 'all';
+      } else {
+        this.recipeQuery = ''; this.recipeFamily = this.recipeTier = 'all'; this.readyOnly = false; this.recipePage = 0;
+        this.nodes['recipe-search'].value = ''; this.nodes['recipe-family'].value = this.nodes['recipe-tier'].value = 'all'; this.nodes['recipe-ready'].checked = false;
+      }
+      this.refreshInventory(true); this.nodes[kind].scrollTop = 0; this.nodes[kind === 'items' ? 'item-search' : 'recipe-search'].focus({ preventScroll: true });
     }
 
     applyPreferences(preferences) {
@@ -6160,6 +6725,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.sound = p.sound !== false;
       this.root.querySelector('[data-setting="sound"]').checked = this.sound;
       this.root.querySelector('[data-setting="motion"]').checked = p.motion !== false;
+      for (const [channel, defaultVolume] of [['music', .35], ['effects', 1], ['ambience', .7]]) {
+        this.nodes['setting-' + channel].checked = p[channel] !== false;
+        const channelVolume = Math.round(clamp(p[channel + 'Volume'] === undefined ? defaultVolume : p[channel + 'Volume'], 0, 1) * 100);
+        this.nodes['setting-' + channel + 'Volume'].value = channelVolume; this.nodes[channel + '-volume-value'].textContent = channelVolume + '%';
+      }
       const volume = Math.round(clamp(p.volume === undefined ? .7 : p.volume, 0, 1) * 100), zoom = Math.round(clamp(p.zoom === undefined ? 1 : p.zoom, .7, 1.5) * 100);
       this.root.querySelector('[data-setting="volume"]').value = volume; this.nodes['volume-value'].textContent = volume + '%';
       this.root.querySelector('[data-setting="zoom"]').value = zoom; this.nodes['zoom-value'].textContent = zoom + '%';
@@ -6467,29 +7037,106 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       });
       if (item.weapon) {
         facts.push(`${item.weapon.damage} damage`, `${(number(item.weapon.range) / 32).toFixed(1)} tile reach`);
+        if (item.weapon.cooldown) facts.push(`${item.weapon.cooldown}s recovery`);
+        if (item.weapon.staminaCost) facts.push(`${item.weapon.staminaCost} stamina per swing`);
         if (item.weapon.kind === 'firearm') facts.push(`${item.weapon.clipSize} rounds`, this.itemMetadata(item.weapon.ammoId || 'ammo').name);
       }
       if (item.armor) facts.push(`${Math.round(Number(item.armor) * 100)}% protection`);
       if (item.capacity) facts.push(`+${item.capacity} kg capacity`);
       if (item.fuel) facts.push(`+${item.fuel} vehicle fuel`);
+      if (item.miningDamage) facts.push(`${item.miningDamage} mining power`);
+      if (item.treeDamage) facts.push(`${item.treeDamage} tree damage`);
+      if (item.wallDamage) facts.push(`${item.wallDamage} wall damage`);
+      if (item.doorDamage) facts.push(`${item.doorDamage} door damage`);
       if (!facts.length) facts.push(item.category === 'tools' ? 'Recipe tool, kept after crafting' : Sirens.Progression && Object.hasOwn(Sirens.Progression.manuals, item.id || '') ? 'Study once for 18 practice and 1 insight' : ['books', 'electronics', 'utility'].includes(item.category) ? 'Reference or crafting ingredient' : 'Crafting ingredient');
       return facts.join(' · ');
     }
 
     craftReady(recipe, inventory) {
+      if (Sirens.Engine && typeof Sirens.Engine.craftQuote === 'function') return this.recipeQuote(recipe).can;
       if (Sirens.Engine && typeof Sirens.Engine.canCraft === 'function') return Sirens.Engine.canCraft(this.state, recipe.id);
       if (!this.canAfford(recipe.cost, inventory) || !(recipe.tools || []).every((id) => number(inventory[id]) > 0)) return false;
       if (recipe.station === 'campfire') return (this.state.structures || []).some((structure) => structure.type === 'campfire' && Math.hypot(structure.x - this.state.player.x, structure.y - this.state.player.y) <= 100);
       return true;
     }
 
+    recipeQuote(recipe) {
+      if (!this.recipeQuotes.has(recipe.id)) this.recipeQuotes.set(recipe.id, Sirens.Engine.craftQuote(this.state, recipe));
+      return this.recipeQuotes.get(recipe.id);
+    }
+
+    matchingItems(inventory, inventorySignature) {
+      const key = JSON.stringify([this.itemView, this.sort, this.category, this.family, this.tier, this.itemQuery, this.itemView === 'owned' || this.sort === 'quantity' ? inventorySignature : '']);
+      if (this.itemMatches && this.itemMatches.key === key) return this.itemMatches;
+      let source = this.itemView === 'catalogue' ? this.sort === 'weight' ? this.reference.byWeight : this.reference.byName : Object.keys(inventory).filter((id) => number(inventory[id]) > 0).map((id) => this.reference.itemsById[id]).filter(Boolean);
+      if (this.itemView === 'owned' || this.sort === 'quantity') {
+        source = source.slice().sort((a, b) => {
+          if (this.sort === 'quantity') return number(inventory[b.id]) - number(inventory[a.id]) || a.item.name.localeCompare(b.item.name);
+          if (this.sort === 'weight') return number(b.item.weight) * number(inventory[b.id]) - number(a.item.weight) * number(inventory[a.id]) || a.item.name.localeCompare(b.item.name);
+          return a.item.name.localeCompare(b.item.name) || a.id.localeCompare(b.id);
+        });
+      }
+      const exact = this.itemQuery.includes('_') && this.reference.itemsById[this.itemQuery];
+      const rows = source.filter((record) => (this.category === 'all' || record.category === this.category) && (this.family === 'all' || record.family === this.family) && (this.tier === 'all' || record.tier === Number(this.tier)) && (exact ? record.id === exact.id : matchesSearch(record.search, this.itemQuery)));
+      const canonical = this.reference.itemsById[this.itemQuery], canonicalIndex = canonical && rows.indexOf(canonical);
+      if (canonicalIndex > 0) { rows.splice(canonicalIndex, 1); rows.unshift(canonical); }
+      this.itemMatches = { key, rows, total: source.length };
+      return this.itemMatches;
+    }
+
+    matchingRecipes(inventory, requirementSignature) {
+      const key = JSON.stringify([this.recipeQuery, this.recipeFamily, this.recipeTier, this.readyOnly, this.readyOnly ? requirementSignature : '']);
+      if (this.recipeMatches && this.recipeMatches.key === key) return this.recipeMatches.rows;
+      const exact = this.reference.recipesById[this.recipeQuery];
+      const rows = (exact ? [exact] : this.reference.recipeRows).filter((record) => (this.recipeFamily === 'all' || record.family === this.recipeFamily) && (this.recipeTier === 'all' || record.tier === Number(this.recipeTier)) && (exact || matchesSearch(record.search, this.recipeQuery)) && (!this.readyOnly || this.craftReady(record.recipe, inventory)));
+      this.recipeMatches = { key, rows };
+      return rows;
+    }
+
+    refreshPagination(kind, count) {
+      const size = kind === 'items' ? ITEM_PAGE_SIZE : RECIPE_PAGE_SIZE, field = kind === 'items' ? 'itemPage' : 'recipePage', pagesField = kind === 'items' ? 'itemPages' : 'recipePages';
+      this[pagesField] = Math.max(1, Math.ceil(count / size));
+      this[field] = Math.floor(clamp(this[field], 0, this[pagesField] - 1));
+      const start = this[field] * size, end = Math.min(count, start + size), nav = this.nodes[kind + '-pages'];
+      nav.dataset.current = String(this[field] + 1); nav.dataset.pages = String(this[pagesField]);
+      this.nodes[kind + '-page-status'].textContent = count ? `Page ${this[field] + 1} of ${this[pagesField]} · Showing ${start + 1} to ${end} of ${count}` : 'No matching results';
+      for (const button of nav.querySelectorAll('button')) button.disabled = !count || (button.dataset.edge === 'first' || button.dataset.step === '-1' ? this[field] === 0 : this[field] >= this[pagesField] - 1);
+      return { start, end };
+    }
+
+    itemOrigins(id) {
+      const item = this.itemMetadata(id), makers = this.reference.makers[id] || [], uses = this.reference.uses[id] || [];
+      const details = document.createElement('details'); details.className = 'as-item-origin';
+      const summary = document.createElement('summary'); summary.textContent = 'Where to find it and how to make it'; details.append(summary);
+      if ((item.sources || []).length) { const source = document.createElement('p'); source.textContent = 'Loot locations: ' + item.sources.map(label).join(', ') + '.'; details.append(source); }
+      if ((item.toolTags || []).length) { const tools = document.createElement('p'); tools.textContent = 'Reusable recipe tools: ' + item.toolTags.map((tag) => this.itemMetadata(tag).name).join(', ') + '. Compatible versions can fill these tool requirements.'; details.append(tools); }
+      for (const { recipe } of makers.slice(0, 3)) {
+        const path = document.createElement('div'); path.className = 'as-item-make-path';
+        const text = document.createElement('p');
+        text.textContent = `Make with ${recipe.name}: ${this.costText(recipe.cost)}.${recipe.station ? ' Stand beside a ' + label(recipe.station).toLowerCase() + '.' : ''}${(recipe.tools || []).length ? ' Keep ' + recipe.tools.map((tool) => this.itemMetadata(tool).name.toLowerCase()).join(', ') + ' in your pack.' : ''}`;
+        const button = document.createElement('button'); button.dataset.showRecipe = recipe.id; button.textContent = 'Show recipe'; button.setAttribute('aria-label', 'Show recipe: ' + recipe.name);
+        path.append(text, button); details.append(path);
+      }
+      if (makers.length > 3) { const other = document.createElement('p'); other.textContent = `${makers.length - 3} more ways to make this item are searchable in Crafting.`; details.append(other); }
+      if (uses.length) {
+        const use = document.createElement('button'); use.dataset.recipeUses = id; use.textContent = `Used in ${uses.length} ${uses.length === 1 ? 'recipe' : 'recipes'}`; use.setAttribute('aria-label', 'Browse recipes using ' + item.name); details.append(use);
+      }
+      if (!(item.sources || []).length && !makers.length) { const source = document.createElement('p'); source.textContent = 'Gather this resource through its field activity. Search the Journal field guide for mining, gardening and world supplies.'; details.append(source); }
+      return details;
+    }
+
     refreshInventory(force) {
       if (!this.state || !this.state.player) return;
       const inventory = this.state.player.inventory || {};
-      const recipes = Sirens.Engine && Array.isArray(Sirens.Engine.recipes) ? Sirens.Engine.recipes : [];
+      const recipes = this.reference.recipes;
       const equipment = this.state.player.equipment || {};
       const progression = Sirens.Progression && Sirens.Progression.ensure(this.state);
-      const signature = `${this.inventoryPane}|${this.itemView}|${this.sort}|${this.category}|${this.itemQuery}|${this.recipeQuery}|${this.readyOnly}|${JSON.stringify(inventory)}|${JSON.stringify(equipment)}|${this.state.player.weapon}|${this.state.player.x}|${this.state.player.y}|${this.state.player.angle}|${this.state.player.vehicleId}|${this.state.player.health}|${this.state.player.hunger}|${this.state.player.thirst}|${this.state.player.bleeding}|${(this.state.structures || []).length}|${JSON.stringify(progression && [progression.studied, progression.research, progression.xp])}`;
+      const inventorySignature = JSON.stringify(inventory), player = this.state.player;
+      const buildQuotes = this.inventoryPane === 'crafting' ? ['barricade', 'campfire'].map((type) => Sirens.Engine.buildQuote(this.state, type)) : [];
+      const requirementSignature = JSON.stringify([inventorySignature, equipment.backpack, player.vehicleId, player.x, player.y, player.angle, this.state.ended, this.state.stories && this.state.stories.floor, (this.state.structures || []).map((structure) => [structure.type, structure.x, structure.y]), buildQuotes.map((quote) => [quote.can, quote.missing])]);
+      if (requirementSignature !== this.recipeQuoteSignature) { this.recipeQuoteSignature = requirementSignature; this.recipeQuotes.clear(); }
+      const vehicle = this.inventoryPane === 'owned' ? this.nearbyVehicle() : null;
+      const signature = JSON.stringify([this.inventoryPane, this.itemView, this.sort, this.category, this.family, this.tier, this.itemQuery, this.itemPage, this.recipeQuery, this.recipeFamily, this.recipeTier, this.recipePage, this.readyOnly, inventorySignature, equipment, player.weapon, progression && progression.studied, this.inventoryPane === 'crafting' ? requirementSignature : this.inventoryPane === 'owned' ? [player.vehicleId, vehicle && [vehicle.id, vehicle.speed, vehicle.fuel, vehicle.tank]] : '']);
       if (!force && signature === this.lastInventorySignature) return;
       this.lastInventorySignature = signature;
       this.nodes['items-pane'].hidden = this.inventoryPane === 'crafting';
@@ -6507,83 +7154,87 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const equippedNames = Array.from(new Set([this.state.player.weapon, equipment.clothing, equipment.backpack].filter((id) => typeof id === 'string' && id))).map((id) => this.itemMetadata(id).name);
       this.nodes.equipment.textContent = 'Equipped: ' + (equippedNames.join(' · ') || 'nothing');
       this.nodes['catalogue-note'].hidden = this.itemView !== 'catalogue';
-      this.nodes.items.replaceChildren();
-      const catalogue = Sirens.Engine && Sirens.Engine.items || {};
-      const allEntries = this.itemView === 'catalogue' ? Object.keys(catalogue).map((id) => [id, inventory[id] || 0]) : Object.entries(inventory).filter(([, quantity]) => number(quantity) > 0);
-      const entries = allEntries.filter(([id]) => {
-        const item = this.itemMetadata(id);
-        return (this.category === 'all' || (item.category || 'materials') === this.category) && (!this.itemQuery || `${item.name} ${item.category || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase().includes(this.itemQuery));
-      });
-      this.nodes['items-count'].textContent = this.itemView === 'catalogue' ? `${entries.length} / ${Object.keys(catalogue).length} ORIGINAL ITEM DEFINITIONS` : `${entries.length} / ${allEntries.length} ITEM TYPES IN YOUR PACK`;
-      entries.sort((a, b) => {
-        if (this.sort === 'weight') return number(this.itemMetadata(b[0]).weight) * (this.itemView === 'catalogue' ? 1 : number(b[1])) - number(this.itemMetadata(a[0]).weight) * (this.itemView === 'catalogue' ? 1 : number(a[1]));
-        if (this.sort === 'quantity') return number(b[1]) - number(a[1]);
-        return this.itemMetadata(a[0]).name.localeCompare(this.itemMetadata(b[0]).name);
-      });
-      if (!entries.length) {
-        const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = allEntries.length ? 'No items match these filters.' : 'Your pack is empty. Search marked supplies.'; this.nodes.items.append(empty);
-      }
-      entries.forEach(([id, quantity]) => {
-        const metadata = this.itemMetadata(id);
-        const row = document.createElement('article'); row.className = 'as-item'; row.dataset.item = id;
-        row.classList.toggle('as-equipped-item', this.equipped(id));
-        const swatch = document.createElement('span'); swatch.className = 'as-item-icon'; swatch.setAttribute('aria-hidden', 'true'); swatch.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' + (itemSymbols[metadata.category] || itemSymbols.materials) + '</svg>';
-        if (/^#[0-9a-f]{3,8}$/i.test(metadata.color || '')) swatch.style.color = metadata.color;
-        const detail = document.createElement('div');
-        const name = document.createElement('h3'); name.textContent = metadata.name;
-        const description = document.createElement('p'); description.textContent = metadata.description;
-        const facts = document.createElement('small'); facts.className = 'as-item-facts'; facts.textContent = this.itemFacts(metadata);
-        detail.append(name, description, facts);
-        const total = document.createElement('div'); total.className = 'as-item-count';
-        const count = document.createElement('strong'); count.textContent = this.itemView === 'catalogue' ? label(metadata.category || 'materials') : `×${Math.floor(number(quantity))}`;
-        const mass = document.createElement('small'); mass.textContent = `${((this.itemView === 'catalogue' ? 1 : number(quantity)) * number(metadata.weight)).toFixed(2)} kg`;
-        total.append(count, mass); row.append(swatch, detail, total); this.nodes.items.append(row);
-        if (this.itemView === 'owned') {
-          const actions = document.createElement('div'); actions.className = 'as-item-actions';
-          const action = document.createElement('button');
-          if (metadata.weapon || number(metadata.armor) > 0 || number(metadata.capacity) > 0) {
-            action.dataset.equip = id; action.textContent = this.equipped(id) ? 'Equipped' : 'Equip'; action.disabled = this.equipped(id); action.title = 'Equip ' + metadata.name;
-          } else if (metadata.effect) {
-            action.dataset.use = id; action.textContent = metadata.category === 'food' ? 'Eat' : metadata.category === 'drinks' ? 'Drink' : 'Use'; action.title = 'Use ' + metadata.name;
-          } else if (metadata.fuel) {
-            action.dataset.use = id; action.textContent = 'Refuel'; action.title = 'Refuel a nearby stopped vehicle with ' + metadata.name;
-            const reason = this.fuelReason(this.nearbyVehicle(), id); action.disabled = !!reason; if (reason) action.title = reason;
-          } else if (Sirens.Progression && Object.hasOwn(Sirens.Progression.manuals, id)) {
-            action.dataset.action = 'study:' + id; action.textContent = Sirens.Progression.ensure(this.state).studied.includes(id) ? 'Studied' : 'Study'; action.disabled = Sirens.Progression.ensure(this.state).studied.includes(id); action.title = 'Study once for 18 practice and 1 insight; keep the reference.';
+      if (this.inventoryPane !== 'crafting') {
+        const openOrigins = new Set(Array.from(this.nodes.items.querySelectorAll('.as-item-origin[open]')).map((details) => details.closest('[data-item]').dataset.item));
+        this.nodes.items.replaceChildren();
+        const matched = this.matchingItems(inventory, inventorySignature), entries = matched.rows;
+        this.nodes['items-count'].textContent = this.itemView === 'catalogue' ? `${entries.length} / ${matched.total} ORIGINAL ITEM DEFINITIONS` : `${entries.length} / ${matched.total} ITEM TYPES IN YOUR PACK`;
+        this.nodes['items-count'].dataset.matched = String(entries.length); this.nodes['items-count'].dataset.total = String(matched.total);
+        const itemRange = this.refreshPagination('items', entries.length);
+        if (!entries.length) {
+          const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = matched.total ? 'No items match these filters. Clear filters to browse again.' : 'Your pack is empty. Search marked supplies.'; this.nodes.items.append(empty);
+        }
+        entries.slice(itemRange.start, itemRange.end).forEach(({ id, item: metadata }) => {
+          const quantity = inventory[id] || 0;
+          const row = document.createElement('article'); row.className = 'as-item'; row.dataset.item = id;
+          row.classList.toggle('as-equipped-item', this.equipped(id));
+          const swatch = document.createElement('span'); swatch.className = 'as-item-icon'; swatch.setAttribute('aria-hidden', 'true'); swatch.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">' + (itemSymbols[metadata.category] || itemSymbols.materials) + '</svg>';
+          if (/^#[0-9a-f]{3,8}$/i.test(metadata.color || '')) swatch.style.color = metadata.color;
+          const detail = document.createElement('div');
+          const name = document.createElement('h3'); name.textContent = metadata.name;
+          const description = document.createElement('p'); description.textContent = metadata.description;
+          const facts = document.createElement('small'); facts.className = 'as-item-facts'; facts.textContent = this.itemFacts(metadata);
+          detail.append(name, description, facts);
+          if (this.itemView === 'catalogue') {
+            const lineage = document.createElement('small'); lineage.className = 'as-item-lineage'; lineage.textContent = `${label(metadata.family || metadata.category)} · Tier ${number(metadata.tier)}${metadata.rarity ? ' · ' + label(metadata.rarity) : ''}`;
+            const origin = this.itemOrigins(id); origin.open = openOrigins.has(id); detail.append(lineage, origin);
           }
-          if (action.textContent) { action.className = 'as-item-action'; actions.append(action); }
-          const drop = document.createElement('button'); drop.className = 'as-item-action as-drop'; drop.dataset.drop = id; drop.textContent = 'Drop'; drop.title = 'Drop 1 ' + metadata.name + ' on the ground';
-          const dropReason = this.state.player.vehicleId ? 'Leave the vehicle before dropping supplies' : equipment.backpack === id && quantity === 1 && weight - number(metadata.weight) > 24 + .00001 ? 'Drop heavy supplies before dropping your equipped pack' : '';
-          drop.disabled = !!dropReason; if (dropReason) drop.title = dropReason; actions.append(drop);
-          row.append(actions);
+          const total = document.createElement('div'); total.className = 'as-item-count';
+          const count = document.createElement('strong'); count.textContent = this.itemView === 'catalogue' ? label(metadata.category || 'materials') : `×${Math.floor(number(quantity))}`;
+          const mass = document.createElement('small'); mass.textContent = `${((this.itemView === 'catalogue' ? 1 : number(quantity)) * number(metadata.weight)).toFixed(2)} kg`;
+          total.append(count, mass); row.append(swatch, detail, total); this.nodes.items.append(row);
+          if (this.itemView === 'owned') {
+            const actions = document.createElement('div'); actions.className = 'as-item-actions';
+            const action = document.createElement('button');
+            if (metadata.weapon || number(metadata.armor) > 0 || number(metadata.capacity) > 0) {
+              action.dataset.equip = id; action.textContent = this.equipped(id) ? 'Equipped' : 'Equip'; action.disabled = this.equipped(id); action.title = 'Equip ' + metadata.name;
+            } else if (metadata.effect) {
+              action.dataset.use = id; action.textContent = metadata.category === 'food' ? 'Eat' : metadata.category === 'drinks' ? 'Drink' : 'Use'; action.title = 'Use ' + metadata.name;
+            } else if (metadata.fuel) {
+              action.dataset.use = id; action.textContent = 'Refuel'; action.title = 'Refuel a nearby stopped vehicle with ' + metadata.name;
+              const reason = this.fuelReason(this.nearbyVehicle(), id); action.disabled = !!reason; if (reason) action.title = reason;
+            } else if (Sirens.Progression && Object.hasOwn(Sirens.Progression.manuals, id)) {
+              action.dataset.action = 'study:' + id; action.textContent = Sirens.Progression.ensure(this.state).studied.includes(id) ? 'Studied' : 'Study'; action.disabled = Sirens.Progression.ensure(this.state).studied.includes(id); action.title = 'Study once for 18 practice and 1 insight; keep the reference.';
+            }
+            if (action.textContent) { action.className = 'as-item-action'; actions.append(action); }
+            const drop = document.createElement('button'); drop.className = 'as-item-action as-drop'; drop.dataset.drop = id; drop.textContent = 'Drop'; drop.title = 'Drop 1 ' + metadata.name + ' on the ground';
+            const dropReason = this.state.player.vehicleId ? 'Leave the vehicle before dropping supplies' : equipment.backpack === id && quantity === 1 && weight - number(metadata.weight) > 24 + .00001 ? 'Drop heavy supplies before dropping your equipped pack' : '';
+            drop.disabled = !!dropReason; if (dropReason) drop.title = dropReason; actions.append(drop);
+            row.append(actions);
+          }
+        });
+      }
+      if (this.inventoryPane === 'crafting') {
+        this.nodes.recipes.replaceChildren();
+        const visibleRecipes = this.matchingRecipes(inventory, requirementSignature);
+        this.nodes['recipes-count'].textContent = `${visibleRecipes.length} / ${recipes.length} RECIPES`;
+        this.nodes['recipes-count'].dataset.matched = String(visibleRecipes.length); this.nodes['recipes-count'].dataset.total = String(recipes.length);
+        const recipeRange = this.refreshPagination('recipes', visibleRecipes.length);
+        if (!visibleRecipes.length) { const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = 'No recipes match. Clear filters or gather tools and supplies.'; this.nodes.recipes.append(empty); }
+        visibleRecipes.slice(recipeRange.start, recipeRange.end).forEach(({ recipe, family, tier }) => {
+          const row = document.createElement('article'); row.className = 'as-recipe'; row.dataset.recipe = recipe.id;
+          const detail = document.createElement('div');
+          const heading = document.createElement('h3'); heading.textContent = recipe.name;
+          const description = document.createElement('p'); description.textContent = recipe.description || '';
+          const cost = document.createElement('span'); cost.className = 'as-cost'; cost.textContent = this.costText(recipe.cost);
+          const result = document.createElement('span'); result.className = 'as-recipe-result'; result.textContent = 'Makes ' + this.costText(recipe.result);
+          detail.append(heading, description, cost, result);
+          const lineage = document.createElement('small'); lineage.className = 'as-item-lineage'; lineage.textContent = `${label(family)} · Result tier ${tier}`; detail.append(lineage);
+          if ((recipe.tools || []).length || recipe.station) {
+            const requirements = document.createElement('span'); requirements.className = 'as-recipe-requirements';
+            requirements.textContent = [(recipe.tools || []).length ? 'Reusable tools: ' + recipe.tools.map((id) => this.itemMetadata(id).name).join(', ') + ' (compatible versions count)' : '', recipe.station ? 'Station: ' + label(recipe.station) + ' nearby' : ''].filter(Boolean).join(' · ');
+            detail.append(requirements);
+          }
+          const quote = this.recipeQuote(recipe);
+          const reason = document.createElement('small'); reason.className = 'as-recipe-missing'; reason.textContent = quote.can ? 'Ready to craft' : quote.missing.join('. '); detail.append(reason);
+          reason.classList.toggle('as-ready', quote.can);
+          const button = document.createElement('button'); button.dataset.craft = recipe.id; button.textContent = 'Craft'; button.disabled = !quote.can; button.title = reason.textContent;
+          row.append(detail, button); this.nodes.recipes.append(row);
+        });
+        for (const [index, type] of ['barricade', 'campfire'].entries()) {
+          const quote = buildQuotes[index], button = this.root.querySelector('[data-build="' + type + '"]'), reason = this.nodes[type + '-reason'];
+          button.disabled = !quote.can; reason.textContent = quote.can ? 'Ready on the tile you are aiming toward' : quote.missing.join('. '); reason.classList.toggle('as-ready', quote.can); button.title = reason.textContent;
         }
-      });
-      this.nodes.recipes.replaceChildren();
-      const visibleRecipes = recipes.filter((recipe) => (!this.recipeQuery || `${recipe.name} ${recipe.description || ''} ${this.costText(recipe.cost)} ${this.costText(recipe.result)}`.toLowerCase().includes(this.recipeQuery)) && (!this.readyOnly || this.craftReady(recipe, inventory)));
-      this.nodes['recipes-count'].textContent = `${visibleRecipes.length} / ${recipes.length} RECIPES`;
-      if (!visibleRecipes.length) { const empty = document.createElement('p'); empty.className = 'as-muted'; empty.textContent = 'No recipes match. Check your filters or gather tools and supplies.'; this.nodes.recipes.append(empty); }
-      visibleRecipes.forEach((recipe) => {
-        const row = document.createElement('article'); row.className = 'as-recipe';
-        const detail = document.createElement('div');
-        const heading = document.createElement('h3'); heading.textContent = recipe.name;
-        const description = document.createElement('p'); description.textContent = recipe.description || '';
-        const cost = document.createElement('span'); cost.className = 'as-cost'; cost.textContent = this.costText(recipe.cost);
-        const result = document.createElement('span'); result.className = 'as-recipe-result'; result.textContent = 'Makes ' + this.costText(recipe.result);
-        detail.append(heading, description, cost, result);
-        if ((recipe.tools || []).length || recipe.station) {
-          const requirements = document.createElement('span'); requirements.className = 'as-recipe-requirements';
-          requirements.textContent = [(recipe.tools || []).length ? 'Tools: ' + recipe.tools.map((id) => this.itemMetadata(id).name).join(', ') : '', recipe.station ? 'Station: ' + label(recipe.station) + ' nearby' : ''].filter(Boolean).join(' · ');
-          detail.append(requirements);
-        }
-        const quote = Sirens.Engine.craftQuote(this.state, recipe.id);
-        const reason = document.createElement('small'); reason.className = 'as-recipe-missing'; reason.textContent = quote.can ? 'Ready to craft' : quote.missing.join('. '); detail.append(reason);
-        reason.classList.toggle('as-ready', quote.can);
-        const button = document.createElement('button'); button.dataset.craft = recipe.id; button.textContent = 'Craft'; button.disabled = !quote.can; button.title = reason.textContent;
-        row.append(detail, button); this.nodes.recipes.append(row);
-      });
-      for (const type of ['barricade', 'campfire']) {
-        const quote = Sirens.Engine.buildQuote(this.state, type), button = this.root.querySelector('[data-build="' + type + '"]'), reason = this.nodes[type + '-reason'];
-        button.disabled = !quote.can; reason.textContent = quote.can ? 'Ready on the tile you are aiming toward' : quote.missing.join('. '); reason.classList.toggle('as-ready', quote.can); button.title = reason.textContent;
       }
       this.refreshQuickActions();
       if (focusAction) {
@@ -6966,18 +7617,19 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   const renderer = new S.Renderer(canvas, minimap);
   const SAVE_KEY = 'after-the-sirens-save-v1';
   const OPTIONS_KEY = 'after-the-sirens-options-v1';
-  const preferences = { sound: true, volume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false };
+  const preferences = { sound: true, volume: .7, music: true, musicVolume: .35, effects: true, effectsVolume: 1, ambience: true, ambienceVolume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false };
   try {
     const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null');
     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-      for (const key of ['sound', 'motion', 'details']) if (typeof saved[key] === 'boolean') preferences[key] = saved[key];
-      if (typeof saved.volume === 'number' && Number.isFinite(saved.volume)) preferences.volume = Math.max(0, Math.min(1, saved.volume));
+      for (const key of ['sound', 'music', 'effects', 'ambience', 'motion', 'details']) if (typeof saved[key] === 'boolean') preferences[key] = saved[key];
+      for (const key of ['volume', 'musicVolume', 'effectsVolume', 'ambienceVolume']) if (typeof saved[key] === 'number' && Number.isFinite(saved[key])) preferences[key] = Math.max(0, Math.min(1, saved[key]));
       if (typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)) preferences.zoom = Math.max(.7, Math.min(1.5, saved.zoom));
     }
   } catch (_) {}
   function rememberOptions() { try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(preferences)); } catch (_) {} }
   renderer.zoom = preferences.zoom; renderer.ambientMotion = preferences.motion;
   S.Effects.audio.setVolume(preferences.volume); S.Effects.audio.setEnabled(preferences.sound);
+  for (const channel of ['music', 'effects', 'ambience']) S.Effects.audio.setChannel(channel, preferences[channel], preferences[channel + 'Volume']);
 
   const pilot = S.Autoplay ? S.Autoplay.create() : null;
   let autoInput = null;
@@ -7002,6 +7654,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   function setScreen(name) {
     screen = name;
+    if (name !== 'playing') S.Effects.audio.suspend();
     ui.showScreen(name);
     mapShell.hidden = name === 'title';
   }
@@ -7128,7 +7781,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     exportSave: exportSave,
     importSave: importSave,
     action: applyAction,
-    menuChanged: clearInput,
+    menuChanged: function () { clearInput(); S.Effects.audio.suspend(); },
     useItem: function (id) { applyAction('use:' + id); },
     equipItem: function (id) { applyAction('equip:' + id); },
     dropItem: function (id) { applyAction('drop:' + id); },
@@ -7136,6 +7789,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     build: function (type) { stopAutoplay(); if (active && !state.ended) { if (networkReady) network.sendAction('build:' + type); else S.Engine.build(state, type); ui.update(state, frameInfo); } },
     setSound: function (on) { preferences.sound = !!on; S.Effects.audio.setEnabled(on); if (on) unlockAudio(); rememberOptions(); },
     setVolume: function (value) { preferences.volume = Math.max(0, Math.min(1, Number(value) || 0)); S.Effects.audio.setVolume(preferences.volume); rememberOptions(); },
+    setAudioPreference: function (field, value) {
+      const channel = field.replace(/Volume$/, '');
+      if (!['music', 'effects', 'ambience'].includes(channel) || field !== channel && field !== channel + 'Volume') return;
+      if (field === channel) { if (typeof value !== 'boolean') return; preferences[field] = value; }
+      else { if (typeof value !== 'number' || !Number.isFinite(value)) return; preferences[field] = Math.max(0, Math.min(1, value)); }
+      S.Effects.audio.setChannel(channel, preferences[channel], preferences[channel + 'Volume']);
+      if (preferences[channel] && preferences.sound) unlockAudio();
+      rememberOptions();
+    },
     setZoom: function (value) { preferences.zoom = Math.max(.7, Math.min(1.5, Number(value) || 1)); renderer.zoom = preferences.zoom; rememberOptions(); },
     setMotion: function (on) { preferences.motion = !!on; renderer.ambientMotion = preferences.motion; rememberOptions(); },
     setDetails: function (on) { preferences.details = !!on; rememberOptions(); },
@@ -7276,8 +7938,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   });
   addEventListener('keyup', function (event) { keys.delete(event.code); });
   addEventListener('blur', function () { clearInput(); if (active && screen === 'playing' && !(pilot && S.Autoplay.status(pilot).enabled)) pause(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); if (!(pilot && S.Autoplay.status(pilot).enabled)) pause(); } });
-  addEventListener('pagehide', function () { if (active && !networkReady) save(true); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); S.Effects.audio.suspend(); if (!(pilot && S.Autoplay.status(pilot).enabled)) pause(); } });
+  addEventListener('pagehide', function () { S.Effects.audio.suspend(); if (active && !networkReady) save(true); });
   addEventListener('beforeunload', function () { if (active && !networkReady) save(true); });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
   canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
@@ -7354,7 +8016,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
     renderBrain(false);
-    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden);
+    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden, !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
     if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0; }

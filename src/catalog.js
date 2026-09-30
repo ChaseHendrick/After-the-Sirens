@@ -5,8 +5,10 @@
   const colors = Object.freeze({ materials: '#bc9c74', food: '#cbb36c', drinks: '#87b5c2', medical: '#d6a39c', tools: '#abb5a6', melee: '#bac59b', firearms: '#a0a7a0', ammo: '#d0b875', clothing: '#a5b4ab', containers: '#a8b889', electronics: '#9abbc2', books: '#c8b29f', utility: '#c3b88d' });
   function add(id, name, category, weight, description, extra) {
     if (items[id]) throw new Error('Duplicate catalogue item: ' + id);
-    const metadata = Object.assign({ id, name, category, weight, color: colors[category], description, tags: [category] }, extra || {});
+    const metadata = Object.assign({ id, name, category, weight, color: colors[category], description, tags: [category], family: category, tier: 0, rarity: 'common', sources: [] }, extra || {});
     metadata.tags = Object.freeze(metadata.tags.slice());
+    metadata.sources = Object.freeze(metadata.sources.slice());
+    if (metadata.toolTags) metadata.toolTags = Object.freeze(metadata.toolTags.slice());
     if (metadata.effect) metadata.effect = Object.freeze(Object.assign({}, metadata.effect));
     if (metadata.weapon) metadata.weapon = Object.freeze(Object.assign({}, metadata.weapon));
     items[id] = Object.freeze(metadata);
@@ -398,6 +400,330 @@
   loot.ranger = loot.camp;
   loot.depot = loot.warehouse;
   loot.fuel = entries([ ['fuel', 1, 4, 18], ['car_battery', 1, 1, 4], ['wrench', 1, 1, 5], ['repair_kit', 1, 1, 5], ['water', 1, 3, 9], ['food', 1, 2, 6], ['rubber', 1, 3, 7], ['tire_iron', 1, 1, 4] ]);
+
+  // Families are authored around actual survival roles. Material, preparation and
+  // design choices change useful statistics and have a connected ingredient graph.
+  // Advanced results are crafted; the additional scavenging pool is kept small.
+  const extensionLoot = Object.create(null);
+  const rounded = (n) => Math.round(n * 100) / 100;
+  const tierOf = (n) => Math.max(0, Math.min(5, Math.floor(n)));
+  const rarityOf = (tier) => tier < 2 ? 'common' : tier < 3 ? 'uncommon' : tier < 5 ? 'rare' : 'epic';
+  const title = (id) => id.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+  function stock(id, name, category, weight, description, family, tier, extra) {
+    add(id, name, category, rounded(weight), description, Object.assign({ family, tier: tierOf(tier), rarity: rarityOf(tier), tags: [category, family] }, extra || {}));
+  }
+  function queueLoot(id, tables, priority, min, max) {
+    tables.forEach((table) => {
+      if (!loot[table]) throw new Error('Unknown extension loot table: ' + table);
+      if (!extensionLoot[table]) extensionLoot[table] = [];
+      extensionLoot[table].push({ id, min: min || 1, max: max || 1, priority: priority || 1 });
+    });
+  }
+  function prepared(id, name, category, weight, effect, family, tier, cost, tools, station, description) {
+    stock(id, name, category, weight, description, family, tier, { effect, consume: true, tags: [category, family, 'consumable'] });
+    recipe('prepare_' + id, name, cost, { [id]: 1 }, description, tools || [], station);
+  }
+
+  const ingredients = [];
+  const ingredientSets = [
+    { family: 'Orchard and berry food', type: 'fruit', ids: 'apricot peach plum cherry nectarine quince persimmon pomegranate fig date mango papaya pineapple guava passionfruit lychee kiwi grapefruit lemon lime tangerine blackberry blueberry raspberry strawberry cranberry mulberry gooseberry currant elderberry', sources: ['farm', 'grocery', 'restaurant', 'house'], hunger: 10, thirst: 7, weight: .17 },
+    { family: 'Garden food', type: 'vegetable', ids: 'onion garlic leek shallot cabbage kale spinach chard lettuce broccoli cauliflower brussels_sprout turnip parsnip rutabaga beet radish celeriac cucumber zucchini pumpkin squash eggplant bell_pepper sweet_potato green_peas', sources: ['farm', 'grocery', 'restaurant', 'suburban'], hunger: 9, thirst: 6, weight: .23 },
+    { family: 'Grain and pulse food', type: 'grain', ids: 'barley rye millet buckwheat spelt sorghum cornmeal quinoa amaranth bulgur lentil chickpea split_pea mung_bean polenta semolina', sources: ['farm', 'grocery', 'restaurant', 'warehouse'], hunger: 13, thirst: -5, weight: .26 },
+    { family: 'Protein supplies', type: 'protein', ids: 'smoked_ham cured_sausage dried_salami tinned_chicken tinned_turkey tinned_duck tinned_tuna tinned_salmon tinned_sardine tinned_mackerel tinned_clam tinned_mussel tinned_crab tinned_shrimp dried_cod dried_anchovy dried_herring cured_beef cured_lamb smoked_venison smoked_rabbit smoked_pork hard_cheese dried_egg', sources: ['grocery', 'restaurant', 'house', 'camp'], hunger: 20, thirst: -4, weight: .2 }
+  ];
+  const preparations = {
+    fruit: [
+      ['salad', 'Salad', 1.35, 14, 3, .36, false, 'Fresh fruit preserves hydration while adding a modest meal.'],
+      ['compote', 'Camp Compote', 1.8, 18, 5, .44, true, 'A campfire fruit meal with more hunger recovery and useful water.'],
+      ['dried_slices', 'Dried Slices', 1.45, -4, 8, .12, true, 'A light travel snack that trades water for energy density.'],
+      ['fruit_leather', 'Fruit Leather', 1.65, -2, 10, .14, true, 'A compact cooked fruit strip with a strong stamina return.'],
+      ['preserve', 'Pantry Preserve', 1.7, 3, 11, .28, true, 'A sweet pantry meal that restores hunger and sprint energy.'],
+      ['grain_bowl', 'Grain Bowl', 2.55, 8, 7, .5, true, 'Fruit and dry grain make a substantial camp meal.'],
+      ['trail_mix', 'Trail Mix', 2.2, -3, 13, .23, false, 'A dense fruit-and-nut supply for long expeditions.']
+    ],
+    vegetable: [
+      ['camp_soup', 'Camp Soup', 2.5, 26, 5, .58, true, 'A water-rich cooked meal for recovering hunger and thirst together.'],
+      ['roast', 'Camp Roast', 2.1, 4, 7, .31, true, 'A simple cooked vegetable meal with useful stamina recovery.'],
+      ['pickle', 'Salted Pickle', 1.6, 7, 3, .24, false, 'A small prepared snack with moderate hydration.'],
+      ['crisp', 'Vegetable Crisp', 1.55, -4, 10, .13, true, 'A light cooked snack with less water and more travel energy.'],
+      ['porridge', 'Savory Porridge', 3.1, 17, 8, .54, true, 'Vegetables and oats make a filling, hydrating camp meal.'],
+      ['flatbread', 'Garden Flatbread', 2.9, -1, 10, .32, true, 'A substantial meal that is easier to carry than soup.'],
+      ['supper_packet', 'Supper Packet', 3.45, 4, 11, .42, false, 'A prepared vegetable, grain and protein ration for travel.']
+    ],
+    grain: [
+      ['flatbread', 'Camp Flatbread', 2.2, -2, 6, .31, true, 'A straightforward cooked grain meal.'],
+      ['porridge', 'Camp Porridge', 2.7, 22, 7, .56, true, 'A filling water-rich breakfast cooked beside a campfire.'],
+      ['crackers', 'Field Crackers', 1.65, -6, 8, .15, true, 'Light dry food with a clear carrying advantage.'],
+      ['honey_cluster', 'Honey Cluster', 1.9, -2, 14, .2, false, 'A grain-and-honey ration with a strong stamina effect.'],
+      ['bean_bowl', 'Bean Bowl', 3.4, 10, 9, .61, true, 'A substantial grain-and-bean meal for a long recovery stop.'],
+      ['broth_dumplings', 'Broth Dumplings', 2.8, 24, 7, .59, true, 'Cooked grain in broth restores both hunger and thirst.'],
+      ['travel_biscuit', 'Travel Biscuit', 2.5, -4, 12, .22, true, 'A compact grain ration made with nuts and a little sugar.']
+    ],
+    protein: [
+      ['stew', 'Camp Stew', 1.9, 15, 7, .62, true, 'Protein and vegetables make a substantial hydrating camp meal.'],
+      ['skillet', 'Skillet Meal', 1.65, 1, 9, .41, true, 'A compact cooked meal with more energy than water.'],
+      ['jerky', 'Trail Jerky', 1.35, -8, 10, .13, true, 'Very light travel protein; carry water alongside it.'],
+      ['smoked_ration', 'Smoked Ration', 1.55, -5, 12, .2, true, 'A dense cooked protein ration for a long expedition.'],
+      ['sandwich', 'Field Sandwich', 2.1, 1, 8, .36, false, 'Protein and bread make a meal without a cooking stop.'],
+      ['broth_bowl', 'Broth Bowl', 1.55, 29, 5, .64, true, 'A lighter water-rich recovery meal.'],
+      ['meal_packet', 'Travel Meal Packet', 2.35, -2, 13, .39, false, 'A grain-and-protein ration with strong hunger and stamina recovery.']
+    ]
+  };
+  ingredientSets.forEach((set) => set.ids.split(' ').forEach((id, index) => {
+    const name = title(id), hunger = set.hunger + index % 7, thirst = set.thirst + index % 5;
+    const ingredient = { id, name, type: set.type, hunger, thirst, index };
+    ingredients.push(ingredient);
+    stock(id, name, 'food', set.weight + (index % 5 - 2) * .015, 'Scavenge this food from ' + set.sources.map(title).join(', ') + '. Eat it directly or use it in seven distinct meal preparations.', set.family, 0, { effect: { hunger, thirst, stamina: 1 + index % 4 }, consume: true, tags: ['food', 'ingredient', set.type] });
+    queueLoot(id, set.sources, 1.4, 1, 3);
+    preparations[set.type].forEach((form, formIndex) => {
+      const output = id + '_' + form[0], cost = { [id]: 2 }, tools = form[6] ? ['cooking_pot'] : [];
+      if (form[6]) { cost.wood = 1; cost.water = 1; }
+      if (['preserve', 'honey_cluster', 'fruit_leather'].includes(form[0])) cost.honey = 1;
+      if (['grain_bowl', 'flatbread', 'meal_packet', 'supper_packet'].includes(form[0])) cost.rice = 1;
+      if (['trail_mix', 'travel_biscuit'].includes(form[0])) cost.nuts = 1;
+      if (form[0] === 'pickle' || form[0] === 'jerky') cost.salt = 1;
+      if (form[0] === 'porridge' && set.type === 'vegetable') cost.oats = 1;
+      if (form[0] === 'bean_bowl') cost.canned_beans = 1;
+      if (form[0] === 'broth_dumplings' || form[0] === 'broth_bowl') cost.broth = 1;
+      if (form[0] === 'sandwich') cost.bread = 1;
+      if (form[0] === 'supper_packet') cost.canned_fish = 1;
+      prepared(output, name + ' ' + form[1], 'food', form[5] + index % 4 * .01, { hunger: Math.min(58, Math.round(hunger * form[2])), thirst: form[3] + index % 3, stamina: form[4] + index % 4 }, 'Prepared ' + set.type + ' meals', formIndex > 4 ? 2 : 1, cost, tools, form[6] ? 'campfire' : undefined, form[7]);
+    });
+  }));
+
+  const herbIds = 'meadow_mint lemon_balm marsh_mallow plantain_leaf chamomile hibiscus rosehip juniper_tip elderflower raspberry_leaf nettle_leaf rosemary thyme sage lavender fennel_seed anise_seed coriander_seed cumin_seed ginger_piece turmeric_piece cinnamon_bark clove_bud licorice_root'.split(' ');
+  herbIds.forEach((id, index) => {
+    stock(id, title(id), 'utility', .04 + index % 5 * .008, 'An ingredient for four drinks and six dressing preparations. Recovery effects use the abstract game meters.', 'Herbs and spices', index > 15 ? 1 : 0, { tags: ['utility', 'ingredient', 'herb'] });
+    queueLoot(id, index < 15 ? ['forest', 'river', 'farm', 'cabin', 'camp'] : ['grocery', 'restaurant', 'pharmacy', 'house'], 1, 1, 3);
+  });
+  const beverageBases = ingredients.filter((entry) => entry.type === 'fruit' || entry.type === 'vegetable').concat(herbIds.map((id, index) => ({ id, name: title(id), type: 'herb', index })));
+  beverageBases.forEach((base) => {
+    const forms = base.type === 'fruit' ? [ ['juice', 'Pressed Juice', 35, 6, 3, false], ['infusion', 'Fruit Infusion', 31, 2, 8, true], ['recovery_drink', 'Recovery Drink', 51, 4, 15, false], ['cordial', 'Camp Cordial', 27, 9, 18, true] ] : base.type === 'vegetable' ? [ ['pressed_drink', 'Garden Drink', 32, 8, 4, false], ['broth', 'Garden Broth', 41, 11, 7, true], ['salted_broth', 'Travel Broth', 48, 8, 13, true], ['oat_drink', 'Savory Oat Drink', 28, 20, 10, true] ] : [ ['infusion', 'Herbal Infusion', 29, 0, 8, true], ['cold_brew', 'Cold Brew', 34, 0, 5, false], ['honey_brew', 'Honey Brew', 26, 8, 18, true], ['recovery_drink', 'Herbal Recovery Drink', 49, 2, 14, false] ];
+    forms.forEach((form, formIndex) => {
+      const cost = { [base.id]: 1, water: 1 };
+      if (form[5]) cost.wood = 1;
+      if (form[0].includes('recovery') || form[0] === 'salted_broth') { cost.salt = 1; cost.sugar = 1; }
+      if (form[0] === 'cordial' || form[0] === 'honey_brew') cost.honey = 1;
+      if (form[0] === 'oat_drink') cost.oats = 1;
+      const effect = { thirst: form[2] + base.index % 4, hunger: form[3], stamina: form[4] + base.index % 3 };
+      prepared(base.id + '_' + form[0], base.name + ' ' + form[1], 'drinks', .28 + formIndex * .055 + base.index % 3 * .01, effect, base.type === 'herb' ? 'Herbal drinks' : base.type === 'fruit' ? 'Fruit drinks' : 'Vegetable drinks', formIndex > 1 ? 2 : 1, cost, form[5] ? ['cooking_pot'] : ['funnel'], form[5] ? 'campfire' : undefined, 'Prepare a drink that restores ' + effect.thirst + ' thirst and ' + effect.stamina + ' stamina in the game. Ingredient units are abstract.');
+    });
+  });
+  const dressingForms = [
+    ['compress', 'Field Compress', 7, 25, 3, .12, ['cloth', 'water']],
+    ['poultice', 'Packed Poultice', 11, 35, 5, .17, ['cloth', 'honey']],
+    ['clean_wrap', 'Clean Wrap', 9, 65, 8, .16, ['gauze', 'soap']],
+    ['care_tonic', 'Recovery Tonic', 8, 0, 6, .3, ['water', 'sugar']],
+    ['field_dressing', 'Reinforced Dressing', 17, 100, 10, .23, ['bandage', 'antiseptic']],
+    ['recovery_kit', 'Recovery Kit', 28, 100, 16, .48, ['emergency_dressing', 'antiseptic', 'cloth']]
+  ];
+  herbIds.forEach((id, index) => dressingForms.forEach((form, formIndex) => {
+    const cost = { [id]: 2 }; form[6].forEach((ingredient) => { cost[ingredient] = 1; });
+    const effect = { health: form[2] + index % 3, bleeding: form[3], infection: form[4] + index % 4 };
+    if (formIndex === 3) { effect.thirst = 18; effect.stamina = 10 + index % 5; }
+    prepared(id + '_' + form[0], title(id) + ' ' + form[1], 'medical', form[5] + index % 3 * .01, effect, 'Prepared field care', formIndex < 2 ? 1 : formIndex < 4 ? 2 : 3, cost, formIndex < 3 ? ['mortar', 'needle'] : ['mortar', 'first_aid_manual'], undefined, 'A one-use preparation for the simplified health, bleeding and infection meters. The ingredient name does not assert real medical treatment.');
+  }));
+
+  // Toughness, density and workability make each stock a different compromise.
+  const metals = [
+    ['mild_steel', 'Mild Steel', 1, 1, 1, 1], ['wrought_iron', 'Wrought Iron', .9, 1.02, .94, 1],
+    ['carbon_steel', 'Carbon Steel', 1.1, 1.02, 1.03, 2], ['stainless_steel', 'Stainless Steel', 1.04, 1.06, .98, 2],
+    ['spring_steel', 'Spring Steel', 1.07, .98, 1.13, 3], ['tool_steel', 'Tool Steel', 1.2, 1.13, .93, 3],
+    ['nickel_steel', 'Nickel Steel', 1.13, 1.08, 1.07, 3], ['manganese_steel', 'Manganese Steel', 1.15, 1.15, .91, 3],
+    ['boron_steel', 'Boron Steel', 1.17, 1.04, 1.08, 4], ['chrome_steel', 'Chrome Steel', 1.19, 1.1, 1.02, 4],
+    ['aluminum', 'Aluminum', .72, .48, 1.16, 1], ['bronze', 'Bronze', .84, 1.14, 1.07, 1],
+    ['brass', 'Brass', .78, 1.12, 1.1, 1], ['copper', 'Copper', .67, 1.16, 1.14, 1],
+    ['titanium', 'Titanium', 1.12, .62, .96, 4], ['nickel_alloy', 'Nickel Alloy', 1.16, 1.18, 1.04, 4],
+    ['cobalt_alloy', 'Cobalt Alloy', 1.25, 1.22, .88, 5], ['cast_iron', 'Cast Iron', .88, 1.17, .85, 1],
+    ['zinc_alloy', 'Zinc Alloy', .7, .86, 1.15, 1], ['pewter', 'Pewter', .64, .96, 1.19, 1]
+  ].map((row) => ({ id: row[0], name: row[1], strength: row[2], density: row[3], speed: row[4], tier: row[5] }));
+  const timbers = [
+    ['ash', .82, 1.03], ['beech', .95, .98], ['birch', .73, 1], ['cedar', .54, .8], ['cherrywood', .84, .92], ['elm', .89, .99], ['hickory', 1.08, 1.16],
+    ['maple', .98, 1.06], ['oak', 1.12, 1.11], ['pine', .62, .79], ['poplar', .59, .76], ['spruce', .55, .82], ['walnut', .88, 1.02], ['yew', .91, 1.12]
+  ].map((row) => ({ id: row[0], name: title(row[0]), density: row[1], strength: row[2] }));
+  const fabrics = [
+    ['linen', .58, .78, 0], ['hemp_canvas', .84, .92, 1], ['cotton_twill', .66, .84, 0], ['denim', .88, .95, 1],
+    ['oilskin', .82, .89, 1], ['wool_felt', .97, 1.02, 1], ['plain_canvas', .86, .96, 1], ['corduroy', .78, .87, 0],
+    ['burlap', .67, .73, 0], ['ripstop', .53, 1.06, 2], ['leather_suede', 1.13, 1.1, 2], ['waxed_canvas', .94, 1.05, 2],
+    ['nylon_webbing', .59, 1.13, 2], ['sailcloth', .85, 1.14, 2], ['quilted_cotton', 1.05, 1.18, 2], ['duckcloth', .92, 1.08, 1],
+    ['seatbelt_weave', .96, 1.31, 3], ['fleece', .76, .88, 0], ['neoprene', .84, 1.16, 2], ['aramid', .7, 1.48, 4],
+    ['ballistic_nylon', .91, 1.41, 3], ['felt_blend', .87, 1.04, 1], ['firecloth', 1.08, 1.35, 3], ['laminated_mesh', .77, 1.44, 4]
+  ].map((row) => ({ id: row[0], name: title(row[0]), density: row[1], strength: row[2], tier: row[3] }));
+  metals.forEach((metal) => {
+    const root = metal.id + '_stock';
+    stock(root, metal.name + ' Stock', 'materials', .58 * metal.density, 'Salvaged material for billets, fittings, weapons and tools. Toughness and density shape the resulting equipment statistics.', 'Metal stock', metal.tier);
+    queueLoot(root, ['industrial', 'hardware', 'garage', 'warehouse'], 1 / (1 + metal.tier), 1, 2);
+    const forms = [ ['billet', 'Billet', .78, { [root]: 2, charcoal: 1 }, ['hammer'], 'campfire'], ['plate', 'Plate', .55, { [metal.id + '_billet']: 1 }, ['hammer', 'tin_snips']], ['bar', 'Bar', .46, { [metal.id + '_billet']: 1 }, ['file']], ['edge', 'Edged Blank', .31, { [metal.id + '_bar']: 1, cloth: 1 }, ['file', 'sharpening_stone']], ['hinge', 'Hinge Set', .19, { [metal.id + '_plate']: 1, wire: 1 }, ['pliers']], ['mechanism', 'Mechanism', .4, { [metal.id + '_bar']: 1, spring: 1, screws: 1 }, ['wrench', 'file']] ];
+    forms.forEach((form) => {
+      const id = metal.id + '_' + form[0];
+      stock(id, metal.name + ' ' + form[1], 'materials', form[2] * metal.density, 'A shaped ' + metal.name.toLowerCase() + ' component used by equipment assemblies. Processing is an abstract game recipe.', 'Worked metal', Math.min(5, metal.tier + 1));
+      recipe('form_' + id, 'Shape ' + metal.name + ' ' + form[1], form[3], { [id]: 1 }, 'Prepare an equipment component from salvaged stock; the process uses the simplified game crafting model.', form[4], form[5]);
+    });
+  });
+  timbers.forEach((timber, index) => {
+    const root = timber.id + '_timber';
+    stock(root, timber.name + ' Timber', 'materials', .72 * timber.density, 'Specific wood stock for grips, shafts, frame supports and slats. It feeds field equipment and carrying designs.', 'Timber stock', index % 4);
+    queueLoot(root, ['forest', 'cabin', 'farm', 'camp'], 1, 1, 3);
+    [ ['grip', 'Grip', .16, 2, ['kitchen_knife']], ['shaft', 'Shaft', .48, 1, ['saw']], ['frame', 'Frame', .7, 1, ['saw', 'hammer']], ['slat', 'Slats', .24, 2, ['saw']] ].forEach((form) => {
+      const id = timber.id + '_' + form[0];
+      stock(id, timber.name + ' ' + form[1], 'materials', form[2] * timber.density, 'A shaped wood component for crafted tools, weapons and carrying frames.', 'Worked timber', 1);
+      recipe('form_' + id, 'Shape ' + timber.name + ' ' + form[1], { [root]: 1 }, { [id]: form[3] }, 'Work specific timber into useful equipment components.', form[4]);
+    });
+  });
+  fabrics.forEach((fabric) => {
+    const root = fabric.id + '_textile';
+    stock(root, fabric.name + ' Textile', 'materials', .37 * fabric.density, 'Scavenged fabric stock for panels, cords, padding and reinforcement. Stronger fabric improves carrying and protection at a different weight cost.', 'Textile stock', fabric.tier);
+    queueLoot(root, ['clothing', 'warehouse', 'house', 'suburban'], 1 / (1 + fabric.tier), 1, 3);
+    [ ['panel', 'Panel', .31, ['needle']], ['cord', 'Cord', .08, ['needle']], ['padding', 'Padding', .4, ['sewing_kit']], ['reinforcement', 'Reinforcement', .3, ['sewing_kit', 'tailoring_manual']] ].forEach((form) => {
+      const id = fabric.id + '_' + form[0], cost = { [root]: 1, thread: 1 };
+      if (form[0] === 'padding') cost.cloth = 1;
+      if (form[0] === 'reinforcement') cost.duct_tape = 1;
+      stock(id, fabric.name + ' ' + form[1], 'materials', form[2] * fabric.density, 'A prepared textile component for protective clothing or carrying gear.', 'Worked textiles', Math.min(5, fabric.tier + 1));
+      recipe('form_' + id, 'Prepare ' + fabric.name + ' ' + form[1], cost, { [id]: 1 }, 'Prepare flexible components for garment and bag assembly.', form[3]);
+    });
+  });
+
+  // Profiles describe different physical roles, rather than quality suffixes.
+  const meleeForms = [
+    ['combat_knife', 'Combat Knife', .27, 22, 47, .3, 5, 42, 'edge'], ['kukri', 'Forward-Curved Knife', .56, 32, 56, .43, 9, 61, 'edge'],
+    ['cutlass', 'Camp Cutlass', .92, 38, 72, .53, 12, 82, 'edge'], ['sabre', 'Scout Sabre', .78, 32, 79, .42, 10, 74, 'edge'],
+    ['shortsword', 'Short Sword', .68, 31, 65, .4, 8, 59, 'edge'], ['longsword', 'Long Sword', 1.45, 47, 93, .76, 19, 92, 'edge'],
+    ['hand_axe', 'Hand Axe', .88, 35, 62, .52, 12, 105, 'axe'], ['camp_axe', 'Camp Axe', 1.38, 44, 77, .68, 17, 121, 'axe'],
+    ['boarding_axe', 'Boarding Axe', 1.77, 51, 82, .8, 21, 132, 'axe'], ['poleaxe', 'Long Poleaxe', 2.45, 55, 109, 1.02, 27, 142, 'axe'],
+    ['war_hammer', 'Impact Hammer', 1.94, 49, 73, .84, 20, 146, 'impact'], ['maul', 'Heavy Maul', 3.8, 65, 90, 1.22, 31, 183, 'impact'],
+    ['mace', 'Field Mace', 1.47, 43, 71, .72, 16, 115, 'impact'], ['flanged_mace', 'Ribbed Mace', 1.63, 46, 74, .8, 18, 122, 'impact'],
+    ['war_pick', 'Hooked Impact Pick', 1.64, 47, 72, .84, 19, 128, 'pick'], ['spear', 'Socket Spear', 1.23, 36, 107, .67, 13, 70, 'reach'],
+    ['partisan', 'Broad Spear', 1.73, 43, 113, .85, 18, 87, 'reach'], ['halberd', 'Guard Halberd', 2.21, 50, 115, .98, 24, 111, 'reach'],
+    ['glaive', 'Long Glaive', 1.82, 45, 114, .88, 20, 89, 'reach'], ['hook_spear', 'Hook Spear', 1.52, 39, 110, .78, 16, 82, 'reach'],
+    ['pry_baton', 'Pry Baton', 1.37, 31, 70, .54, 11, 109, 'pry'], ['chain_morningstar', 'Linked Impact Club', 2.19, 51, 85, 1.05, 25, 153, 'impact'],
+    ['trench_club', 'Weighted Field Club', 1.42, 36, 77, .58, 13, 118, 'impact'], ['guard_baton', 'Guard Baton', .79, 26, 74, .42, 8, 86, 'impact'],
+    ['sickle', 'Harvest Sickle', .53, 25, 58, .4, 7, 55, 'edge'], ['cleaver', 'Camp Cleaver', .49, 30, 52, .43, 8, 69, 'edge']
+  ];
+  metals.forEach((metal, metalIndex) => meleeForms.forEach((form, formIndex) => {
+    const id = metal.id + '_' + form[0], timber = timbers[(metalIndex + formIndex) % timbers.length], reach = form[8] === 'reach' || form[0] === 'poleaxe';
+    const weight = rounded(form[2] * metal.density + .09 * timber.density), damage = Math.round(form[3] * metal.strength);
+    const cooldown = rounded(form[5] / metal.speed), staminaCost = Math.max(3, Math.round(form[6] * (.75 + metal.density * .25)));
+    const extra = { weapon: { kind: 'melee', damage, range: form[4], cooldown, staminaCost, noise: Math.round(form[7] * (.8 + metal.density * .2)) }, tags: ['melee', 'weapon', metal.id, form[8]] };
+    if (['combat_knife', 'kukri', 'cleaver'].includes(form[0])) extra.toolTags = ['kitchen_knife'];
+    if (form[8] === 'axe') { extra.toolTags = ['hatchet']; extra.treeDamage = 1.5; extra.doorDamage = 1.25; }
+    if (form[8] === 'pry') { extra.toolTags = ['crowbar']; extra.doorDamage = 1.25; }
+    if (form[8] === 'pick' || form[0] === 'maul') extra.wallDamage = 2.5;
+    const tier = Math.min(5, metal.tier + (reach || form[0] === 'maul' ? 1 : 0));
+    stock(id, metal.name + ' ' + form[1], 'melee', weight, 'A ' + metal.name.toLowerCase() + ' ' + form[1].toLowerCase() + ' on ' + timber.name.toLowerCase() + ' fittings. ' + damage + ' damage, ' + form[4] + ' reach and ' + staminaCost + ' stamina per swing define its combat role.', 'Material melee weapons', tier, extra);
+    const cost = { [metal.id + '_bar']: 1, [metal.id + (form[8] === 'impact' ? '_billet' : '_edge')]: 1, [timber.id + (reach ? '_shaft' : '_grip')]: 1, bolts: 1 };
+    if (form[0] === 'chain_morningstar') cost[metal.id + '_hinge'] = 2;
+    recipe('assemble_' + id, 'Assemble ' + metal.name + ' ' + form[1], cost, { [id]: 1 }, 'Combine shaped material and timber into a weapon with its own damage, reach, recovery, weight and stamina tradeoffs.', ['wrench', 'file']);
+    if (metalIndex < 4 && [0, 6, 20, 24].includes(formIndex)) queueLoot(id, ['hardware', 'garage', 'warehouse'], .55);
+    if (weight >= .9) recipe('recover_' + id, 'Recover ' + metal.name + ' Stock', { [id]: 1 }, { [metal.id + '_stock']: 1 }, 'Dismantle this weapon to recover part of its material; grips and processing supplies are lost.', ['wrench']);
+  }));
+
+  const toolForms = [
+    ['claw_hammer', 'Claw Hammer', .91, 27, 57, .52, 9, 100, ['hammer']], ['joiner_mallet', 'Joiner Mallet', 1.16, 26, 62, .64, 10, 69, ['hammer']],
+    ['tack_hammer', 'Tack Hammer', .43, 17, 50, .36, 5, 61, ['hammer']], ['cabinet_saw', 'Cabinet Saw', .64, 18, 57, .43, 7, 63, ['saw']],
+    ['field_file', 'Field File', .28, 13, 44, .3, 4, 39, ['file', 'sharpening_stone']], ['piercing_awl', 'Piercing Awl', .12, 12, 40, .25, 3, 31, ['needle']],
+    ['hinge_wrench', 'Hinge Wrench', .75, 25, 59, .5, 8, 86, ['wrench']], ['flat_driver', 'Flat Driver', .19, 14, 43, .29, 4, 33, ['screwdriver']],
+    ['grip_pliers', 'Grip Pliers', .34, 16, 45, .37, 5, 45, ['pliers']], ['wire_shear', 'Wire Shear', .41, 17, 47, .39, 6, 48, ['wire_cutters']],
+    ['sheet_cutter', 'Sheet Cutter', .51, 19, 49, .42, 7, 55, ['tin_snips']], ['hand_borer', 'Hand Borer', .83, 19, 52, .48, 8, 59, ['drill']],
+    ['camp_pot', 'Camp Pot', .97, 21, 59, .53, 9, 132, ['cooking_pot', 'frying_pan']], ['herb_mortar', 'Herb Mortar', .67, 20, 44, .51, 8, 79, ['mortar']],
+    ['chipping_pick', 'Chipping Pick', 1.73, 34, 77, .86, 19, 142, ['pickaxe']], ['demolition_hammer', 'Demolition Hammer', 3.12, 58, 85, 1.11, 28, 170, ['sledgehammer']]
+  ];
+  metals.forEach((metal, metalIndex) => toolForms.forEach((form, formIndex) => {
+    const id = metal.id + '_' + form[0], timber = timbers[(metalIndex * 3 + formIndex) % timbers.length];
+    const weight = rounded(form[2] * metal.density + .04 * timber.density), extra = { toolTags: form[8], weapon: { kind: 'melee', damage: Math.round(form[3] * metal.strength), range: form[4], cooldown: rounded(form[5] / metal.speed), staminaCost: Math.max(2, Math.round(form[6] * (.78 + metal.density * .22))), noise: Math.round(form[7] * (.85 + metal.density * .15)) }, tags: ['tools', 'weapon', metal.id, 'reusable'] };
+    if (form[0] === 'chipping_pick') { extra.miningDamage = Math.round(38 * metal.strength / Math.sqrt(metal.density)); extra.wallDamage = 2.5; }
+    if (form[0] === 'demolition_hammer') { extra.miningDamage = Math.round(18 * metal.strength); extra.wallDamage = 3; }
+    const tier = Math.min(5, metal.tier + (formIndex > 10 ? 1 : 0));
+    stock(id, metal.name + ' ' + form[1], 'tools', weight, 'A reusable ' + form[1].toLowerCase() + ' that satisfies ' + form[8].map((tag) => items[tag].name.toLowerCase()).join(' and ') + ' recipe requirements. It can also be equipped for melee' + (extra.miningDamage ? ' and mines deposits for ' + extra.miningDamage + ' damage' : '') + '.', 'Material field tools', tier, extra);
+    const cost = { [metal.id + '_bar']: 1, [metal.id + (formIndex === 12 ? '_plate' : formIndex === 11 ? '_mechanism' : formIndex < 3 || formIndex > 12 ? '_billet' : '_edge')]: 1, [timber.id + (formIndex > 13 ? '_shaft' : '_grip')]: 1, screws: 1 };
+    recipe('assemble_' + id, 'Assemble ' + metal.name + ' ' + form[1], cost, { [id]: 1 }, 'Make a reusable material-specific tool for existing crafting and survival actions.', ['file', 'wrench']);
+    if (metalIndex < 5 && [0, 3, 6, 7, 14].includes(formIndex)) queueLoot(id, ['hardware', 'workshop', 'garage'], .8);
+    if (weight >= .7) recipe('recover_' + id, 'Recover ' + metal.name + ' Tool Stock', { [id]: 1 }, { [metal.id + '_stock']: 1 }, 'Recover part of this reusable tool as stock for a different assembly.', ['wrench']);
+  }));
+
+  const garmentForms = [
+    ['utility_vest', 'Utility Vest', .5, .07, 2, false], ['work_smock', 'Work Smock', .7, .09, 3, false], ['quilted_coat', 'Quilted Coat', 1.46, .18, 4, true],
+    ['patrol_coat', 'Patrol Coat', 1.3, .16, 4, true], ['reinforced_jacket', 'Reinforced Jacket', 1.64, .24, 5, true], ['trail_tunic', 'Trail Tunic', .57, .08, 2, false],
+    ['mechanic_apron', 'Mechanic Apron', .96, .13, 3, false], ['guard_tabard', 'Guard Tabard', 1.4, .22, 4, true], ['scout_wrap', 'Scout Wrap', .36, .05, 2, false],
+    ['forester_coat', 'Forester Coat', 1.1, .15, 4, false], ['knee_guard', 'Knee Guard', .32, .06, 2, false], ['arm_wrap', 'Arm Wrap', .24, .04, 2, false],
+    ['shoulder_mantle', 'Shoulder Mantle', .65, .1, 3, false], ['salvager_overall', 'Salvager Overall', 1.28, .2, 4, true], ['breacher_vest', 'Breacher Vest', 2.38, .31, 5, true],
+    ['patchwork_poncho', 'Patchwork Poncho', .83, .11, 3, false], ['padded_helmet', 'Padded Helmet', .55, .12, 2, true], ['courier_jerkin', 'Courier Jerkin', .75, .14, 3, true]
+  ];
+  fabrics.forEach((fabric, fabricIndex) => garmentForms.forEach((form, formIndex) => {
+    const id = fabric.id + '_' + form[0], armor = rounded(Math.min(.52, form[3] * fabric.strength)), weight = rounded(form[2] * fabric.density + (form[5] ? .14 : 0));
+    stock(id, fabric.name + ' ' + form[1], 'clothing', weight, 'A ' + fabric.name.toLowerCase() + ' protective design with ' + Math.round(armor * 100) + '% damage reduction at ' + weight + ' kg. Uses the single protective clothing slot; insulation and specialized body slots are not simulated.', 'Protective garment designs', Math.min(5, fabric.tier + (form[5] ? 1 : 0)), { armor, tags: ['clothing', 'protective', fabric.id] });
+    const cost = { [fabric.id + '_panel']: form[4], [fabric.id + '_cord']: 1, [fabric.id + '_padding']: form[5] ? 2 : 1, thread: 1 };
+    if (form[5]) cost[fabric.id + '_reinforcement'] = 1;
+    if (form[0] === 'breacher_vest') cost[metals[fabricIndex % metals.length].id + '_plate'] = 1;
+    recipe('assemble_' + id, 'Sew ' + fabric.name + ' ' + form[1], cost, { [id]: 1 }, 'Choose a protective garment whose textile and design balance weight against damage reduction.', form[5] ? ['sewing_kit', 'tailoring_manual'] : ['sewing_kit']);
+    if (fabricIndex < 7 && [0, 1, 8, 15].includes(formIndex)) queueLoot(id, ['clothing', 'house', 'warehouse'], .65);
+    recipe('recover_' + id, 'Recover ' + fabric.name + ' Fabric', { [id]: 1 }, { [fabric.id + '_textile']: 1 }, 'Cut this garment back into one supply of textile stock; padding and assembly supplies are lost.', ['kitchen_knife']);
+  }));
+  const bagForms = [
+    ['hip_satchel', 'Hip Satchel', .3, 3, 2, false], ['roll_pack', 'Roll Pack', .49, 6, 3, false], ['tool_roll', 'Tool Roll', .4, 4, 2, false],
+    ['medical_satchel', 'Medical Satchel', .52, 5, 3, false], ['forager_sling', 'Forager Sling', .35, 4, 2, false], ['water_carrier', 'Supply Carrier', .61, 7, 4, false],
+    ['shoulder_pack', 'Shoulder Pack', .59, 8, 4, false], ['rucksack', 'Trail Rucksack', .86, 11, 5, false], ['hauler_bag', 'Hauler Bag', 1.09, 13, 6, false],
+    ['frame_rig', 'Frame Rig', 1.41, 15, 5, true], ['expedition_pack', 'Expedition Pack', 1.58, 17, 6, true], ['wideframe_pack', 'Wide Frame Pack', 1.89, 19, 7, true]
+  ];
+  fabrics.forEach((fabric, fabricIndex) => bagForms.forEach((form, formIndex) => {
+    const id = fabric.id + '_' + form[0], timber = timbers[(fabricIndex + formIndex) % timbers.length], metal = metals[(fabricIndex * 2 + formIndex) % metals.length];
+    const capacity = Math.min(25, Math.max(2, Math.round(form[3] * (.58 + fabric.strength * .42)))), weight = rounded(form[2] * fabric.density + (form[5] ? .32 * timber.density + .14 * metal.density : 0));
+    stock(id, fabric.name + ' ' + form[1], 'containers', weight, 'A carrying design that adds ' + capacity + ' kg capacity at a ' + weight + ' kg weight cost. Uses the existing backpack slot; the named design does not restrict which supplies fit inside.', 'Carrying equipment designs', Math.min(5, fabric.tier + (form[5] ? 1 : 0)), { capacity, tags: ['containers', 'backpack', fabric.id] });
+    const cost = { [fabric.id + '_panel']: form[4], [fabric.id + '_cord']: form[5] ? 3 : 2, [fabric.id + '_padding']: 1, thread: 1 };
+    if (form[5]) { cost[fabric.id + '_reinforcement'] = 1; cost[timber.id + '_frame'] = 1; cost[metal.id + '_hinge'] = 1; }
+    if (form[0] === 'hauler_bag') cost[timber.id + '_slat'] = 2;
+    recipe('assemble_' + id, 'Sew ' + fabric.name + ' ' + form[1], cost, { [id]: 1 }, 'Choose fabric strength and frame design for carrying capacity, assembly cost and pack weight.', form[5] ? ['sewing_kit', 'saw', 'woodcraft_manual'] : ['sewing_kit']);
+    if (fabricIndex < 7 && [0, 1, 6].includes(formIndex)) queueLoot(id, ['clothing', 'house', 'camp', 'warehouse'], .7);
+    recipe('recover_' + id, 'Recover ' + fabric.name + ' Pack Fabric', { [id]: 1 }, { [fabric.id + '_textile']: 1, thread: 1 }, 'Recover a little textile and thread by dismantling this carrying item.', ['kitchen_knife']);
+  }));
+
+  const receivers = [
+    ['harbor', 'Harbor', .97, 1.03, 1.01, .92], ['wayfarer', 'Wayfarer', .91, .95, 1.12, .78], ['outpost', 'Outpost', 1.04, .99, .95, 1.08],
+    ['switchyard', 'Switchyard', 1, 1.08, .92, 1.13], ['highland', 'Highland', 1.06, 1.13, .84, 1.17], ['orchard', 'Orchard', .95, 1.04, 1.04, .9],
+    ['breakwater', 'Breakwater', 1.1, .92, .88, 1.2], ['cinder', 'Cinder', 1.02, .96, 1.15, 1.04], ['ridgeway', 'Ridgeway', 1.07, 1.16, .8, 1.24],
+    ['lanternworks', 'Lanternworks', .93, 1.02, 1.09, .85]
+  ].map((row) => ({ id: row[0], name: row[1], damage: row[2], reach: row[3], speed: row[4], density: row[5] }));
+  const firearmForms = [
+    ['courier_pistol', 'Courier Pistol', .81, 55, 480, .28, 8, 'ammo', 620, 2], ['watch_revolver', 'Watch Revolver', 1.02, 68, 550, .47, 6, 'magnum_round', 610, 2],
+    ['street_carbine', 'Street Carbine', 2.18, 39, 610, .21, 18, 'ammo', 650, 3], ['patrol_rifle', 'Patrol Rifle', 2.82, 55, 760, .34, 20, 'rifle_round', 760, 3],
+    ['ranger_rifle', 'Ranger Rifle', 3.21, 82, 920, .88, 5, 'rifle_round', 800, 4], ['breach_shotgun', 'Breach Shotgun', 3.46, 90, 345, .86, 6, 'shotgun_shell', 880, 3],
+    ['heavy_marksman', 'Heavy Marksman', 4.12, 108, 1120, 1.23, 5, 'heavy_round', 960, 5], ['quiet_bolt_launcher', 'Quiet Bolt Launcher', 2.36, 65, 580, 1.24, 1, 'crossbow_bolt', 78, 3]
+  ];
+  receivers.forEach((receiver, receiverIndex) => {
+    const component = receiver.id + '_receiver';
+    stock(component, receiver.name + ' Receiver Assembly', 'materials', .46 * receiver.density, 'A recovered equipment assembly used by eight ranged designs. Receiver balance changes damage, range, weight and shot recovery.', 'Ranged equipment components', 2);
+    queueLoot(component, ['gunshop', 'police', 'warehouse', 'garage'], .6);
+    firearmForms.forEach((form, formIndex) => {
+      const id = receiver.id + '_' + form[0], metal = metals[(receiverIndex + formIndex + 2) % metals.length], timber = timbers[(receiverIndex * 2 + formIndex) % timbers.length];
+      const weapon = { kind: 'firearm', damage: Math.round(form[3] * receiver.damage), range: Math.round(form[4] * receiver.reach), cooldown: rounded(form[5] / receiver.speed), staminaCost: 2, clipSize: form[6] + (form[6] > 8 ? receiverIndex % 3 - 1 : 0), ammoId: form[7], noise: Math.round(form[8] * (.9 + receiver.density * .1)) };
+      stock(id, receiver.name + ' ' + form[1], 'firearms', form[2] * receiver.density, 'A ranged design with ' + weapon.damage + ' damage, ' + weapon.range + ' range and a ' + weapon.clipSize + '-shot load using ' + items[weapon.ammoId].name.toLowerCase() + '. Shots follow the existing single-target ranged simulation.', 'Receiver ranged designs', form[9], { weapon, tags: ['firearms', 'weapon', receiver.id, form[7]] });
+      const cost = { [component]: 1, [metal.id + '_mechanism']: formIndex > 3 ? 2 : 1, [metal.id + '_bar']: 1, [timber.id + '_slat']: 1, [timber.id + '_grip']: 1, spring: 1, screws: 2 };
+      recipe('assemble_' + id, 'Assemble ' + receiver.name + ' ' + form[1], cost, { [id]: 1 }, 'An abstract game equipment assembly using recovered components. Compatible ammunition is unchanged.', ['wrench', 'file', 'reloading_manual']);
+      if (receiverIndex < 3 && formIndex < 2) queueLoot(id, ['gunshop', 'police'], .45);
+      recipe('recover_' + id, 'Recover ' + receiver.name + ' Assembly', { [id]: 1 }, { [component]: 1, scrap: 1 }, 'Dismantle the ranged item to recover its receiver and a little metal. Other assembled components are lost.', ['wrench']);
+    });
+  });
+
+  // Normalize each extension pool to a twelve-percent weight budget. Existing
+  // food, water, rescue parts and all other legacy rows retain their exact weights.
+  Object.entries(extensionLoot).forEach(([table, rows]) => {
+    const baseline = loot[table], originalWeight = baseline.reduce((sum, row) => sum + row.weight, 0);
+    const totalPriority = rows.reduce((sum, row) => sum + row.priority, 0);
+    const extraRows = rows.map((row) => Object.freeze({ id: row.id, min: row.min, max: row.max, weight: originalWeight * .12 * row.priority / totalPriority }));
+    loot[table] = Object.freeze(baseline.concat(extraRows));
+  });
+  loot.market = loot.grocery;
+  loot.ranger = loot.camp;
+  loot.depot = loot.warehouse;
+
+  // Derive honest acquisition hints from the final data, including table aliases.
+  const sourceTables = Object.create(null);
+  Object.entries(loot).forEach(([table, rows]) => rows.forEach((row) => {
+    if (!sourceTables[row.id]) sourceTables[row.id] = new Set();
+    sourceTables[row.id].add(table);
+  }));
+  Object.keys(items).forEach((id) => {
+    items[id] = Object.freeze(Object.assign({}, items[id], { sources: Object.freeze(Array.from(sourceTables[id] || []).sort()) }));
+  });
   // Freeze all exported data so one UI or recipe handler cannot silently alter balancing globally.
   Sirens.Catalog = Object.freeze({ items: Object.freeze(items), recipes: Object.freeze(recipes), loot: Object.freeze(loot) });
 }());
