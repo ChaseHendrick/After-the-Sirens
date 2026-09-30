@@ -1,10 +1,10 @@
 # Validation
 
-Validated September 29, 2026. These results describe version 0.2 of this original browser game. They do not measure improvements to another game.
+Validated September 30, 2026. These results describe version 0.3 of this original browser game. They do not measure improvements to another game.
 
 ## Simulation and saves
 
-The Node suites cover the original rescue game, the streamed world, and expansion systems. All use production update, action, and save APIs.
+Seventy-five grouped Node checks pass, including eight presentation checks. The suites cover the original rescue game, the streamed world, and expansion systems. All use production update, action, and save APIs.
 
 - Twenty original town seeds have walkable spawns, reachable supplies and sufficient radio parts. Generation and movement are deterministic and finite.
 - Three standard-difficulty automated rescue playthroughs use ordinary movement, doors, scavenging, combat and waves. They finish in approximately 195 simulation seconds with 34 to 39 zombie kills and 100 health in the final run. This is an ideal automated player's result, not human difficulty or session-length evidence.
@@ -21,7 +21,7 @@ Fixture tests deliberately isolate behavior or supply entities. They are separat
 
 ## Integrated browser checks
 
-Twenty-eight integrated checks passed in installed Chrome 154.0.8037.58, headless, opening the actual assembled game through `file://`.
+Thirty-eight integrated checks passed in installed Chrome 154.0.8037.59, headless, opening the actual assembled game through `file://`.
 
 The original suite covers keyboard start, WASD and looting, inventory pause, crafting, construction, quick-action focus, local saves after a full reload, export/import and invalid imports, death/title/restart/victory, and finite keyboard/pointer stress. Inventory layouts were exercised at 390x844, 700x300 and 3400x700 without horizontal document overflow.
 
@@ -29,9 +29,13 @@ The expansion suite uses explicitly labeled safe road, survivor and staircase fi
 
 The dedicated destruction suite adds eight actual keyboard/mouse checks: axe door bashing, intact and broken window climbing, glass smashing, tree resources, sledgehammer wall destruction, terrain after full reload, and a controlled lethal-glass death/restart. Controlled placements and RNG fixtures are labeled in the test.
 
-All three suites reported no page errors or HTTP network requests. A short local observation at 1440x960 was about 60 FPS, 16.7 ms average frame interval and 16.8 ms p95. This is not a cross-device benchmark. Safari, Firefox, touch play and multiplayer have not been validated. Mobile-sized layout tests establish layout behavior only.
+The presentation suite compares actual Canvas pixels with empty and full exploration masks, including the minimap. It renders real human/zombie sprites behind a wall and beyond the former sight distance. Three captured frames per axe, machete and spear attack have distinct weapon pixels. Mouse attacks and keyboard footsteps produce nonzero output from the actual Web Audio graph, measured after the master gain and compressor. Reloading remains distinct from attack poses. Mute produces a silent waveform, pause stops continuous ambience, and a rain/driving/crowded-effects fixture stays within the 40-voice cap and releases completed voices. A night-tint pixel check confirms equal brightness at the center and edge. Audio quality has not been assessed across speakers or headphones.
 
-The README gameplay screenshot was captured after actual keyboard movement, looting and entering an original generated car. It is a real render of the shipped game. The catalogue screenshot displays the real registry through its UI.
+Node presentation checks compare otherwise identical runs with presentation enabled and removed, then compare full parsed saves and continuation after restore. Poses and sound queues remain outside saved state, use no simulation random draws, and have bounded queues. Controlled geometry, inventory and actor fixtures are explicitly labeled.
+
+All four suites reported no page errors or HTTP network requests. A short local observation at 1440x960 was about 60 FPS, 16.7 ms average frame interval and 16.7 ms p95. This is not a cross-device benchmark. Safari, Firefox, touch play and multiplayer have not been validated. Mobile-sized layout tests establish layout behavior only.
+
+The README gameplay screenshot was captured after actual keyboard movement, looting and entering an original generated car. It is a real render of the shipped game. The animation contact sheet contains frames rendered by the production player renderer in a controlled empty-terrain fixture. The catalogue screenshot displays the real registry through its UI.
 
 ## Build and CI
 

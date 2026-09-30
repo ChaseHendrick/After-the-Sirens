@@ -42,9 +42,6 @@
       this.lastFloor = 0;
       this.clock = 0; this.lastTime = 0; this.lastMini = -1000;
       this.minimapState = null; this.miniTerrain = null;
-      this.darkness = surface(1, 1);
-      this.darkCtx = this.darkness.getContext('2d');
-      this.visibility = new Map();
       this.grassSprites = []; this.floorSprites = []; this.waterSprites = []; this.treeSprites = [];
       this.createArt();
       this.resize = this.resize.bind(this);
@@ -107,11 +104,7 @@
         }
         this.treeSprites.push(tree);
       }
-      this.fireLight = surface(190, 190);
-      const f = this.fireLight.getContext('2d');
-      const halo = f.createRadialGradient(95, 95, 4, 95, 95, 95);
-      halo.addColorStop(0, '#000000d0'); halo.addColorStop(1, '#00000000');
-      f.fillStyle = halo; f.fillRect(0, 0, 190, 190);
+
     }
 
     resize() {
@@ -122,10 +115,9 @@
       this.canvas.width = Math.round(this.width * this.dpr);
       this.canvas.height = Math.round(this.height * this.dpr);
       this.ctx.imageSmoothingEnabled = false;
-      this.darkness.width = this.width; this.darkness.height = this.height;
       const v = this.ctx.createRadialGradient(this.width / 2, this.height / 2, Math.min(this.width, this.height) * .16,
         this.width / 2, this.height / 2, Math.max(this.width, this.height) * .66);
-      v.addColorStop(0, '#07131400'); v.addColorStop(.62, '#07131410'); v.addColorStop(1, '#061517cc');
+      v.addColorStop(0, '#07131400'); v.addColorStop(.62, '#07131405'); v.addColorStop(1, '#06151718');
       this.vignette = v;
       if (this.minimap) {
         const miniRect = this.minimap.getBoundingClientRect();
@@ -156,15 +148,15 @@
       const floor = state.stories && Number(state.stories.floor) || 0;
       if (this.lastDrawState !== state || !this.camera.ready) {
         this.camera.x = state.player.x; this.camera.y = state.player.y; this.camera.ready = true;
-        this.lastDrawState = state; this.visibility.clear(); this.lastMini = -1000;
+        this.lastDrawState = state; this.lastMini = -1000;
       } else if (originX !== this.lastOriginX || originY !== this.lastOriginY) {
         this.camera.x -= (originX - this.lastOriginX) * state.tileSize;
         this.camera.y -= (originY - this.lastOriginY) * state.tileSize;
-        this.visibility.clear(); this.lastMini = -1000;
+        this.lastMini = -1000;
       } else if (revision !== this.lastRevision) {
-        this.visibility.clear(); this.lastMini = -1000;
+        this.lastMini = -1000;
       }
-      if (floor !== this.lastFloor) { this.visibility.clear(); this.lastMini = -1000; }
+      if (floor !== this.lastFloor) { this.lastMini = -1000; }
       this.lastOriginX = originX; this.lastOriginY = originY; this.lastRevision = revision;
       this.lastFloor = floor;
     }
@@ -183,9 +175,8 @@
     }
 
     known(state, x, y) {
-      if (!state.discovered) return true;
       const tx = Math.floor(x / state.tileSize), ty = Math.floor(y / state.tileSize);
-      return tx >= 0 && ty >= 0 && tx < state.width && ty < state.height && !!state.discovered[ty * state.width + tx];
+      return tx >= 0 && ty >= 0 && tx < state.width && ty < state.height;
     }
 
     inView(x, y, margin) {
@@ -224,9 +215,6 @@
       }
       for (const human of state.humans || []) {
         if (human.health <= 0 || !this.inView(human.x, human.y, 35) || !this.known(state, human.x, human.y)) continue;
-        const dx = human.x - p.x, dy = human.y - p.y;
-        if (dx * dx + dy * dy > 480 * 480) continue;
-        if (Sirens.Engine && typeof Sirens.Engine.hasLOS === 'function' && !Sirens.Engine.hasLOS(state, p.x, p.y, human.x, human.y)) continue;
         entities.push({ y: human.y, kind: 'human', data: human });
       }
       for (const container of state.containers || []) {
@@ -237,16 +225,7 @@
       }
       for (const zombie of state.zombies || []) {
         if (zombie.health <= 0 || !this.inView(zombie.x, zombie.y, 30) || !this.known(state, zombie.x, zombie.y)) continue;
-        const dx = zombie.x - p.x, dy = zombie.y - p.y;
-        if (dx * dx + dy * dy > 480 * 480) continue;
-        const old = this.visibility.get(zombie.id);
-        let visible;
-        if (old && now - old.time < 90 && Math.abs(old.px - p.x) + Math.abs(old.py - p.y) < 20 && Math.abs(old.zx - zombie.x) + Math.abs(old.zy - zombie.y) < 20) visible = old.visible;
-        else {
-          visible = Sirens.Engine && typeof Sirens.Engine.hasLOS === 'function' ? Sirens.Engine.hasLOS(state, p.x, p.y, zombie.x, zombie.y) : true;
-          this.visibility.set(zombie.id, { time: now, visible, px: p.x, py: p.y, zx: zombie.x, zy: zombie.y });
-        }
-        if (visible) entities.push({ y: zombie.y, kind: 'zombie', data: zombie });
+        entities.push({ y: zombie.y, kind: 'zombie', data: zombie });
       }
       entities.push({ y: p.y, kind: 'player', data: p });
       for (const tree of this.visibleTrees) entities.push({ y: tree.y + 14, kind: 'tree', data: tree });
@@ -268,7 +247,6 @@
       this.drawWeather(state);
       ctx.fillStyle = this.vignette; ctx.fillRect(0, 0, this.width, this.height);
       this.drawMinimap(state, now);
-      if (this.visibility.size > (state.zombies || []).length + 64) this.visibility.clear();
     }
 
     drawTerrain(state) {
@@ -281,12 +259,6 @@
         const index = y * state.width + x;
         if (upstairs && !(state.buildings || []).some((building) => x >= building.x && y >= building.y && x < building.x + building.w && y < building.y + building.h)) {
           ctx.fillStyle = '#0c1c20'; ctx.fillRect(x * s, y * s, s, s); continue;
-        }
-        if (state.discovered && !state.discovered[index]) {
-          ctx.fillStyle = (x + y) % 3 === 0 ? '#0b1e1e' : COLORS.fog;
-          ctx.fillRect(x * s, y * s, s, s);
-          if (noise(x + this.lastOriginX, y + this.lastOriginY, state.seed) > .87) { ctx.fillStyle = '#142929'; ctx.fillRect(x * s + 14, y * s + 14, 2, 2); }
-          continue;
         }
         const gx = x + this.lastOriginX, gy = y + this.lastOriginY;
         const tile = state.tiles[index], variant = Math.floor(noise(gx, gy, state.seed) * 12);
@@ -422,7 +394,7 @@
       for (const b of state.buildings || []) {
         const x = b.x * s, y = b.y * s, w = b.w * s, h = b.h * s;
         if (!this.inView(x + w / 2, y + h / 2, Math.max(w, h)) || !this.known(state, x + w / 2, y + h / 2)) continue;
-        c.save(); this.clipExploredBuilding(state, b);
+        c.save();
         c.fillStyle = '#374c3866'; c.fillRect(x + s + 4, y + s + 6, Math.max(8, w - s * 2 - 8), Math.max(8, h - s * 2 - 12));
         const name = String(b.name || '').toLowerCase();
         if (/warehouse|workshop|depot|barn/i.test(name)) {
@@ -457,18 +429,6 @@
       }
     }
 
-    clipExploredBuilding(state, building) {
-      if (!state.discovered) return;
-      const c = this.ctx, s = state.tileSize;
-      c.beginPath();
-      for (let yy = building.y; yy < building.y + building.h; yy++) {
-        for (let xx = building.x; xx < building.x + building.w; xx++) {
-          if (state.discovered[yy * state.width + xx]) c.rect(xx * s, yy * s, s, s);
-        }
-      }
-      c.clip();
-    }
-
     drawStairs(state) {
       const c = this.ctx, s = state.tileSize;
       for (const building of state.buildings || []) {
@@ -485,34 +445,12 @@
     }
 
     drawRoofs(state) {
-      const c = this.ctx, s = state.tileSize, p = state.player;
+      const c = this.ctx, s = state.tileSize;
       for (const b of state.buildings || []) {
         const x = b.x * s, y = b.y * s, w = b.w * s, h = b.h * s;
         if (x > this.right + 60 || x + w < this.left - 60 || y > this.bottom + 60 || y + h < this.top - 60) continue;
-        // A roof cuts away before the player reaches its door.
-        const dx = Math.max(x - p.x, 0, p.x - x - w), dy = Math.max(y - p.y, 0, p.y - y - h);
-        if (dx * dx + dy * dy < 90 * 90) continue;
-        const discover = this.known(state, x + w / 2, y + h / 2);
-        if (!discover) continue;
-        c.save(); this.clipExploredBuilding(state, b);
-        c.fillStyle = '#101f2266'; c.fillRect(x + 11, y + 13, w, h);
-        c.fillStyle = '#28383e'; c.fillRect(x - 3, y - 3, w + 6, h + 5);
-        const industrial = /warehouse|depot|workshop/i.test(b.name || ''), rural = /barn|farm/i.test(b.name || '');
-        c.fillStyle = industrial ? '#67746c' : rural ? '#7a6750' : '#465759'; c.fillRect(x, y, w, h / 2);
-        c.fillStyle = industrial ? '#4c615b' : rural ? '#5c5546' : '#34464a'; c.fillRect(x, y + h / 2, w, h / 2);
-        c.strokeStyle = '#546363'; c.lineWidth = 1;
-        for (let row = 10; row < h; row += 12) {
-          c.beginPath(); c.moveTo(x + 3, y + row); c.lineTo(x + w - 3, y + row); c.stroke();
-          c.strokeStyle = row < h / 2 ? '#35454a' : '#293b41';
-          for (let col = (row % 24 ? 4 : 17); col < w; col += 27) { c.beginPath(); c.moveTo(x + col, y + row - 10); c.lineTo(x + col, y + row); c.stroke(); }
-          c.strokeStyle = '#546363';
-        }
-        c.fillStyle = '#899189'; c.fillRect(x - 2, y + h / 2 - 3, w + 4, 4);
-        c.fillStyle = '#c0b997'; c.fillRect(x - 2, y + h / 2 - 3, w + 4, 1);
-        c.fillStyle = '#263639'; c.fillRect(x + w - 44, y + 22, 21, 25);
-        c.fillStyle = '#717c73'; c.fillRect(x + w - 46, y + 18, 21, 23);
-        c.fillStyle = '#454c46'; c.fillRect(x + w - 43, y + 21, 15, 15);
-        c.fillStyle = '#949a83'; c.fillRect(x + w - 46, y + 18, 21, 3);
+        // Always cut away roofs so nearby interiors and actors remain visible.
+        c.save();
         // Small hand-painted sign labels help make the town navigable.
         if (w > 100 && b.name) {
           const label = String(b.name).toUpperCase();
@@ -604,9 +542,12 @@
 
     drawPlayer(player, state) {
       const c = this.ctx, x = Math.floor(player.x), y = Math.floor(player.y), angle = player.angle || 0;
+      const pose = Sirens.Effects ? Sirens.Effects.pose(state) : { stride: 0, attack: null };
+      const attack = pose.attack;
+      const id = attack ? attack.weapon : player.weapon;
       const items = Sirens.Engine && Sirens.Engine.items || {};
-      const weapon = items[player.weapon] && items[player.weapon].weapon;
-      const firearm = weapon ? weapon.kind === 'firearm' : player.weapon === 'pistol';
+      const weapon = items[id] && items[id].weapon;
+      const firearm = weapon ? weapon.kind === 'firearm' : id === 'pistol';
       const equipment = player.equipment || {};
       const clothing = items[equipment.clothing], backpack = items[equipment.backpack];
       const vehicle = (state.vehicles || []).find((car) => car.id === player.vehicleId);
@@ -614,37 +555,50 @@
         c.strokeStyle = '#e4d08d99'; c.lineWidth = 1; c.beginPath(); c.ellipse(vehicle.x, vehicle.y, 29, 19, vehicle.angle || 0, 0, TAU); c.stroke();
         return;
       }
+      const phase = attack ? attack.progress : 0;
+      const stroke = Math.sin(phase * Math.PI), stride = Math.sin(pose.stride) * 3;
+      const relativeAim = attack ? attack.angle - angle : 0;
+      const sweep = attack && !firearm ? -1.5 + phase * 3 : -.65;
+      const thrust = /spear|knife|dagger/.test(id);
+      const recoil = attack && firearm ? Math.max(0, 1 - phase * 3) * 5 : 0;
       ellipse(c, x + 1, y + 6, 12, 6, '#091d2490');
       c.save(); c.translate(x, y); c.rotate(angle);
       c.strokeStyle = '#d9d39b40'; c.lineWidth = 1; c.setLineDash([3, 6]);
       c.beginPath(); c.moveTo(19, 0); c.lineTo(firearm ? 100 : 43, 0); c.stroke(); c.setLineDash([]);
-      c.fillStyle = '#1b343a'; c.fillRect(-6, -9, 9, 6); c.fillRect(-6, 4, 9, 6);
+      if (attack && !firearm && !thrust) {
+        c.save(); c.rotate(relativeAim); c.strokeStyle = '#f3e6b0'; c.globalAlpha = stroke * .45; c.lineWidth = 4;
+        c.beginPath(); c.arc(10, 2, Math.min(54, (weapon && weapon.range || 70) * .55), sweep - .65, sweep); c.stroke(); c.restore();
+      }
+      c.fillStyle = '#1b343a'; c.fillRect(-6 + stride, -9, 9, 6); c.fillRect(-6 - stride, 4, 9, 6);
       c.fillStyle = clothing && clothing.color || '#a99b69'; c.fillRect(-8, -8, 13, 16);
       c.fillStyle = clothing ? '#d9ddac85' : '#d5bd75'; c.fillRect(-8, -8, 13, 4); c.fillRect(-5, -3, 13, 6);
       c.fillStyle = backpack && backpack.color || '#6c6e47'; c.fillRect(-10, -5, backpack ? 8 : 5, 10);
-      c.fillStyle = '#d6b78a'; c.fillRect(5, -7, 9, 4); c.fillRect(5, 3, 10, 4);
+      c.fillStyle = '#d6b78a'; c.fillRect(5 - recoil, -7, 9, 4);
+      c.save(); c.translate(10 - recoil + (thrust ? stroke * 12 : 0), 3); c.rotate(relativeAim + (firearm || thrust ? 0 : sweep));
+      c.fillStyle = '#d6b78a'; c.fillRect(-4, -2, 11, 4);
       if (firearm) {
         const length = weapon && weapon.range > 300 ? 21 : 11;
-        c.fillStyle = '#142b32'; c.fillRect(12, -4, length, 4); c.fillRect(14, -2, 4, 6);
-        c.fillStyle = '#a4b0a2'; c.fillRect(16, -5, Math.max(6, length - 5), 1);
-      } else if (weapon && weapon.range < 55) {
-        c.fillStyle = '#8b744b'; c.fillRect(12, 0, 8, 4);
-        c.fillStyle = '#d2dbbb'; c.fillRect(18, -1, 9, 3);
+        c.fillStyle = '#142b32'; c.fillRect(3, -4, length, 4); c.fillRect(5, -2, 4, 6);
+        c.fillStyle = '#a4b0a2'; c.fillRect(7, -5, Math.max(6, length - 5), 1);
+        if (attack && phase < .32) {
+          c.fillStyle = '#ffe19b'; c.beginPath(); c.moveTo(length + 3, -2); c.lineTo(length + 15, -7); c.lineTo(length + 10, -2); c.lineTo(length + 15, 3); c.closePath(); c.fill();
+        }
       } else {
-        c.save(); c.translate(13, 2); c.rotate(-.65);
-        c.fillStyle = '#766e4c'; c.fillRect(-3, -1, 24, 4);
-        const length = weapon && weapon.range > 100 ? 29 : 16;
-        c.fillStyle = '#d6c28c'; c.fillRect(8, -2, length, 6);
-        c.fillStyle = '#e9d7a3'; c.fillRect(9, -2, 14, 1); c.restore();
+        const length = weapon && weapon.range > 100 ? 37 : weapon && weapon.range < 55 ? 16 : 27;
+        c.fillStyle = '#766e4c'; c.fillRect(2, -1, length, 4);
+        if (/axe|hatchet/.test(id)) { c.fillStyle = '#d1d9bf'; c.fillRect(length - 5, -8, 9, 14); c.fillStyle = '#eef1d3'; c.fillRect(length + 2, -7, 2, 12); }
+        else if (/hammer|pickaxe/.test(id)) { c.fillStyle = '#a9b5ae'; c.fillRect(length - 4, -7, 10, 13); }
+        else if (/machete|katana|knife|dagger/.test(id)) { c.fillStyle = '#d5dec4'; c.fillRect(9, -3, length - 6, 6); c.fillStyle = '#f3f2d3'; c.fillRect(10, -3, length - 8, 1); }
+        else if (thrust) { c.fillStyle = '#d5dec4'; c.beginPath(); c.moveTo(length + 8, 1); c.lineTo(length - 2, -3); c.lineTo(length - 2, 5); c.closePath(); c.fill(); }
+        else { c.fillStyle = '#d6c28c'; c.fillRect(10, -2, length - 5, 6); c.fillStyle = '#e9d7a3'; c.fillRect(11, -2, length - 7, 1); }
       }
+      c.restore();
       c.fillStyle = '#593f2d'; c.fillRect(-6, -6, 12, 12);
       c.fillStyle = '#b99064'; c.fillRect(0, -4, 8, 8);
       c.fillStyle = '#ddbc88'; c.fillRect(6, -3, 3, 6);
       c.fillStyle = '#382e26'; c.fillRect(-5, -6, 8, 5); c.fillRect(-6, -2, 3, 6);
       c.restore();
-      if (player.bleeding > 0) {
-        c.fillStyle = '#b96753'; c.fillRect(x - 2, y + 14, 3, 2);
-      }
+      if (player.bleeding > 0) { c.fillStyle = '#b96753'; c.fillRect(x - 2, y + 14, 3, 2); }
       c.strokeStyle = '#e4d08d'; c.lineWidth = 1; c.beginPath();
       c.arc(x, y, 17, angle + .7, angle + 2.4); c.arc(x, y, 17, angle + 3.85, angle + 5.55); c.stroke();
     }
@@ -767,33 +721,11 @@
 
     drawLighting(state) {
       const hour = ((Number(state.time) || 8) % 24 + 24) % 24;
-      let darkness;
-      if (hour >= 8 && hour <= 17) darkness = .045;
-      else if (hour > 17 && hour < 21) darkness = .045 + (hour - 17) / 4 * .63;
-      else if (hour >= 5 && hour < 8) darkness = .68 - (hour - 5) / 3 * .635;
-      else darkness = .68;
-      const c = this.ctx, d = this.darkCtx;
-      if (darkness > .06) {
-        const px = state.player.x - this.left, py = state.player.y - this.top;
-        d.globalCompositeOperation = 'source-over'; d.clearRect(0, 0, this.width, this.height);
-        d.fillStyle = '#061521'; d.fillRect(0, 0, this.width, this.height);
-        d.globalCompositeOperation = 'destination-out';
-        const light = d.createRadialGradient(px, py, 36, px, py, 210);
-        light.addColorStop(0, '#000000e8'); light.addColorStop(.45, '#000000ba'); light.addColorStop(1, '#00000000');
-        d.fillStyle = light; d.fillRect(px - 210, py - 210, 420, 420);
-        const angle = state.player.angle || 0;
-        d.fillStyle = '#00000050'; d.beginPath(); d.moveTo(px, py);
-        d.arc(px, py, 265, angle - .35, angle + .35); d.closePath(); d.fill();
-        // Campfires share the lighting pass and are limited to the visible viewport.
-        for (const structure of state.structures || []) if (structure.type === 'campfire' && this.inView(structure.x, structure.y, 80)) {
-          const sx = structure.x - this.left, sy = structure.y - this.top;
-          d.drawImage(this.fireLight, sx - 95, sy - 95);
-        }
-        d.globalCompositeOperation = 'source-over';
-        c.globalAlpha = darkness; c.drawImage(this.darkness, 0, 0); c.globalAlpha = 1;
-      } else {
-        c.fillStyle = '#d8ba6910'; c.fillRect(0, 0, this.width, this.height);
-      }
+      const night = hour < 6 || hour >= 20 ? 1 : hour >= 17 ? (hour - 17) / 3 : hour < 8 ? (8 - hour) / 2 : 0;
+      // A gentle uniform night tint keeps the entire viewport readable.
+      const c = this.ctx;
+      c.fillStyle = night > 0 ? 'rgba(17, 30, 54, ' + (night * .14) + ')' : '#d8ba6908';
+      c.fillRect(0, 0, this.width, this.height);
     }
 
     drawWeather(state) {
@@ -814,7 +746,7 @@
       if (!this.miniCtx) return;
       const c = this.miniCtx, w = this.miniWidth, h = this.miniHeight;
       const ground = this.lastFloor > 0 && Sirens.Stories && typeof Sirens.Stories.groundView === 'function' ? Sirens.Stories.groundView(state) || state : state;
-      const mapTiles = ground.tiles || state.tiles, mapDiscovered = ground.discovered || state.discovered;
+      const mapTiles = ground.tiles || state.tiles;
       if (this.minimapState !== state || now - this.lastMini > 240) {
         if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) this.miniTerrain = surface(state.width, state.height);
         const m = this.miniTerrain.getContext('2d');
@@ -822,7 +754,6 @@
         m.fillStyle = '#102a29'; m.fillRect(0, 0, state.width, state.height);
         for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) {
           const i = y * state.width + x;
-          if (mapDiscovered && !mapDiscovered[i]) continue;
           m.fillStyle = tileColors[mapTiles[i]] || '#35513d'; m.fillRect(x, y, 1, 1);
         }
         this.minimapState = state; this.lastMini = now;
@@ -855,7 +786,7 @@
 
     destroy() {
       window.removeEventListener('resize', this.resize);
-      this.visibility.clear();
+
       this.grassSprites.length = 0; this.floorSprites.length = 0; this.treeSprites.length = 0; this.waterSprites.length = 0;
     }
   }

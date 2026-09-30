@@ -8,7 +8,7 @@ An original open world zombie survival game. Leave the town of Morrow, follow ro
 
 ![Gameplay in Morrow](docs/gameplay.png)
 
-**Version 0.2 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. The catalogue contains 212 original items and 61 recipes, with collectible ingredients clearly identified.
+**Version 0.3 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. The catalogue contains 212 original items and 61 recipes, with collectible ingredients clearly identified.
 
 ## Play
 
@@ -21,6 +21,16 @@ Chrome is tested. Other modern desktop browsers may work, but have not all been 
 Local autosave and Continue are available. **Export save** keeps a portable JSON copy. Export regularly, especially when using local files, because browsers can restrict or clear local storage.
 
 ![Searchable original item catalogue](docs/catalogue.png)
+
+## Visibility, animation and sound
+
+The entire surrounding area and loaded minimap are visible as you travel, including unexplored terrain, interiors, supplies, cars and people. Roofs stay cut away. Night uses a gentle uniform tint. Walls still block movement, attacks and AI sight; seeing a target does not let you attack through a wall. Each floor shows its own scene.
+
+Axes, machetes and bats swing with a visible arc; spears and knives thrust. Walking animates the feet, and guns recoil with a muzzle flash. Successful attacks animate even when they miss. Failed attacks and reloading do not create phantom swings.
+
+Original Web Audio sounds cover footsteps, melee swings, gunfire, reloads, flesh/wood/stone/glass impacts, doors, looting, climbing, nearby zombie growls, wind, rain and a car engine whose pitch follows speed. Sound starts after a click or key press. Toggle **Procedural sound** in the pause menu to mute everything; ambience stops while paused or in a menu. All sounds are generated locally without downloads.
+
+![Axe, machete and spear attack frames](docs/combat-animation.png)
 
 ## Seeded worlds
 
@@ -59,7 +69,7 @@ Saves store the world seed and the current simulation RNG state, along with pers
 - Hunger, thirst, stamina, bleeding, infection, protective clothing, backpack capacity, day/night, crafting stations, and simple defenses shape survival.
 - Chop trees, break walls with heavy tools, and bash doors with repeated melee strikes. Open or smash windows, then climb through when the opposite side is clear. Broken glass can cause cuts. Terrain changes and partial damage persist.
 - Search the catalogue without receiving free items. Owned equipment can be used, equipped, and dropped; dropped supplies can be recovered.
-- Import/export saves, autosave, a minimap, pause menus, keyboard menu access, synthesized audio, and a performance overlay are included.
+- Import/export saves, autosave, a minimap, pause menus, keyboard menu access, procedural gameplay audio, and a performance overlay are included.
 
 The world has explicit bounds: sector centers from -128 to 128 and a journal budget of 2,048 generated sectors per save, including the active neighbors. Upper-floor journals have a separate budget of 512 visited buildings. The active terrain stays bounded at 192 by 192 tiles. This is a large procedural sandbox, not an unlimited world. The game explains when the journal or map boundary is reached.
 
@@ -100,9 +110,10 @@ Then open `http://localhost:8000`. CI runs the build, simulation checks, save va
 | `src/vehicles.js` | Driving, collision, fuel |
 | `src/destruction.js` | Terrain damage, resources and window traversal |
 | `src/actors.js` | Survivors, raiders, trade, following and combat |
-| `src/renderer.js` | Procedural Canvas visuals and camera |
+| `src/effects.js` | Transient attack poses, footsteps, bounded events and Web Audio |
+| `src/renderer.js` | Fully visible Canvas world, animated characters and camera |
 | `src/ui.js`, `src/ui.css` | Menus, inventory, dialogue and HUD |
-| `src/main.js` | Input, fixed-step loop, audio and browser storage |
+| `src/main.js` | Input, fixed-step loop, presentation integration and browser storage |
 
 Each module registers once under `window.Sirens`. [Architecture](ARCHITECTURE.md), [validation](VALIDATION.md), [release notes](CHANGELOG.md), and [contribution instructions](CONTRIBUTING.md) describe the implementation and its limits.
 
