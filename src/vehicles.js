@@ -36,12 +36,13 @@
       if (Math.abs(v.speed) > 18) { log(s, 'Brake before getting out.', 'warn'); return false; }
       for (const a of [v.angle + Math.PI / 2, v.angle - Math.PI / 2, v.angle + Math.PI, v.angle]) {
         const x = v.x + Math.cos(a) * 42, y = v.y + Math.sin(a) * 42;
-        if (clearFoot(s, x, y)) { p.x = x; p.y = y; p.vehicleId = null; v.speed = 0; log(s, 'Left the ' + v.name + '.'); return true; }
+        if (clearFoot(s, x, y)) { p.x = x; p.y = y; p.vehicleId = null; v.speed = 0; if (S.Effects) S.Effects.emit(s, 'vehicle'); log(s, 'Left the ' + v.name + '.'); return true; }
       }
       log(s, 'No clear space beside this car. Move to an open area.', 'warn'); return false;
     }
     if (v.condition <= 0) { log(s, 'This car is wrecked.', 'warn'); return false; }
     p.vehicleId = v.id; p.x = v.x; p.y = v.y; p.resting = false;
+    if (S.Effects) S.Effects.emit(s, 'vehicle');
     log(s, 'Driving: W accelerates, S brakes and reverses, A/D steer, V exits.', 'good'); return true;
   }
   function refuel(s, itemId) {
@@ -72,7 +73,7 @@
       const x = v.x + Math.cos(v.angle) * v.speed * dt / steps, y = v.y + Math.sin(v.angle) * v.speed * dt / steps;
       if (clear(s, x, y, v.angle)) { v.x = x; v.y = y; }
       else {
-        if (Math.abs(v.speed) > 35) { v.condition = Math.max(0, v.condition - Math.abs(v.speed) * 0.035); log(s, 'Collision damaged the car.', 'warn'); }
+        if (Math.abs(v.speed) > 35) { v.condition = Math.max(0, v.condition - Math.abs(v.speed) * 0.035); log(s, 'Collision damaged the car.', 'warn'); if (S.Effects) S.Effects.emit(s, 'stone'); }
         v.speed = 0; break;
       }
     }
@@ -81,6 +82,7 @@
       s._vehicleHits = s._vehicleHits || {};
       for (const z of s.zombies) if (z.health > 0 && Math.hypot(z.x - v.x, z.y - v.y) < 31 && (s._vehicleHits[z.id] || -10) < s.elapsed - 0.7) {
         s._vehicleHits[z.id] = s.elapsed; z.health -= Math.abs(v.speed) * 0.65; z._stun = 0.6; v.condition = Math.max(0, v.condition - 0.35);
+        if (S.Effects) S.Effects.emit(s, 'impact');
         if (z.health <= 0) p.kills++;
       }
       s.zombies = s.zombies.filter(z => z.health > 0);

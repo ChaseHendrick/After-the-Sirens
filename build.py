@@ -9,11 +9,11 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-MODULES = ["catalog.js", "vehicles.js", "actors.js", "destruction.js", "stories.js", "world.js", "engine.js", "renderer.js", "ui.js", "main.js"]
+MODULES = ["catalog.js", "effects.js", "vehicles.js", "actors.js", "destruction.js", "stories.js", "world.js", "engine.js", "renderer.js", "ui.js", "main.js"]
 
 def validate_exports(sources):
     combined = "\n".join(sources)
-    for name in ("Catalog", "Vehicles", "Actors", "Destruction", "Stories", "World", "Engine", "Renderer", "UI", "App"):
+    for name in ("Catalog", "Effects", "Vehicles", "Actors", "Destruction", "Stories", "World", "Engine", "Renderer", "UI", "App"):
         registrations = re.findall(r"\b(?:S|Sirens|NS|ns|window\.Sirens)\." + name + r"\s*=", combined)
         if len(registrations) != 1:
             raise ValueError(f"Expected one {name} registration; found {len(registrations)}")

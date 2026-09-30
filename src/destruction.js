@@ -82,6 +82,7 @@
     if (tile === 6) {
       const before = Number.isFinite(s._doorHealth[index]) ? s._doorHealth[index] : 65;
       s._doorHealth[index] = Math.max(-20, before - damage);
+      if (Sirens.Effects) Sirens.Effects.emit(s, 'wood', { broken: s._doorHealth[index] <= 0 });
       if (s._doorHealth[index] <= 0) { s.tiles[index] = 7; fragments(s, tx, ty, '#bba181'); log(s, 'The door gives way. The route is open.', 'good'); }
       else log(s, 'Door damaged: ' + Math.ceil(s._doorHealth[index]) + ' strength remaining.', 'info');
       noise(s, (tx + 0.5) * TILE, (ty + 0.5) * TILE, Math.max(150, stats.noise || 0));
@@ -91,6 +92,7 @@
     const before = Number.isFinite(terrain[index]) ? terrain[index] : maximum;
     const remaining = Math.max(0, before - damage);
     terrain[index] = remaining;
+    if (Sirens.Effects) Sirens.Effects.emit(s, tile === 5 ? 'wood' : tile === 3 ? 'stone' : 'glass', { broken: remaining === 0 });
     noise(s, (tx + 0.5) * TILE, (ty + 0.5) * TILE, tile === 8 || tile === 9 ? 270 : Math.max(130, stats.noise || 0));
     if (remaining > 0) { log(s, (tile === 5 ? 'Tree' : tile === 3 ? 'Wall' : 'Window') + ' damaged: ' + Math.ceil(remaining) + ' strength remaining.', 'info'); return true; }
     if (tile === 5) {
@@ -146,6 +148,7 @@
     const terrain = health(s), broken = tile === 9 && terrain[index] === 0;
     if (tile === 8) { s.tiles[index] = 9; if (terrain[index] === undefined) terrain[index] = limits.windowHealth; }
     s.player.x = landingX; s.player.y = landingY; s.player.resting = false;
+    if (Sirens.Effects) Sirens.Effects.emit(s, 'climb');
     s.player.invulnerable = Math.max(s.player.invulnerable || 0, 0.3);
     noise(s, cx, cy, broken ? 85 : 55);
     const item = Sirens.Catalog && Sirens.Catalog.items[s.player.equipment && s.player.equipment.clothing];

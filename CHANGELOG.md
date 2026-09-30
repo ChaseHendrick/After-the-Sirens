@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Show all surrounding terrain, interiors, loot and actors without exploration or line-of-sight render masks. Reveal the full loaded minimap and keep roofs cut away.
+- Replace the small night light pool and heavy vignette with a gentle tint across the viewport.
+- Animate melee swings, weapon-specific silhouettes, spear/knife thrusts, walking strides, gun recoil and muzzle flashes.
+- Add original procedural audio for gameplay, material impacts, footsteps, weather, nearby zombies and speed-responsive car engines.
+- Respect mute and pause/menu states; bound audio voices and transient event queues. Presentation uses separate state and does not consume simulation RNG or change save schemas.
+- Add eight presentation/simulation checks and ten integrated pixel, input and Web Audio checks. Retain the previous gameplay suites.
+
 ## 0.2.0
 
 - Added a persistent streamed procedural world and an open world mode.

@@ -1,13 +1,13 @@
 {
   "name": "after-the-sirens",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "An original offline open world zombie survival game",
   "license": "MIT",
   "scripts": {
     "build": "python3 build.py",
-    "test": "node tests/engine.cjs && node tests/survival.cjs && node tests/open-world.cjs && node tests/world-integrity.cjs && node tests/expansion.cjs && node tests/destruction.cjs && python3 tests/build.py",
-    "test:browser": "node tests/browser.cjs && node tests/expansion-browser.cjs && node tests/destruction-browser.cjs"
+    "test": "node tests/engine.cjs && node tests/survival.cjs && node tests/open-world.cjs && node tests/world-integrity.cjs && node tests/expansion.cjs && node tests/destruction.cjs && node tests/effects.cjs && python3 tests/build.py",
+    "test:browser": "node tests/browser.cjs && node tests/expansion-browser.cjs && node tests/destruction-browser.cjs && node tests/effects-browser.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"

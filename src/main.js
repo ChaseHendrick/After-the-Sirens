@@ -9,10 +9,7 @@
   const SAVE_KEY = 'after-the-sirens-save-v1';
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
-  let soundOn = true;
   let debugOn = false;
-  let audioContext = null;
-  let lastAudioTime = 0;
   let screen = 'title';
   let hasWarnedStorage = false;
   let lastFrame = performance.now();
@@ -24,34 +21,7 @@
   const keys = new Set();
   const pointer = { x: innerWidth / 2, y: innerHeight / 2, down: false, shoot: false, used: false };
 
-  function unlockAudio() {
-    if (!soundOn) return;
-    try {
-      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioContext.state === 'suspended') audioContext.resume().catch(function () {});
-    } catch (_) { soundOn = false; }
-  }
-
-  function tone(frequency, duration, type, gain, endFrequency) {
-    if (!soundOn || !audioContext || audioContext.state !== 'running') return;
-    const now = audioContext.currentTime;
-    if (now - lastAudioTime < 0.035) return;
-    lastAudioTime = now;
-    try {
-      const oscillator = audioContext.createOscillator();
-      const envelope = audioContext.createGain();
-      oscillator.type = type || 'sine';
-      oscillator.frequency.setValueAtTime(frequency, now);
-      oscillator.frequency.exponentialRampToValueAtTime(endFrequency || frequency, now + duration);
-      envelope.gain.setValueAtTime(gain || 0.025, now);
-      envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-      oscillator.connect(envelope);
-      envelope.connect(audioContext.destination);
-      oscillator.start(now);
-      oscillator.stop(now + duration);
-      oscillator.onended = function () { oscillator.disconnect(); envelope.disconnect(); };
-    } catch (_) { /* Sound failures never stop the simulation. */ }
-  }
+  function unlockAudio() { S.Effects.audio.unlock(); }
 
   function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; }
 
@@ -91,7 +61,7 @@
     unlockAudio();
     setScreen('playing');
     ui.update(state, frameInfo);
-    tone(440, 0.22, 'sine', 0.025, 220);
+    S.Effects.emit(state, 'ready');
   }
 
   function continueRun() {
@@ -128,7 +98,7 @@
     if (!active || state.ended) return;
     const result = S.Engine.action(state, name);
     if (state.conversation) clearInput();
-    if (result) tone(340, 0.08, 'triangle', 0.015, 450);
+    if (result && name !== 'reload') S.Effects.emit(state, 'ui');
     ui.update(state, frameInfo);
   }
 
@@ -180,7 +150,7 @@
     dropItem: function (id) { applyAction('drop:' + id); },
     craft: function (id) { if (active && !state.ended) { S.Engine.craft(state, id); ui.update(state, frameInfo); } },
     build: function (type) { if (active && !state.ended) { S.Engine.build(state, type); ui.update(state, frameInfo); } },
-    setSound: function (on) { soundOn = !!on; if (soundOn) unlockAudio(); },
+    setSound: function (on) { S.Effects.audio.setEnabled(on); if (on) unlockAudio(); },
     setDebug: function (on) { debugOn = !!on; debug.hidden = !debugOn; }
   });
   setScreen('title');
@@ -211,7 +181,7 @@
     keys.add(event.code);
     unlockAudio();
     if (event.code === 'KeyE') {
-      if (S.Engine.interact(state)) tone(660, 0.12, 'triangle', 0.02, 880);
+      S.Engine.interact(state);
       if (state.conversation) clearInput();
       ui.update(state, frameInfo);
     } else if (event.code === 'Digit1') applyAction('eat');
@@ -279,19 +249,16 @@
       accumulator += elapsed;
       while (accumulator >= 1 / 60) {
         const oldHealth = state.player.health;
-        const oldKills = state.player.kills;
-        const oldAmmo = state.player.ammo;
         S.Engine.update(state, 1 / 60, inputSnapshot());
         accumulator -= 1 / 60;
-        if (state.player.health < oldHealth - 0.2) tone(85, 0.18, 'sawtooth', 0.018, 35);
-        else if (state.player.ammo < oldAmmo) tone(130, 0.12, 'square', 0.035, 25);
-        else if (state.player.kills > oldKills) tone(160, 0.1, 'triangle', 0.025, 55);
+        if (state.player.health < oldHealth - 0.2) S.Effects.emit(state, 'hurt');
         if (state.ended) break;
       }
       autoSaveTime += elapsed;
       if (autoSaveTime >= 30) { save(true); autoSaveTime = 0; }
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
+    S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !state.ended && !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
     if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); uiTime = 0; }
@@ -306,5 +273,5 @@
 
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
-    getScreen: function () { return screen; } };
+    getScreen: function () { return screen; }, getAudioMetrics: S.Effects.audio.metrics };
 })();

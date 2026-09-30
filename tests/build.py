@@ -10,7 +10,7 @@ build = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build)
 sources = [(ROOT / "src" / name).read_text() for name in build.MODULES]
 build.validate_exports(sources)
-for extra in ("S.Engine = {};", "S.Stories = {};", "// </script>"):
+for extra in ("S.Engine = {};", "S.Stories = {};", "S.Effects = {};", "// </script>"):
     try:
         build.validate_exports(sources + [extra])
     except ValueError:
