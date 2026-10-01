@@ -6293,7 +6293,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.search.addEventListener('input', () => { this.query = this.search.value.toLowerCase().trim(); this.signature = ''; this.render(this.state, true); });
     }
     show(s) { if (this.state !== s) this.atlasCursor = null; this.open = true; this.overlay.hidden = false; this.signature = ''; this.render(s, true); this.overlay.querySelector('.as-close').focus({ preventScroll: true }); }
-    close() { this.open = false; this.overlay.hidden = true; }
+    close() { this.open = false; this.overlay.hidden = true; if (this.overlay.contains(document.activeElement)) document.activeElement.blur(); }
     markAtlas() {
       const p = this.atlasCursor || this.state.player, w = this.state.world;
       S.Engine.action(this.state, 'mark:' + (p.x + (w ? w.originX * 32 : 0)) + ',' + (p.y + (w ? w.originY * 32 : 0)) + ',' + (this.state.stories ? this.state.stories.floor : 0));
@@ -6884,6 +6884,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     }
 
+    // Browsers differ on moving focus off an element that becomes hidden, so closing UI releases it explicitly.
+    releaseFocus(container) {
+      const active = document.activeElement;
+      if (active && active !== document.body && container && container.contains(active) && typeof active.blur === 'function') active.blur();
+    }
+
     disarmRestart() {
       clearTimeout(this.restartTimer);
       const button = this.root.querySelector('.as-save-actions [data-command="restart"]');
@@ -6901,6 +6907,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.root.querySelectorAll('[data-screen]').forEach((panel) => { panel.hidden = panel.dataset.screen !== name; });
       this.nodes.hud.hidden = name === 'title';
       this.root.dataset.screen = name;
+      if (document.activeElement && this.root.contains(document.activeElement) && !document.activeElement.getClientRects().length) document.activeElement.blur();
       if (name === 'title') this.refreshContinue();
       if (name === 'dead' || name === 'won') this.renderEndStats();
       const panel = this.root.querySelector(`[data-screen="${name}"]`);
@@ -6923,10 +6930,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         this.lastFocus = document.activeElement;
         this.refreshInventory(true);
         this.nodes['inventory-overlay'].querySelector('.as-close').focus({ preventScroll: true });
-      } else if (this.lastFocus && this.lastFocus.isConnected && typeof this.lastFocus.focus === 'function' && this.lastFocus !== document.body) {
-        this.lastFocus.focus({ preventScroll: true });
-      } else if (document.activeElement && this.root.contains(document.activeElement)) {
-        document.activeElement.blur();
+      } else {
+        // Return focus only to a control that is still shown; otherwise leave nothing focused inside the closed Pack.
+        if (this.lastFocus && this.lastFocus.isConnected && typeof this.lastFocus.focus === 'function' && this.lastFocus !== document.body && this.lastFocus.getClientRects().length) this.lastFocus.focus({ preventScroll: true });
+        else if (document.activeElement && this.root.contains(document.activeElement)) document.activeElement.blur();
+        this.releaseFocus(this.nodes['inventory-overlay']);
       }
     }
 
@@ -7051,7 +7059,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     renderConversation(conversation) {
       const wasVisible = !this.nodes['conversation-overlay'].hidden;
       this.nodes['conversation-overlay'].hidden = !conversation || this.screen !== 'playing';
-      if (!conversation || this.screen !== 'playing') return;
+      if (!conversation || this.screen !== 'playing') { if (wasVisible) this.releaseFocus(this.nodes['conversation-overlay']); return; }
       this.nodes['conversation-role'].textContent = String(conversation.role || 'Survivor').toUpperCase();
       this.nodes['conversation-name'].textContent = String(conversation.name || 'Survivor');
       this.nodes['conversation-text'].textContent = String(conversation.text || 'The survivor watches the road.');
@@ -8232,8 +8240,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   addEventListener('keydown', function (event) {
     if (event.defaultPrevented || social && social.isBlocking()) return;
-    const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
-    const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
+    // A control left focused inside a hidden menu must not swallow game keys.
+    const shown = !!(event.target && event.target.getClientRects && event.target.getClientRects().length);
+    const editing = shown && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+    const buttonActivation = shown && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
     // A key still held from play must not activate a button that just received focus,
     // such as Try again on the death screen.
     if (buttonActivation) { if (event.repeat) event.preventDefault(); return; }

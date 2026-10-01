@@ -399,6 +399,12 @@
       else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     }
 
+    // Browsers differ on moving focus off an element that becomes hidden, so closing UI releases it explicitly.
+    releaseFocus(container) {
+      const active = document.activeElement;
+      if (active && active !== document.body && container && container.contains(active) && typeof active.blur === 'function') active.blur();
+    }
+
     disarmRestart() {
       clearTimeout(this.restartTimer);
       const button = this.root.querySelector('.as-save-actions [data-command="restart"]');
@@ -416,6 +422,7 @@
       this.root.querySelectorAll('[data-screen]').forEach((panel) => { panel.hidden = panel.dataset.screen !== name; });
       this.nodes.hud.hidden = name === 'title';
       this.root.dataset.screen = name;
+      if (document.activeElement && this.root.contains(document.activeElement) && !document.activeElement.getClientRects().length) document.activeElement.blur();
       if (name === 'title') this.refreshContinue();
       if (name === 'dead' || name === 'won') this.renderEndStats();
       const panel = this.root.querySelector(`[data-screen="${name}"]`);
@@ -438,10 +445,11 @@
         this.lastFocus = document.activeElement;
         this.refreshInventory(true);
         this.nodes['inventory-overlay'].querySelector('.as-close').focus({ preventScroll: true });
-      } else if (this.lastFocus && this.lastFocus.isConnected && typeof this.lastFocus.focus === 'function' && this.lastFocus !== document.body) {
-        this.lastFocus.focus({ preventScroll: true });
-      } else if (document.activeElement && this.root.contains(document.activeElement)) {
-        document.activeElement.blur();
+      } else {
+        // Return focus only to a control that is still shown; otherwise leave nothing focused inside the closed Pack.
+        if (this.lastFocus && this.lastFocus.isConnected && typeof this.lastFocus.focus === 'function' && this.lastFocus !== document.body && this.lastFocus.getClientRects().length) this.lastFocus.focus({ preventScroll: true });
+        else if (document.activeElement && this.root.contains(document.activeElement)) document.activeElement.blur();
+        this.releaseFocus(this.nodes['inventory-overlay']);
       }
     }
 
@@ -566,7 +574,7 @@
     renderConversation(conversation) {
       const wasVisible = !this.nodes['conversation-overlay'].hidden;
       this.nodes['conversation-overlay'].hidden = !conversation || this.screen !== 'playing';
-      if (!conversation || this.screen !== 'playing') return;
+      if (!conversation || this.screen !== 'playing') { if (wasVisible) this.releaseFocus(this.nodes['conversation-overlay']); return; }
       this.nodes['conversation-role'].textContent = String(conversation.role || 'Survivor').toUpperCase();
       this.nodes['conversation-name'].textContent = String(conversation.name || 'Survivor');
       this.nodes['conversation-text'].textContent = String(conversation.text || 'The survivor watches the road.');

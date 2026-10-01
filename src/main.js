@@ -310,8 +310,10 @@
 
   addEventListener('keydown', function (event) {
     if (event.defaultPrevented || social && social.isBlocking()) return;
-    const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
-    const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
+    // A control left focused inside a hidden menu must not swallow game keys.
+    const shown = !!(event.target && event.target.getClientRects && event.target.getClientRects().length);
+    const editing = shown && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+    const buttonActivation = shown && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
     // A key still held from play must not activate a button that just received focus,
     // such as Try again on the death screen.
     if (buttonActivation) { if (event.repeat) event.preventDefault(); return; }

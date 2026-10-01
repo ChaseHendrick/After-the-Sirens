@@ -122,6 +122,23 @@ const ROOT = path.resolve(__dirname, '..'), output = path.join(ROOT, '.test-resu
       await page.keyboard.press('Escape'); await page.waitForTimeout(100); assert.equal((await read()).conversation, false);
     });
 
+    await check('closing a dialog releases focus from its controls, so game keys keep working', async () => {
+      // Records focus at the moment a dialog becomes hidden, before any browser focus fixup can run.
+      const watch = selector => page.evaluate(sel => { const node = document.querySelector(sel); window.__leftInside = null;
+        const observer = new MutationObserver(() => { if (node.hidden) { window.__leftInside = node.contains(document.activeElement); observer.disconnect(); } });
+        observer.observe(node, { attributes: true, attributeFilter: ['hidden'] }); }, selector);
+      await page.keyboard.press('KeyE'); await page.locator('[data-ui="conversation-overlay"]').waitFor({ state: 'visible' });
+      assert.equal(await page.evaluate(() => document.querySelector('[data-ui="conversation-overlay"]').contains(document.activeElement)), true, 'the open conversation should hold focus');
+      await watch('[data-ui="conversation-overlay"]'); await page.keyboard.press('Escape'); await page.locator('[data-ui="conversation-overlay"]').waitFor({ state: 'hidden' });
+      assert.equal(await page.evaluate(() => window.__leftInside), false, 'focus stayed on a control inside the hidden conversation');
+      await page.keyboard.press('KeyI'); await page.locator('[data-ui="inventory-overlay"]').waitFor({ state: 'visible' });
+      await page.locator('[data-command="crafting"]').click(); await page.locator('[data-ui="recipe-ready"]').check();
+      await watch('[data-ui="inventory-overlay"]'); await page.keyboard.press('Escape'); await page.locator('[data-ui="inventory-overlay"]').waitFor({ state: 'hidden' });
+      assert.equal(await page.evaluate(() => window.__leftInside), false, 'focus stayed on a control inside the hidden Pack');
+      const before = await read(); await page.keyboard.down('KeyD'); await page.waitForTimeout(250); await page.keyboard.up('KeyD');
+      assert((await read()).x - before.x > 5, 'movement keys were swallowed after closing the Pack');
+    });
+
     await check('Space held through death does not restart the run', async () => {
       await page.keyboard.down('Space'); await page.waitForTimeout(80);
       // Labeled fixture: lethal condition while Space is held.
