@@ -389,7 +389,8 @@
       this.root.querySelector('[data-setting="zoom"]').value = zoom; this.nodes['zoom-value'].textContent = zoom + '%';
       this.details = !!p.details; this.root.dataset.details = this.details ? 'expanded' : 'compact';
       const details = this.root.querySelector('[data-command="details"]'); details.setAttribute('aria-pressed', String(this.details)); details.textContent = this.details ? 'Details −' : 'Details +';
-      const look = Math.round(clamp(p.lookSensitivity === undefined ? 1 : p.lookSensitivity, .3, 3) * 100);
+      // The slider moves in steps of ten, so the label shows the same rounded value the slider can hold.
+      const look = Math.round(clamp(p.lookSensitivity === undefined ? 1 : p.lookSensitivity, .3, 3) * 10) * 10;
       this.root.querySelector('[data-setting="lookSensitivity"]').value = look; this.nodes['look-value'].textContent = look + '%';
       this.applyView(p.view);
     }

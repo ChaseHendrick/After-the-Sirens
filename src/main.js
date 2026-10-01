@@ -430,9 +430,11 @@
     stopAutoplay();
     event.preventDefault();
     pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
+    // In first person the click that captures the mouse only captures it: after a menu or a conversation it would
+    // otherwise swing at whoever is ahead. Once locked, or where locking is unavailable, clicks attack as usual.
+    if (firstPerson() && !view.locked && !view.lockFailed && typeof canvas.requestPointerLock === 'function') { requestPointer(); unlockAudio(); return; }
     if (event.button === 0) pointer.down = true;
     if (event.button === 2) pointer.shoot = true;
-    if (firstPerson()) requestPointer();
     unlockAudio();
     try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
   });
@@ -484,6 +486,8 @@
   function updateView(elapsed) {
     const looked = touch ? touch.takeLook() : 0, mouse = view.mouse;
     view.mouse = 0;
+    // A menu or a conversation that arrives without a local key press (a multiplayer snapshot) still hands the mouse back.
+    if (view.locked && !gameAcceptsInput()) releasePointer();
     if (!firstPerson() || !S.FirstPerson) return;
     const p = state.player, car = p.vehicleId ? (state.vehicles || []).find(function (v) { return v.id === p.vehicleId; }) : null;
     let turn = 0;

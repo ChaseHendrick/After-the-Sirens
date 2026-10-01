@@ -127,7 +127,10 @@ const wrap = (a) => { a %= TAU; return a > Math.PI ? a - TAU : a <= -Math.PI ? a
       await hold(page, 'Space', 90); let s = await inspect(page);
       assert(s.cooldown > 0, 'Space did not attack'); assert(s.stamina < before.stamina, 'the swing cost no stamina'); assert(Math.abs(wrap(s.angle - s.yaw)) < .02, 'the attack did not face the view');
       await page.waitForTimeout(700); before = await inspect(page);
-      await page.mouse.move(720, 450); await page.mouse.down(); await page.waitForTimeout(90); await page.mouse.up(); await page.waitForTimeout(120);
+      // The click that captures the mouse only captures it; it must not swing at whoever is ahead.
+      await page.mouse.move(720, 450); await page.mouse.down(); await page.waitForTimeout(90); await page.mouse.up(); await page.waitForTimeout(150);
+      s = await inspect(page); assert.equal(s.cooldown, 0, 'the click that captures the mouse also attacked'); assert.equal(s.stamina >= before.stamina, true, 'the capturing click spent stamina');
+      await page.mouse.down(); await page.waitForTimeout(90); await page.mouse.up(); await page.waitForTimeout(120);
       s = await inspect(page); assert(s.cooldown > 0, 'a left click did not attack'); assert(Math.abs(wrap(s.angle - s.yaw)) < .02);
       evidence.pointerLock = s.locked;
       if (s.locked) {
@@ -139,6 +142,17 @@ const wrap = (a) => { a %= TAU; return a > Math.PI ? a - TAU : a <= -Math.PI ? a
         await page.waitForTimeout(400); await page.keyboard.press('Escape'); await page.waitForTimeout(150);
         assert.equal((await inspect(page)).screen, 'playing');
       }
+    });
+
+    await check('a conversation that opens without a local key press hands the mouse back', async () => {
+      await page.waitForTimeout(300); await page.mouse.move(720, 450); await page.mouse.down(); await page.mouse.up(); await page.waitForTimeout(200);
+      if (!(await inspect(page)).locked) { console.log('NOTE pointer lock is unavailable in this browser; the release check is skipped'); evidence.conversationRelease = 'skipped: no pointer lock'; return; }
+      // Labeled fixture: a conversation appearing in state, as a multiplayer snapshot delivers it, with no local E press.
+      await page.evaluate(() => { Sirens.App.getState().conversation = { id: 'fixture', name: 'Fixture survivor', role: 'Survivor', text: 'A snapshot opened this conversation.', trust: 0 }; });
+      await page.locator('[data-ui="conversation-overlay"]').waitFor({ state: 'visible' }); await page.waitForTimeout(150);
+      const s = await inspect(page); assert.equal(s.locked, false, 'the mouse stayed locked behind the conversation'); assert.equal(s.screen, 'playing', 'handing the mouse back must not pause');
+      await page.evaluate(() => { Sirens.App.getState().conversation = null; }); await page.locator('[data-ui="conversation-overlay"]').waitFor({ state: 'hidden' });
+      evidence.conversationRelease = 'released';
     });
 
     await check('a zombie straight ahead is drawn while one behind a wall is not', async () => {
@@ -260,6 +274,13 @@ const wrap = (a) => { a %= TAU; return a > Math.PI ? a - TAU : a <= -Math.PI ? a
       evidence.portrait = await p.evaluate(() => { const f = Sirens.App.getView().firstPerson; return { buffer: [f.width, f.height], fov: f.fov }; });
       await p.screenshot({ path: path.join(output, 'firstperson-portrait.png') });
       await c.close();
+    });
+
+    await check('a stored look sensitivity shows the same value on the slider and its label', async () => {
+      const { context: c, page: p } = await open({ width: 1280, height: 800 }, false);
+      await p.evaluate(() => localStorage.setItem('after-the-sirens-options-v1', JSON.stringify({ lookSensitivity: .35 }))); await p.reload(); await p.waitForTimeout(200);
+      const shown = await p.evaluate(() => ({ slider: document.querySelector('[data-setting="lookSensitivity"]').value, label: document.querySelector('[data-ui="look-value"]').textContent }));
+      assert.equal(shown.label, shown.slider + '%', 'slider ' + shown.slider + ' but label ' + shown.label); await c.close();
     });
 
     await check('first person runs offline without uncaught errors', async () => { assert.deepEqual(errors, []); assert.deepEqual(requests, []); });
