@@ -21,7 +21,7 @@
     ['Appearance', 'Choose skin, hair, coat color, and a cap or beanie in Appearance. These choices are free and stay in your save. Equipped clothing determines protection, and backpacks determine carrying capacity.'],
     ['Pets and care', 'Approach a stray dog or cat on the ground floor and use E, or Befriend in Pets, for one ration. Keep up to two pets. Feed a nearby pet one ration for 25 care; choose Follow or Stay and mark its location. At 40 care or more, a pet nearby slows fatigue by 15 percent. Cared-for dogs alert you to nearby dead. Pets move in the loaded ground floor, wait when you drive or go upstairs, and receive no combat damage in this build.'],
     ['Groups and battles', 'Forces records three groups, their reputation, alliances, and support. Aid spends two stored rations for three reputation. Alliance needs three reputation and stored food, bandages, and scrap. Allied support sends up to eight people to defend home, with a 180-second cooldown. You can deliberately stage a four-wave horde siege or a two-wave raider battle. Prepare supplies, allies, and defenses before beginning; leaving the area counts as withdrawal.'],
-    ['Saves and controls', 'Escape pauses or closes the current menu. I opens Pack and Crafting; J opens this journal. Details expands the HUD. Autosave runs every 30 seconds of play. Export a portable save in the pause menu to keep a copy. Sound can be muted there too.']
+    ['Saves and controls', 'Escape pauses or closes the current menu. I opens Pack and Crafting; J opens this journal. Details expands the HUD. Autosave runs every 5 seconds of play and when you leave the page. Export a portable save in the pause menu to keep a copy. Sound can be muted there too.']
   ]);
   class Journal {
     constructor(root) {
@@ -50,7 +50,7 @@
       this.search.addEventListener('input', () => { this.query = this.search.value.toLowerCase().trim(); this.signature = ''; this.render(this.state, true); });
     }
     show(s) { if (this.state !== s) this.atlasCursor = null; this.open = true; this.overlay.hidden = false; this.signature = ''; this.render(s, true); this.overlay.querySelector('.as-close').focus({ preventScroll: true }); }
-    close() { this.open = false; this.overlay.hidden = true; }
+    close() { this.open = false; this.overlay.hidden = true; if (this.overlay.contains(document.activeElement)) document.activeElement.blur(); }
     markAtlas() {
       const p = this.atlasCursor || this.state.player, w = this.state.world;
       S.Engine.action(this.state, 'mark:' + (p.x + (w ? w.originX * 32 : 0)) + ',' + (p.y + (w ? w.originY * 32 : 0)) + ',' + (this.state.stories ? this.state.stories.floor : 0));

@@ -8,23 +8,28 @@
   const renderer = new S.Renderer(canvas, minimap);
   const SAVE_KEY = 'after-the-sirens-save-v1';
   const OPTIONS_KEY = 'after-the-sirens-options-v1';
-  const preferences = { sound: true, volume: .7, music: true, musicVolume: .35, effects: true, effectsVolume: 1, ambience: true, ambienceVolume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false };
+  const preferences = { sound: true, volume: .7, music: true, musicVolume: .35, effects: true, effectsVolume: 1, ambience: true, ambienceVolume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false, view: 'top', lookSensitivity: 1 };
   try {
     const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null');
     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
       for (const key of ['sound', 'music', 'effects', 'ambience', 'motion', 'details']) if (typeof saved[key] === 'boolean') preferences[key] = saved[key];
       for (const key of ['volume', 'musicVolume', 'effectsVolume', 'ambienceVolume']) if (typeof saved[key] === 'number' && Number.isFinite(saved[key])) preferences[key] = Math.max(0, Math.min(1, saved[key]));
       if (typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)) preferences.zoom = Math.max(.7, Math.min(1.5, saved.zoom));
+      if (saved.view === 'top' || saved.view === 'first') preferences.view = saved.view;
+      if (typeof saved.lookSensitivity === 'number' && Number.isFinite(saved.lookSensitivity)) preferences.lookSensitivity = Math.max(.3, Math.min(3, saved.lookSensitivity));
     }
   } catch (_) {}
   function rememberOptions() { try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(preferences)); } catch (_) {} }
-  renderer.zoom = preferences.zoom; renderer.ambientMotion = preferences.motion;
+  renderer.zoom = preferences.zoom; renderer.ambientMotion = preferences.motion; preferences.view = renderer.setView(preferences.view);
+  // First-person camera. The yaw lives here, not in saves; it only shapes input snapshots and the view.
+  const TURN_SPEED = 2.6, MOUSE_TURN = .0025, TOUCH_TURN = .008;
+  const view = { yaw: Math.PI / 2, mouse: 0, locked: false, lockFailed: false, releasing: false, lockPausedAt: -1e9 };
   S.Effects.audio.setVolume(preferences.volume); S.Effects.audio.setEnabled(preferences.sound);
   for (const channel of ['music', 'effects', 'ambience']) S.Effects.audio.setChannel(channel, preferences[channel], preferences[channel + 'Volume']);
 
   const pilot = S.Autoplay ? S.Autoplay.create() : null;
   let autoInput = null;
-  let network = null, networkUI = null, social = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
+  let network = null, networkUI = null, social = null, touch = null, touchContext = { use: false, drive: false, driving: false }, networkReady = false, networkPlayers = [], networkSendTime = 0;
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
   let debugOn = false;
@@ -41,19 +46,54 @@
 
   function unlockAudio() { S.Effects.audio.unlock(); }
 
-  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; if (networkReady && network) network.sendInput(inputSnapshot()); }
+  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; view.mouse = 0; releasePointer(); if (touch) touch.reset(); if (networkReady && network) network.sendInput(inputSnapshot()); }
+
+  function firstPerson() { return renderer.viewMode === 'first'; }
+  function syncYaw() { view.yaw = S.FirstPerson ? S.FirstPerson.wrap(state.player.angle || 0) : 0; renderer.viewYaw = view.yaw; }
+  // Menus, pauses and view changes hand the mouse back; the flag keeps that release from pausing again.
+  function releasePointer() {
+    if (document.pointerLockElement !== canvas) return;
+    view.releasing = true;
+    try { document.exitPointerLock(); } catch (_) { view.releasing = false; }
+  }
+  function requestPointer() {
+    if (view.locked) return;
+    if (typeof canvas.requestPointerLock !== 'function') { view.lockFailed = true; return; }
+    try {
+      const request = canvas.requestPointerLock();
+      if (request && typeof request.catch === 'function') request.catch(function () { view.lockFailed = true; });
+    } catch (_) { view.lockFailed = true; }
+  }
+  function setView(mode, quiet) {
+    const next = mode === 'first' && S.FirstPerson ? 'first' : 'top';
+    if (next === renderer.viewMode && preferences.view === next) { ui.applyView(next); return; }
+    preferences.view = renderer.setView(next);
+    if (next === 'first') syncYaw();
+    // Switching keeps the run going but drops held input, so nothing keeps moving in the new frame of reference.
+    clearInput();
+    if (touch) touch.setLook(next === 'first');
+    ui.applyView(next); describeCanvas(); rememberOptions();
+    if (!quiet) toast(next === 'top' ? 'Top-down view. P switches views.' : touch && touch.enabled ? 'First-person view. Drag the right side to look and tap it to strike.' : 'First-person view. Click to look with the mouse, or turn with the arrow keys. P switches back.');
+  }
+  function describeCanvas() {
+    canvas.setAttribute('aria-label', firstPerson() ? 'First-person survival view. W and S move, A and D step sideways, the arrow keys or mouse turn, E interacts, and I opens the pack.' : 'Top down survival game. Use WASD to move, mouse to aim, E to interact, and I for inventory.');
+  }
 
   function setScreen(name) {
     screen = name;
     if (name !== 'playing') S.Effects.audio.suspend();
     ui.showScreen(name);
+    const mapWasHidden = mapShell.hidden;
     mapShell.hidden = name === 'title';
+    // The minimap is measured while visible; measuring it hidden falls back to a mismatched size.
+    if (mapWasHidden && !mapShell.hidden) renderer.resize();
   }
 
   function toast(text, toneName) { ui.toast(text, toneName || 'info'); }
 
+  // A finished run (death or rescue) is kept for its record but is not offered as Continue.
   function hasSave() {
-    try { return !!localStorage.getItem(SAVE_KEY); } catch (_) { return false; }
+    try { const data = localStorage.getItem(SAVE_KEY); if (!data) return false; const saved = JSON.parse(data); return !(saved && saved.state && saved.state.ended === true); } catch (_) { return false; }
   }
 
   function save(silent) {
@@ -76,7 +116,7 @@
     let parsed = Number(seed);
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) parsed = Date.now() % 2147483647;
     state = S.Engine.create(parsed, difficulty || 'standard', mode === 'rescue' ? 'rescue' : 'openworld');
-    active = true;
+    active = true; syncYaw();
     accumulator = 0;
     autoSaveTime = 0;
     clearInput();
@@ -92,8 +132,9 @@
     try {
       const data = localStorage.getItem(SAVE_KEY);
       if (!data) { toast('No local save found. Start a new run.', 'warning'); return; }
+      if (!hasSave()) { toast('That run has ended. Start a new run.', 'warning'); return; }
       state = S.Engine.deserialize(data);
-      active = true;
+      active = true; syncYaw();
       accumulator = 0;
       clearInput();
       unlockAudio();
@@ -149,7 +190,7 @@
       if (file.size > 32 * 1024 * 1024) throw new Error('Save file is too large.');
       const loaded = S.Engine.deserialize(await file.text());
       state = loaded;
-      active = true;
+      active = true; syncYaw();
       accumulator = 0;
       clearInput();
       setScreen(state.ended ? (state.player.health > 0 && state.won ? 'won' : 'dead') : 'playing');
@@ -192,6 +233,9 @@
     setZoom: function (value) { preferences.zoom = Math.max(.7, Math.min(1.5, Number(value) || 1)); renderer.zoom = preferences.zoom; rememberOptions(); },
     setMotion: function (on) { preferences.motion = !!on; renderer.ambientMotion = preferences.motion; rememberOptions(); },
     setDetails: function (on) { preferences.details = !!on; rememberOptions(); },
+    setView: function (mode) { setView(mode); },
+    toggleView: function () { setView(firstPerson() ? 'top' : 'first'); },
+    setLookSensitivity: function (value) { const n = Number(value); if (!Number.isFinite(n)) return; preferences.lookSensitivity = Math.max(.3, Math.min(3, n)); rememberOptions(); },
     fullscreen: function () {
       try {
         const change = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
@@ -203,7 +247,7 @@
   const autoPanel = document.createElement('div'); autoPanel.className = 'as-autoplay';
   autoPanel.innerHTML = '<button type="button" aria-pressed="false" data-autoplay-toggle>AI play: Off</button><span data-autoplay-status>You are in control.</span><details class="as-brain"><summary>Neural activity</summary><div data-brain-view>Enable AI play to train its local controller.</div></details>';
   document.querySelector('.as-objective').appendChild(autoPanel);
-  const autoButton = autoPanel.querySelector('button'); autoButton.disabled = !pilot;
+  const autoButton = autoPanel.querySelector('button'), autoStatus = autoPanel.querySelector('[data-autoplay-status]'); autoButton.disabled = !pilot;
   autoButton.addEventListener('click', function () {
     if (!pilot) return; S.Autoplay.toggle(pilot); clearInput(); autoButton.blur();
     toast(S.Autoplay.status(pilot).enabled ? 'AI play is on. Manual movement or combat returns control to you.' : 'AI play is off. You are in control.');
@@ -216,6 +260,7 @@
     }
   }
   autoPanel.querySelector('details').addEventListener('toggle', function () { renderBrain(true); });
+  autoPanel.querySelector('summary').addEventListener('click', function (event) { if (event.detail > 0) event.currentTarget.blur(); });
   function stopAutoplay() { if (pilot && S.Autoplay.status(pilot).enabled) S.Autoplay.toggle(pilot, false); autoInput = null; }
   function autoCommand(command) {
     if (networkReady) network.sendAction(command);
@@ -257,7 +302,7 @@
               S.Effects.attack(state, state.player.weapon, kind, item && item.weapon && item.weapon.cooldown || .5, state.player.angle);
             }
             if (state.player.health < previous.player.health - .2) S.Effects.emit(state, 'hurt');
-          } else { clearInput(); accumulator = 0; unlockAudio(); setScreen('playing'); S.Effects.emit(state, 'ready'); }
+          } else { clearInput(); syncYaw(); accumulator = 0; unlockAudio(); setScreen('playing'); S.Effects.emit(state, 'ready'); }
           ui.update(state, frameInfo); networkUI.update(true, networkPlayers, state);
           if (social) social.update(true, networkPlayers, state, network.getStatus());
         },
@@ -280,23 +325,50 @@
     clearInput: clearInput,
     isPlaying: function () { return active && screen === 'playing' && !ui.isBlocking() && !state.ended; }
   });
+  function gameAcceptsInput() { return active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended; }
+  function interactNearby() {
+    if (networkReady) network.sendAction('interact'); else S.Engine.interact(state);
+    if (state.conversation) clearInput();
+    ui.update(state, frameInfo);
+  }
+  touch = S.Touch ? new S.Touch(document.getElementById('ui'), {
+    command: function (name) {
+      if (!gameAcceptsInput()) return;
+      stopAutoplay(); unlockAudio();
+      if (name === 'interact') interactNearby();
+      else if (name === 'switch') applyAction('switchWeapon');
+      else if (name === 'vehicle') applyAction('vehicle');
+    }
+  }) : null;
   if (ui.applyPreferences) ui.applyPreferences(preferences);
+  if (touch) touch.setLook(firstPerson());
+  describeCanvas();
   setScreen('title');
   ui.update(state, frameInfo);
 
-  const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyJ', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape']);
+  const heldKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC']);
+  const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyJ', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape', 'KeyP']);
 
   addEventListener('keydown', function (event) {
     if (event.defaultPrevented || social && social.isBlocking()) return;
-    const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
-    const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
-    if (buttonActivation) return;
+    // A control left focused inside a hidden menu must not swallow game keys.
+    const shown = !!(event.target && event.target.getClientRects && event.target.getClientRects().length);
+    const editing = shown && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+    const buttonActivation = shown && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
+    // A key still held from play must not activate a button that just received focus,
+    // such as Try again on the death screen.
+    if (buttonActivation) { if (event.repeat) event.preventDefault(); return; }
     if (editing && event.code !== 'Escape') return;
-    if (controlledKeys.has(event.code)) event.preventDefault();
-    if (event.repeat) return;
+    if (controlledKeys.has(event.code)) { event.preventDefault(); if (touch && event.code !== 'Escape') touch.enable(false); }
+    if (event.repeat) {
+      // Menus clear held keys; a key still held when play resumes is picked up again.
+      if (heldKeys.has(event.code) && !keys.has(event.code) && gameAcceptsInput()) keys.add(event.code);
+      return;
+    }
     if (event.code === 'Escape') {
-      if (state.conversation) applyAction('closeConversation');
-      else if (screen === 'paused') resume();
+      // A browser that also delivers the Escape which ended pointer lock must not undo that pause.
+      if (screen === 'paused') { if (performance.now() - view.lockPausedAt > 350) resume(); }
+      else if (state.conversation) applyAction('closeConversation');
       else if (active && screen === 'playing') {
         if (ui.journal && ui.journal.open) ui.toggleJournal();
         else if (ui.isBlocking()) ui.toggleInventory();
@@ -304,6 +376,7 @@
       }
       return;
     }
+    if (event.code === 'KeyP' && active && !state.ended && (screen === 'paused' || screen === 'playing' && !ui.isBlocking())) { setView(firstPerson() ? 'top' : 'first'); return; }
     if (event.code === 'KeyI' && active && screen === 'playing' && !state.ended) {
       clearInput(); ui.toggleInventory(); ui.update(state, frameInfo); return;
     }
@@ -312,11 +385,8 @@
     stopAutoplay();
     keys.add(event.code);
     unlockAudio();
-    if (event.code === 'KeyE') {
-      if (networkReady) network.sendAction('interact'); else S.Engine.interact(state);
-      if (state.conversation) clearInput();
-      ui.update(state, frameInfo);
-    } else if (event.code === 'Digit1') applyAction('eat');
+    if (event.code === 'KeyE') interactNearby();
+    else if (event.code === 'Digit1') applyAction('eat');
     else if (event.code === 'Digit2') applyAction('drink');
     else if (event.code === 'Digit3') applyAction('bandage');
     else if (event.code === 'Digit4' || event.code === 'KeyR') applyAction('reload');
@@ -333,32 +403,105 @@
   addEventListener('pagehide', function () { S.Effects.audio.suspend(); if (active && !networkReady) save(true); });
   addEventListener('beforeunload', function () { if (active && !networkReady) save(true); });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
-  canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
+  canvas.addEventListener('pointermove', function (event) {
+    if (event.pointerType === 'touch') { if (touch) touch.move(event); return; }
+    pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
+    // Locked mouse movement turns the view. Without pointer lock, plain movement over the view turns it instead.
+    if (firstPerson() && (view.locked || view.lockFailed) && gameAcceptsInput() && Number.isFinite(event.movementX)) view.mouse += Math.max(-400, Math.min(400, event.movementX));
+  });
+  document.addEventListener('pointerlockerror', function () { view.lockFailed = true; });
+  document.addEventListener('pointerlockchange', function () {
+    const locked = document.pointerLockElement === canvas, was = view.locked, releasing = view.releasing;
+    view.locked = locked; view.releasing = false;
+    if (locked) { view.lockFailed = false; return; }
+    // Escape ends pointer lock before the page sees the key, so losing it mid-play pauses like a window blur.
+    if (was && !releasing && firstPerson() && active && screen === 'playing' && !ui.isBlocking() && !state.ended) { view.lockPausedAt = performance.now(); pause(); }
+  });
   canvas.addEventListener('pointerdown', function (event) {
+    if (event.pointerType === 'touch' && touch) {
+      event.preventDefault();
+      if (!gameAcceptsInput()) return;
+      stopAutoplay(); unlockAudio();
+      if (touch.down(event, canvas.getBoundingClientRect())) { try { canvas.setPointerCapture(event.pointerId); } catch (_) {} }
+      return;
+    }
+    if (touch && event.pointerType === 'mouse') touch.enable(false);
     if (!active || ui.isBlocking() || social && social.isBlocking()) return;
     stopAutoplay();
     event.preventDefault();
     pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
+    // In first person the click that captures the mouse only captures it: after a menu or a conversation it would
+    // otherwise swing at whoever is ahead. Once locked, or where locking is unavailable, clicks attack as usual.
+    if (firstPerson() && !view.locked && !view.lockFailed && typeof canvas.requestPointerLock === 'function') { requestPointer(); unlockAudio(); return; }
     if (event.button === 0) pointer.down = true;
     if (event.button === 2) pointer.shoot = true;
     unlockAudio();
     try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
   });
   addEventListener('pointerup', function (event) {
+    if (event.pointerType === 'touch') { if (touch) touch.up(event); return; }
     if (event.button === 0) pointer.down = false;
     if (event.button === 2) pointer.shoot = false;
+    syncButtons(event);
   });
-  canvas.addEventListener('pointercancel', clearInput);
+  // Browsers report a second mouse button pressed or released during a drag as pointermove,
+  // so held attack state follows the buttons bitmask rather than only down/up events.
+  function syncButtons(event) {
+    if (!(event.buttons & 1)) pointer.down = false;
+    if (!(event.buttons & 2)) pointer.shoot = false;
+    if ((pointer.down || pointer.shoot) && gameAcceptsInput()) {
+      if (event.button === 0 && event.buttons & 1) pointer.down = true;
+      if (event.button === 2 && event.buttons & 2) pointer.shoot = true;
+    }
+  }
+  addEventListener('pointermove', function (event) { if (event.pointerType !== 'touch') syncButtons(event); });
+  canvas.addEventListener('pointercancel', function (event) { if (event.pointerType === 'touch' && touch) touch.up(event); else clearInput(); });
 
   function inputSnapshot() {
-    const moveX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-    const moveY = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
-    const aim = pointer.used ? renderer.screenToWorld(pointer.x, pointer.y, state) : {
-      x: state.player.x + Math.cos(state.player.angle || 0) * 100,
-      y: state.player.y + Math.sin(state.player.angle || 0) * 100
-    };
-    return { moveX: moveX, moveY: moveY, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), sneak: keys.has('KeyC'),
-      aimX: aim.x, aimY: aim.y, attack: pointer.down || keys.has('Space'), shoot: pointer.shoot };
+    const thumbs = touch ? touch.snapshot(performance.now()) : null, first = firstPerson() && !!S.FirstPerson;
+    let moveX, moveY;
+    if (first && !state.player.vehicleId) {
+      // First person on foot: W/S and the up/down arrows walk along the view, A/D and the left stick's sideways push strafe.
+      // The left/right arrows turn instead (updateView). A car keeps its own throttle and steering below.
+      const move = S.FirstPerson.viewInput({ forward: (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (thumbs ? thumbs.moveY : 0),
+        strafe: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + (thumbs ? thumbs.moveX : 0) }, view.yaw);
+      moveX = move.moveX; moveY = move.moveY;
+    } else {
+      moveX = Math.max(-1, Math.min(1, (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + (thumbs ? thumbs.moveX : 0)));
+      moveY = Math.max(-1, Math.min(1, (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + (thumbs ? thumbs.moveY : 0)));
+    }
+    let aim;
+    // The engine aims at a point; first person aims straight ahead, so targeting, sound and multiplayer are unchanged.
+    if (first) aim = S.FirstPerson.aim(state.player, view.yaw, 100);
+    else if (thumbs && thumbs.aim && thumbs.aim.kind === 'screen') aim = renderer.screenToWorld(thumbs.aim.x, thumbs.aim.y, state);
+    else if (thumbs && thumbs.aim) aim = { x: state.player.x + thumbs.aim.x * 100, y: state.player.y + thumbs.aim.y * 100 };
+    else if (pointer.used && !(touch && touch.enabled)) aim = renderer.screenToWorld(pointer.x, pointer.y, state);
+    else aim = { x: state.player.x + Math.cos(state.player.angle || 0) * 100, y: state.player.y + Math.sin(state.player.angle || 0) * 100 };
+    return { moveX: moveX, moveY: moveY, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight') || !!(thumbs && thumbs.sprint), sneak: keys.has('KeyC') || !!(thumbs && thumbs.sneak),
+      aimX: aim.x, aimY: aim.y, attack: pointer.down || keys.has('Space') || !!(thumbs && thumbs.attack), shoot: pointer.shoot };
+  }
+
+  // Turns the first-person camera once per frame: arrow keys, mouse and the touch look pad on foot;
+  // a car's heading while driving; AI play's facing while it is in control.
+  function updateView(elapsed) {
+    const looked = touch ? touch.takeLook() : 0, mouse = view.mouse;
+    view.mouse = 0;
+    // A menu or a conversation that arrives without a local key press (a multiplayer snapshot) still hands the mouse back.
+    if (view.locked && !gameAcceptsInput()) releasePointer();
+    if (!firstPerson() || !S.FirstPerson) return;
+    const p = state.player, car = p.vehicleId ? (state.vehicles || []).find(function (v) { return v.id === p.vehicleId; }) : null;
+    let turn = 0;
+    if (gameAcceptsInput() && !car) turn = ((keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0)) * TURN_SPEED * elapsed + (mouse * MOUSE_TURN + looked * TOUCH_TURN) * preferences.lookSensitivity;
+    if (car) view.yaw = S.FirstPerson.wrap(car.angle || 0);
+    else if (!turn && pilot && S.Autoplay.status(pilot).enabled) view.yaw = S.FirstPerson.wrap(view.yaw + S.FirstPerson.wrap((p.angle || 0) - view.yaw) * Math.min(1, elapsed * 6));
+    else view.yaw = S.FirstPerson.wrap(view.yaw + turn);
+    renderer.viewYaw = view.yaw;
+  }
+  // After the simulation steps, a driven car's new heading is what the frame should show.
+  function followCar() {
+    if (!firstPerson() || !S.FirstPerson || !state.player.vehicleId) return;
+    const car = (state.vehicles || []).find(function (v) { return v.id === state.player.vehicleId; });
+    if (car) { view.yaw = S.FirstPerson.wrap(car.angle || 0); renderer.viewYaw = view.yaw; }
   }
 
   let lastMetrics = performance.now();
@@ -385,7 +528,13 @@
       const choice = S.Autoplay.step(pilot, state, elapsed); autoInput = choice.input;
       if (choice.command) autoCommand(choice.command);
     }
-    if (pilot) { const pilotStatus = S.Autoplay.status(pilot); autoButton.textContent = 'AI play: ' + (pilotStatus.enabled ? 'On' : 'Off'); autoButton.setAttribute('aria-pressed', String(pilotStatus.enabled)); autoPanel.querySelector('span').textContent = pilotStatus.enabled ? pilotStatus.text : 'You are in control.'; }
+    if (pilot) {
+      // Write only changed text so an idle HUD does not force a layout every frame.
+      const pilotStatus = S.Autoplay.status(pilot), label = 'AI play: ' + (pilotStatus.enabled ? 'On' : 'Off'), text = pilotStatus.enabled ? pilotStatus.text : 'You are in control.';
+      if (autoButton.textContent !== label) { autoButton.textContent = label; autoButton.setAttribute('aria-pressed', String(pilotStatus.enabled)); }
+      if (autoStatus.textContent !== text) autoStatus.textContent = text;
+    }
+    updateView(elapsed);
     if (networkReady && active) {
       networkSendTime += elapsed; S.Effects.advance(state, elapsed);
       if (networkSendTime >= .05) {
@@ -407,15 +556,25 @@
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
     renderBrain(false);
+    followCar();
+    if (touch) touch.update(gameAcceptsInput(), touchContext);
     S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden, !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
-    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0; }
+    if (uiTime > 0.1 || state.ended) {
+      ui.update(state, frameInfo);
+      if (touch && touch.enabled) touchContext = { use: !ui.nodes.interact.hidden, drive: !state.player.vehicleId && !!(S.Vehicles && S.Vehicles.nearby(state)), driving: !!state.player.vehicleId };
+      networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0;
+    }
     debug.hidden = !debugOn || screen === 'title';
     if (!debug.hidden) debug.textContent = frameInfo.fps + ' FPS  |  ' + frameInfo.frameMs.toFixed(1) + ' ms avg  |  ' + frameInfo.p95.toFixed(1) + ' ms p95\n' +
       state.zombies.length + ' active zombies  |  ' + state.stats.aiUpdates + ' AI decisions  |  seed ' + state.seed +
-      (state.world ? '\nSector ' + state.world.centerCX + ', ' + state.world.centerCY + '  |  ' + Object.keys(state.world.records).length + ' journaled sectors' : '');
+      (state.world ? '\nSector ' + state.world.centerCX + ', ' + state.world.centerCY + '  |  ' + Object.keys(state.world.records).length + ' journaled sectors' : '') + debugView();
     requestAnimationFrame(frame);
+  }
+  function debugView() {
+    const info = renderer.viewInfo(), fp = info.firstPerson;
+    return '\nView ' + (fp ? 'first person ' + fp.width + 'x' + fp.height + ' · ' + fp.visible.length + ' sprites' : 'top-down') + '  |  draw ' + info.draw.mean.toFixed(1) + ' ms avg, ' + info.draw.p95.toFixed(1) + ' ms p95';
   }
   renderer.resize();
   requestAnimationFrame(frame);
@@ -423,5 +582,6 @@
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
     getSocialStatus: function () { return social.getStatus(); }, getVoiceStats: function () { return social.getVoiceStats(); },
-    getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics };
+    getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { const info = renderer.viewInfo(); return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion, mode: info.mode, yaw: view.yaw, lookSensitivity: preferences.lookSensitivity, pointerLocked: view.locked, draw: info.draw, firstPerson: info.firstPerson }; }, getAudioMetrics: S.Effects.audio.metrics,
+    getTouchStatus: function () { return touch ? touch.status() : { enabled: false }; } };
 })();

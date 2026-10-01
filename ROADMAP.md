@@ -18,6 +18,7 @@ Version 0.4 connects the original playable foundation with practice skills, six 
 - Underground resource layers, distinct geology and more mining tools; current resources are seeded surface deposits.
 - More cosmetic choices, richer pet behaviors, safe travel with companions/pets and interaction across floors.
 - Richer animation and audio, configurable key bindings, accessibility settings and performance measurements on more hardware.
+- Validate touch controls on physical phones and tablets and in mobile Safari; add gamepad support and a less crowded portrait phone layout.
 - Longer natural playtesting, world-journal pruning or migration, and more browser/device validation.
 
 ## Larger work

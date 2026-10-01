@@ -292,9 +292,10 @@
         for (const c of raw.containers) {
           const p = position(c, 'container'), id = text(c.id, 100, 'container identity');
           if (identities.has(id)) fail('duplicate entity'); identities.add(id);
-          if (!walkable(p)) fail('inaccessible container');
           const content = inventory(c.items);
           if (typeof c.looted !== 'boolean' || c.looted && Object.keys(content).length) fail('looted container content');
+          if (c._ground && c.looted) continue; // emptied piles from older saves hold nothing
+          if (!walkable(p)) fail('inaccessible container');
           const container = Object.assign({ id, label: text(c.label, 150, 'container label'), items: content, looted: c.looted }, p);
           if (c._ground) container._ground = true;
           saved.containers.push(container);

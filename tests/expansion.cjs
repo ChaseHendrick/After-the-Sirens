@@ -96,6 +96,19 @@ check('collision stops a fast car before a solid wall and causes condition damag
   assert(car.x <= 640 - 22 + 0.01, 'car cannot tunnel through wall');
   assert(car.condition < 100); assert(Math.abs(car.speed) < 10);
 });
+check('a car squeezing between trees keeps its driver seat clear, and a wedged driver save still loads and drives clear', () => {
+  const s = openFixture(); s._doorHealth = {}; s._terrainHealth = {};
+  s.tiles[29 * s.width + 32] = 5; s.tiles[31 * s.width + 33] = 5;
+  const car = Object.assign({}, V.spawnForChunk(s.seed, 0, 0)[0], { x: 1044.22, y: 987.83, angle: 5.6663, speed: 103, fuel: 20, condition: 100 });
+  s.vehicles = [car]; s.player.x = car.x; s.player.y = car.y; s.player.vehicleId = car.id;
+  const seat = (x, y) => [[-9, -9], [-9, 9], [9, -9], [9, 9]].every(d => !E.isSolid(s, (x + d[0]) / 32, (y + d[1]) / 32));
+  // Before the seat test, this exact turn pressed a tree corner between the footprint points onto the driver.
+  for (let i = 0; i < 40; i++) { E.update(s, 1 / 20, { moveX: 1, moveY: -1 }); assert(seat(car.x, car.y), 'driver seat entered a tree on frame ' + i); }
+  const loaded = E.deserialize(E.serialize(s)); assert.equal(loaded.player.vehicleId, car.id); assert.equal(loaded.player.x, s.player.x);
+  car.x = s.player.x = 1054.6; car.y = s.player.y = 983.2; car.angle = 6.1816; car.speed = 0; car.condition = 100; car.fuel = 20; // where the older build stopped assert.equal(seat(car.x, car.y), false);
+  const wedged = E.deserialize(E.serialize(s)); assert.equal(wedged.player.x, 1054.6); assert.equal(wedged.player.vehicleId, car.id);
+  tick(wedged, 90, { moveY: 1, moveX: 1 }); assert(Math.hypot(wedged.player.x - 1054.6, wedged.player.y - 983.2) > 5, 'a car wedged by an older build can reverse clear');
+});
 check('fuel use, empty tank, and safe exit have meaningful engine effects', () => {
   const { s, car } = carFixture();
   car.fuel = 0; car.speed = 0; const start = car.x;

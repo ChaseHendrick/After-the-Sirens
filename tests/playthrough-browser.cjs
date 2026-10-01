@@ -170,10 +170,21 @@ function selectSeed() {
     });
     await check('ordinary movement opens the cabin and business doors and loots a second generated location', async () => {
       const business = await container('Ranger shed supplies'); assert(business);
-      const before = await observe(); await walkTo(business.x, business.y); await press('KeyE'); const after = await observe();
-      assert(after.progression.totals.loot >= before.progression.totals.loot + 1); assert(after.progression.insight > before.progression.insight); assert(opened.size >= 2);
+      const before = await observe(); await walkTo(business.x, business.y);
+      // Act on the visible prompt, as a player would: a wandering survivor or pet nearby takes E first.
+      const prompt = () => page.locator('[data-ui="interact-text"]').textContent();
+      // The prompt refreshes ten times a second, so a survivor or pet stepping closer just before the key press can still
+      // take E. As a player would, close a conversation that opens and act on the shed prompt again.
+      let after = before, attempts = 0;
+      while (attempts < 3 && after.progression.totals.loot < before.progression.totals.loot + 1) {
+        attempts++;
+        await page.waitForFunction(() => /Ranger shed supplies/.test(document.querySelector('[data-ui="interact-text"]').textContent), null, { timeout: 6000 }).catch(() => {});
+        assert.match(await prompt(), /Ranger shed supplies/, 'the shed prompt never appeared'); await press('KeyE'); after = await observe();
+        if (await page.evaluate(() => !!Sirens.App.getState().conversation)) { await press('Escape'); await page.waitForTimeout(150); }
+      }
+      assert(after.progression.totals.loot >= before.progression.totals.loot + 1, 'E at the shed prompt did not loot after ' + attempts + ' attempts: ' + JSON.stringify(after.logs)); assert(after.progression.insight > before.progression.insight); assert(opened.size >= 2);
       const remaining = await container('Ranger shed supplies'); assert(Object.keys(remaining.items).length < Object.keys(business.items).length || Object.entries(business.items).some(([id, n]) => (remaining.items[id] || 0) < n));
-      event('business-loot', { label: business.label || 'Ranger shed supplies', insight: after.progression.insight, inventory: after.player.inventory, leftovers: remaining.items });
+      event('business-loot', { label: business.label || 'Ranger shed supplies', attempts, insight: after.progression.insight, inventory: after.player.inventory, leftovers: remaining.items });
     });
     await check('mouse aiming and Space melee kill a naturally generated zombie', async () => {
       const baseline = (await observe()).player.kills, fightStart = Date.now();

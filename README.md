@@ -8,7 +8,7 @@ An original open world zombie survival game. Leave the town of Morrow, follow ro
 
 ![Gameplay in Morrow](docs/gameplay.png)
 
-**Version 0.5 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. It is not a complete recreation of Project Zomboid and does not contain that game's code, maps, assets, or item definitions. The catalogue contains **3,455 original items and 4,457 crafting and salvage recipes** across 38 families, with actual acquisition paths and collectible limitations shown. Material and design choices change equipment handling, protection and carrying capacity; food preparations change their effects. See the [item guide](docs/ITEMS.md).
+**Version 0.6 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. It is not a complete recreation of Project Zomboid and does not contain that game's code, maps, assets, or item definitions. The catalogue contains **3,455 original items and 4,457 crafting and salvage recipes** across 38 families, with actual acquisition paths and collectible limitations shown. Material and design choices change equipment handling, protection and carrying capacity; food preparations change their effects. See the [item guide](docs/ITEMS.md).
 
 ## Play
 
@@ -16,9 +16,9 @@ Open the demo above, or download `After-the-Sirens.html` from a release and open
 
 Choose **Open world** to explore and survive freely. The optional radio mission continues into free survival after completion. Choose **Rescue mission** for the compact original town scenario: find five radio parts, repair the relay, and survive until rescue arrives.
 
-Chrome is tested. Other modern desktop browsers may work, but have not all been validated. Keyboard and mouse are required; mobile-sized layout checks do not establish touch play support.
+Chrome is tested. Other modern browsers may work, but have not all been validated. Play with a keyboard and mouse, or with **touch on a phone or tablet**: drag the left side of the screen to move or drive, drag the right side to aim and attack, or tap to strike at that point. Touch buttons cover Use, Swap, Run, Sneak and, beside a car, Drive. Touch play is verified with Chrome's touch emulation at phone and tablet sizes; physical devices and mobile Safari have not been validated. Landscape gives the most room on a phone.
 
-Singleplayer autosaves every five seconds of play and on page exit. Continue restores the saved run. **Export save** keeps a portable JSON copy. Export regularly, especially when using local files, because browsers can restrict or clear local storage.
+Singleplayer autosaves every five seconds of play and on page exit. Continue restores the saved run; a run that ended in death or rescue is kept but not offered as Continue. **New run** in the pause menu asks once before replacing the save. **Export save** keeps a portable JSON copy. Export regularly, especially when using local files, because browsers can restrict or clear local storage.
 
 ![Searchable original item catalogue](docs/catalogue.png)
 
@@ -136,6 +136,14 @@ Original Web Audio sounds cover footsteps, melee swings, gunfire, reloads, flesh
 
 ![Axe, machete and spear attack frames](docs/combat-animation.png)
 
+## First-person view
+
+Press **P**, click the eye button between **Details** and the pause button, or choose **View: First person** under Game feel in the pause menu to see the town through your survivor's eyes. It is a second camera on the same world, drawn as a raycast pixel-art scene: buildings keep their top-down wall, floor and trim colors, closed doors and windows block the view while open doorways and broken windows can be seen through, interiors have ceilings, trees stand as billboards, and the sky follows the hour and the weather. Walls hide whatever is behind them. Your weapon swings, thrusts or recoils in view, a car shows its hood and dashboard, the minimap keeps a view cone, and the journal marker floats over its destination with its distance.
+
+W and S walk along the view, A and D step sideways, and the left and right arrows or the mouse turn. Click the view to capture the mouse; Escape releases it and pauses. **Look sensitivity** sets the turn speed. Space or a left click strikes straight ahead and right click fires: the engine simply aims along your view, so combat, noise, saves and multiplayer are unchanged. In a car, W and S still drive and A and D steer while the view follows the car. On touch screens the left thumb moves relative to the view, dragging the right side turns, and a quick tap strikes. The choice is remembered with your other settings, and the top-down view stays the default.
+
+![First-person view of zombies on a Morrow road at dusk](docs/first-person.png)
+
 ## Seeded worlds
 
 Enter a numeric **World seed** on the title screen. Seed `0` is valid. With the same seed and difficulty, generation reproduces the same terrain, business types, loot, cars, human spawns, and upper floors. Each sector uses a coordinate-derived RNG stream, so exploring sectors in a different order does not change their initial contents. Roads and building footprints follow authored procedural templates.
@@ -163,6 +171,24 @@ Saves store the world seed and the current simulation RNG state, along with pers
 | Steer | A / D while driving |
 | Climb or descend near stairs | Page Up / Page Down, or HUD buttons |
 | Pause or close a menu/conversation | Escape |
+| Switch between top-down and first-person view | P, or the eye button beside Pause |
+| Turn in first person | Left / right arrows, or the mouse after clicking the view |
+| Walk / step sideways in first person | W and S or up / down arrows / A and D |
+
+On touch screens:
+
+| Action | Touch |
+| --- | --- |
+| Move, or accelerate and steer while driving | Drag anywhere on the left side |
+| Aim and attack with the equipped weapon | Drag on the right side; a short push aims, a longer push attacks |
+| Strike toward a point | Quick tap on the right side |
+| Loot, door/window, radio, talk | Use (lights up when something is in reach) |
+| Switch weapon / sprint / sneak | Swap / Run / Sneak |
+| Enter a nearby car | Drive (appears beside a car, even when a survivor or pet is closer) |
+| Exit, refuel, stairs, supplies, Pack, Journal, pause | The existing HUD buttons |
+| Look around in first person | Drag on the right side; a quick tap strikes ahead |
+
+A physical keyboard or mouse switches the HUD back to keyboard hints; touching the game switches to touch again.
 
 ## What is playable
 
@@ -221,6 +247,7 @@ Then open `http://localhost:8000`. CI runs the build, simulation checks, save va
 | `src/personal.js` | Saved appearance, seeded strays, pet care and ground-floor behavior |
 | `src/effects.js` | Transient attack poses, footsteps, bounded events and Web Audio |
 | `src/renderer.js` | Fully visible Canvas world, animated characters and camera |
+| `src/firstperson.js` | First-person raycast view, billboards and view model, plus pure ray and view-relative input helpers |
 | `src/journal.js` | Skills, projects, people, daybook, searchable field guide and Atlas |
 | `src/ui.js`, `src/ui.css` | Menus, inventory, dialogue and HUD |
 | `src/neural.js`, `src/autoplay.js` | Local learned steering and constrained AI play |
@@ -228,6 +255,7 @@ Then open `http://localhost:8000`. CI runs the build, simulation checks, save va
 | `src/commands.js`, `src/social.js` | Singleplayer console, bounded chat and proximity WebRTC audio |
 | `server/index.cjs`, `server/directory.cjs` | Local authoritative world host and optional public directory |
 | `server/social.cjs` | Owner authorization, moderation, world commands and nearby voice signaling |
+| `src/touch.js` | Twin-stick touch input and touch action buttons, merged into ordinary input snapshots |
 | `src/main.js` | Input, fixed-step loop, presentation integration and browser storage |
 
 Each module registers once under `window.Sirens`. [Architecture](ARCHITECTURE.md), [validation](VALIDATION.md), [release notes](CHANGELOG.md), and [contribution instructions](CONTRIBUTING.md) describe the implementation and its limits.

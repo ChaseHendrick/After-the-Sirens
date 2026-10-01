@@ -36,6 +36,7 @@
     referenceIndex = Object.freeze({ items, recipes, byName, byWeight, recipesById: Object.freeze(recipesById), itemsById: Object.freeze(itemsById), recipeRows: Object.freeze(recipeRows), makers, uses });
     return referenceIndex;
   }
+  const eye = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="3.2"/></svg>';
   const icon = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 26V44M17 44h14M24 26l-7 18M24 26l7 18M15 17a13 13 0 0 1 18 0M9 11a22 22 0 0 1 30 0"/><circle cx="24" cy="22" r="4"/></svg>';
   // These small catalogue symbols are drawn here so menus look the same offline on every platform.
   const itemSymbols = Object.freeze({
@@ -96,7 +97,7 @@
       this.root.innerHTML = `
         <div class="as-hud" data-ui="hud" hidden>
           <section class="as-status" aria-label="Survivor status">
-            <div class="as-status-top"><span class="as-kicker">SURVIVOR</span><button class="as-details-button" data-command="details" aria-pressed="false" title="Show all needs and recent messages">Details +</button><button class="as-small-button" data-command="pause" title="Pause (Escape)" aria-label="Pause game">II</button></div>
+            <div class="as-status-top"><span class="as-kicker">SURVIVOR</span><button class="as-details-button" data-command="details" aria-pressed="false" title="Show all needs and recent messages">Details +</button><button class="as-small-button as-view-button" data-command="view" aria-pressed="false" aria-label="First-person view" title="First-person view (P)">${eye}</button><button class="as-small-button" data-command="pause" title="Pause (Escape)" aria-label="Pause game">II</button></div>
             <div class="as-meters">
               ${this.meterMarkup('health', 'Health', 'as-health')}
               ${this.meterMarkup('stamina', 'Stamina', 'as-stamina')}
@@ -129,7 +130,7 @@
               <button class="as-pack-button" data-command="inventory" title="Inventory and crafting (I)"><kbd>I</kbd><span>Pack</span><b data-ui="pack-weight">0 kg</b></button>
               <button class="as-journal-button" data-command="journal" title="Skills, projects, people and field guide (J)"><kbd>J</kbd><span>Journal</span><b data-ui="insight-count">0</b></button>
             </div>
-            <div class="as-controls-hint">WASD move <span>·</span> SPACE attack <span>·</span> SHIFT sprint</div>
+            <div class="as-controls-hint"><span class="as-hint-keys">WASD move <span>·</span> SPACE attack <span>·</span> SHIFT sprint</span><span class="as-hint-touch">Left thumb moves <span>·</span> right thumb aims and attacks <span>·</span> tap to strike</span><span class="as-hint-first-keys">WS move <span>·</span> AD strafe <span>·</span> ←→ or mouse turn <span>·</span> SPACE attack <span>·</span> P view</span><span class="as-hint-first-touch">Left thumb moves <span>·</span> drag right side to look <span>·</span> tap to strike</span></div>
           </div>
         </div>
 
@@ -157,7 +158,7 @@
             <div class="as-kicker">TAKE A BREATH</div><h2 id="as-pause-title">Run paused</h2><p class="as-muted">The town waits while you plan your next move.</p>
             <div class="as-pause-actions"><button class="as-primary" data-command="resume">BACK TO THE TOWN <span>→</span></button><button class="as-secondary" data-command="save">SAVE RUN</button></div>
             <div class="as-save-actions"><button data-command="exportSave">Export save</button><label class="as-file-label">Import save<input type="file" data-ui="import" accept=".json,application/json"></label><button data-command="restart">New run</button></div>
-            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Game audio</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Overall volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label></div><div class="as-audio-channels"><div class="as-section-heading">SOUND AND MUSIC</div>${this.audioPreferencesMarkup()}</div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
+            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Game audio</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><label class="as-view-setting">View <select data-setting="view" aria-label="Camera view"><option value="top">Top-down</option><option value="first">First person</option></select></label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Overall volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label><label for="as-look">Look sensitivity <output data-ui="look-value" for="as-look">100%</output><input id="as-look" type="range" data-setting="lookSensitivity" min="30" max="300" step="10" value="100"></label></div><div class="as-audio-channels"><div class="as-section-heading">SOUND AND MUSIC</div>${this.audioPreferencesMarkup()}</div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
             ${this.controlsMarkup()}
             <p class="as-save-note">Saves stay in this browser. Export a file to keep a copy.</p>
           </section>
@@ -205,7 +206,8 @@
       this.root.addEventListener('click', this.handleClick);
       this.root.addEventListener('change', this.handleChange);
       this.root.addEventListener('input', this.handleInput);
-      this.root.addEventListener('keydown', this.handleKeydown);
+      // Dialog focus trapping listens on the document: after a click on dialog text focus sits on <body>.
+      document.addEventListener('keydown', this.handleKeydown);
       this.refreshContinue();
       this.refreshCategories();
       this.refreshMode();
@@ -226,7 +228,7 @@
     }
 
     controlsMarkup() {
-      return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause or close the current menu</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. The game uses a keyboard and mouse.</p></details>`;
+      return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>P</kbd> First-person or top-down view</span><span>First person: <kbd>W</kbd><kbd>S</kbd> move, <kbd>A</kbd><kbd>D</kbd> strafe</span><span>First person: <kbd>←</kbd><kbd>→</kbd> or mouse turn; click to lock the mouse</span><span><kbd>ESC</kbd> Pause or close the current menu</span><span>Touch: drag the left side to move or drive</span><span>Touch: drag the right side to aim and attack, or tap to strike there</span><span>Touch: Use, Swap, Run and Sneak buttons; the bar holds supplies, Pack and Journal</span><span>Touch, first person: drag the right side to look, tap it to strike ahead</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. Play with a keyboard and mouse, or with touch on a phone or tablet.</p></details>`;
     }
 
     refreshCategories() {
@@ -291,13 +293,20 @@
         this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; this.nodes['recipe-search'].focus({ preventScroll: true });
         return;
       }
-      if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.inventoryOpen) button.blur(); return; }
+      if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.isBlocking()) button.blur(); return; }
       if (button.dataset.use) { this.invoke('useItem', button.dataset.use); this.refreshInventory(true); return; }
       if (button.dataset.equip) { this.invoke('equipItem', button.dataset.equip); this.refreshInventory(true); return; }
       if (button.dataset.drop) { this.invoke('dropItem', button.dataset.drop); this.refreshInventory(true); return; }
       if (button.dataset.craft) { this.invoke('craft', button.dataset.craft); this.refreshInventory(true); return; }
       if (button.dataset.build) { this.invoke('build', button.dataset.build); this.refreshInventory(true); return; }
       const command = button.dataset.command;
+      // The pause menu's New run replaces the only local save, so it asks once before acting.
+      if (command === 'restart' && this.screen === 'paused' && button.dataset.confirm !== 'armed') {
+        button.dataset.confirm = 'armed'; button.textContent = 'Replace saved run?'; button.title = 'Click again to start a new run. Your current save will be replaced.';
+        clearTimeout(this.restartTimer); this.restartTimer = setTimeout(() => this.disarmRestart(), 5000);
+        return;
+      }
+      if (command === 'restart') this.disarmRestart();
       if (command === 'start') {
         const seed = Math.floor(clamp(this.nodes.seed.value, 0, 2147483647));
         this.nodes.seed.value = seed;
@@ -312,6 +321,8 @@
       } else if (command === 'details') {
         this.details = !this.details; this.root.dataset.details = this.details ? 'expanded' : 'compact'; button.setAttribute('aria-pressed', String(this.details)); button.textContent = this.details ? 'Details −' : 'Details +'; if (event.detail > 0) button.blur();
         this.invoke('setDetails', this.details);
+      } else if (command === 'view') {
+        this.invoke('toggleView'); if (event.detail > 0) button.blur();
       } else if (command === 'title') {
         if (typeof this.callbacks.title === 'function') this.invoke('title');
         else this.showScreen('title');
@@ -325,6 +336,7 @@
       if (target.dataset.setting === 'sound') { this.sound = target.checked; this.invoke('setSound', this.sound); }
       if (target.dataset.setting === 'debug') { this.debug = target.checked; this.invoke('setDebug', this.debug); }
       if (target.dataset.setting === 'motion') this.invoke('setMotion', target.checked);
+      if (target.dataset.setting === 'view') this.invoke('setView', target.value === 'first' ? 'first' : 'top');
       if (['music', 'effects', 'ambience'].includes(target.dataset.setting)) this.invoke('setAudioPreference', target.dataset.setting, target.checked);
       if (target === this.nodes.sort) { this.sort = target.value; this.itemPage = 0; this.refreshInventory(true); }
       if (target === this.nodes.mode) this.refreshMode();
@@ -347,6 +359,7 @@
       if (event.target === this.nodes['recipe-search']) { this.recipeQuery = event.target.value.trim().toLowerCase(); this.recipePage = 0; this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; }
       if (event.target.dataset.setting === 'volume') { const value = clamp(event.target.value, 0, 100); this.nodes['volume-value'].textContent = value + '%'; this.invoke('setVolume', value / 100); }
       if (event.target.dataset.setting === 'zoom') { const value = clamp(event.target.value, 70, 150); this.nodes['zoom-value'].textContent = value + '%'; this.invoke('setZoom', value / 100); }
+      if (event.target.dataset.setting === 'lookSensitivity') { const value = clamp(event.target.value, 30, 300); this.nodes['look-value'].textContent = value + '%'; this.invoke('setLookSensitivity', value / 100); }
       for (const channel of ['music', 'effects', 'ambience']) if (event.target.dataset.setting === channel + 'Volume') { const value = clamp(event.target.value, 0, 100); this.nodes[channel + '-volume-value'].textContent = value + '%'; this.invoke('setAudioPreference', channel + 'Volume', value / 100); }
     }
 
@@ -376,6 +389,19 @@
       this.root.querySelector('[data-setting="zoom"]').value = zoom; this.nodes['zoom-value'].textContent = zoom + '%';
       this.details = !!p.details; this.root.dataset.details = this.details ? 'expanded' : 'compact';
       const details = this.root.querySelector('[data-command="details"]'); details.setAttribute('aria-pressed', String(this.details)); details.textContent = this.details ? 'Details −' : 'Details +';
+      // The slider moves in steps of ten, so the label shows the same rounded value the slider can hold.
+      const look = Math.round(clamp(p.lookSensitivity === undefined ? 1 : p.lookSensitivity, .3, 3) * 10) * 10;
+      this.root.querySelector('[data-setting="lookSensitivity"]').value = look; this.nodes['look-value'].textContent = look + '%';
+      this.applyView(p.view);
+    }
+
+    // Reflects the camera view on the HUD toggle, the pause-menu setting and the controls hint.
+    applyView(mode) {
+      const first = mode === 'first';
+      this.root.dataset.view = first ? 'first' : 'top';
+      const button = this.root.querySelector('[data-command="view"]');
+      button.setAttribute('aria-pressed', String(first)); button.title = first ? 'Back to the top-down view (P)' : 'First-person view (P)';
+      this.root.querySelector('[data-setting="view"]').value = first ? 'first' : 'top';
     }
 
     onKeydown(event) {
@@ -391,8 +417,21 @@
       else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     }
 
+    // Browsers differ on moving focus off an element that becomes hidden, so closing UI releases it explicitly.
+    releaseFocus(container) {
+      const active = document.activeElement;
+      if (active && active !== document.body && container && container.contains(active) && typeof active.blur === 'function') active.blur();
+    }
+
+    disarmRestart() {
+      clearTimeout(this.restartTimer);
+      const button = this.root.querySelector('.as-save-actions [data-command="restart"]');
+      if (button && button.dataset.confirm) { delete button.dataset.confirm; button.textContent = 'New run'; button.removeAttribute('title'); }
+    }
+
     showScreen(name) {
       if (!['title', 'playing', 'paused', 'dead', 'won'].includes(name)) return;
+      this.disarmRestart();
       this.screen = name;
       this.inventoryOpen = false;
       if (this.journal) this.journal.close();
@@ -401,11 +440,12 @@
       this.root.querySelectorAll('[data-screen]').forEach((panel) => { panel.hidden = panel.dataset.screen !== name; });
       this.nodes.hud.hidden = name === 'title';
       this.root.dataset.screen = name;
+      if (document.activeElement && this.root.contains(document.activeElement) && !document.activeElement.getClientRects().length) document.activeElement.blur();
       if (name === 'title') this.refreshContinue();
       if (name === 'dead' || name === 'won') this.renderEndStats();
       const panel = this.root.querySelector(`[data-screen="${name}"]`);
       if (panel && !panel.hidden) {
-        const focus = panel.querySelector('button:not(:disabled)');
+        const focus = Array.from(panel.querySelectorAll('button:not(:disabled)')).find((el) => el.getClientRects().length > 0);
         if (focus) focus.focus({ preventScroll: true });
       } else {
         const active = document.activeElement;
@@ -423,10 +463,11 @@
         this.lastFocus = document.activeElement;
         this.refreshInventory(true);
         this.nodes['inventory-overlay'].querySelector('.as-close').focus({ preventScroll: true });
-      } else if (this.lastFocus && this.lastFocus.isConnected && typeof this.lastFocus.focus === 'function' && this.lastFocus !== document.body) {
-        this.lastFocus.focus({ preventScroll: true });
-      } else if (document.activeElement && this.root.contains(document.activeElement)) {
-        document.activeElement.blur();
+      } else {
+        // Return focus only to a control that is still shown; otherwise leave nothing focused inside the closed Pack.
+        if (this.lastFocus && this.lastFocus.isConnected && typeof this.lastFocus.focus === 'function' && this.lastFocus !== document.body && this.lastFocus.getClientRects().length) this.lastFocus.focus({ preventScroll: true });
+        else if (document.activeElement && this.root.contains(document.activeElement)) document.activeElement.blur();
+        this.releaseFocus(this.nodes['inventory-overlay']);
       }
     }
 
@@ -472,7 +513,7 @@
       const firearm = weapon.weapon && weapon.weapon.kind === 'firearm' || player.weapon === 'pistol';
       const ammoId = weapon.weapon && weapon.weapon.ammoId || 'ammo';
       this.nodes.weapon.textContent = String(weapon.name || player.weapon || 'Bat').toUpperCase();
-      this.nodes.ammo.textContent = firearm ? `${Math.floor(number(player.ammo))} loaded · ${Math.floor(number(inventory[ammoId]))} spare` : 'F to switch weapon · I to equip';
+      this.nodes.ammo.textContent = firearm ? `${Math.floor(number(player.ammo))} loaded · ${Math.floor(number(inventory[ammoId]))} spare` : this.root.dataset.input === 'touch' ? 'Swap switches weapon · Pack to equip' : 'F to switch weapon · I to equip';
       this.root.querySelector('[data-count="ammo"]').textContent = String(Math.floor(number(inventory[ammoId])));
       const goal = state.goal || {};
       const required = Math.max(1, number(goal.required) || 5);
@@ -551,7 +592,7 @@
     renderConversation(conversation) {
       const wasVisible = !this.nodes['conversation-overlay'].hidden;
       this.nodes['conversation-overlay'].hidden = !conversation || this.screen !== 'playing';
-      if (!conversation || this.screen !== 'playing') return;
+      if (!conversation || this.screen !== 'playing') { if (wasVisible) this.releaseFocus(this.nodes['conversation-overlay']); return; }
       this.nodes['conversation-role'].textContent = String(conversation.role || 'Survivor').toUpperCase();
       this.nodes['conversation-name'].textContent = String(conversation.name || 'Survivor');
       this.nodes['conversation-text'].textContent = String(conversation.text || 'The survivor watches the road.');
@@ -909,11 +950,11 @@
 
     destroy() {
       this.destroyed = true;
-      clearTimeout(this.toastTimer);
+      clearTimeout(this.toastTimer); clearTimeout(this.restartTimer);
       this.root.removeEventListener('click', this.handleClick);
       this.root.removeEventListener('change', this.handleChange);
       this.root.removeEventListener('input', this.handleInput);
-      this.root.removeEventListener('keydown', this.handleKeydown);
+      document.removeEventListener('keydown', this.handleKeydown);
       this.root.replaceChildren();
     }
   }

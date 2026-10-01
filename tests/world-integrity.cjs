@@ -143,3 +143,67 @@ check('zombies see through open windows and route around the solid frame to a do
   assert.equal(s.tiles[window], 9); assert.equal(s.tiles[door], 7, 'pursuer should reach and break the cabin door');
   assert(z.x > 7 * 32 && z.y < 14 * 32, 'pursuer must reach the cabin through its doorway');
 });
+check('crowds beyond the active zombie budget reload exactly after movement and kills', () => {
+  const s = E.create(42, 'hard', 'openworld'), budget = W.limits.maxActiveZombies;
+  const go = cx => { s.player.x = (cx * 64 + 31.5 - s.world.originX) * 32; s.player.y = (31.5 - s.world.originY) * 32; W.maybeRecenter(s); };
+  // Ecology and sieges add wanderers through spawnWanderers until the active budget is full.
+  const fill = () => { for (let i = 0; i < 200 && s.zombies.length < budget; i++) E.spawnWanderers(s, 8); };
+  fill(); go(1); fill(); go(2); fill(); go(1);
+  assert.equal(s.zombies.length, budget); assert(s.world.dormantZombies.length > 0, 'fixture needs a dormant remainder');
+  const everyone = x => x.zombies.map(z => z.id).concat(x.world.dormantZombies.map(z => z.id)).sort();
+  const roundTrip = () => {
+    const loaded = E.deserialize(E.serialize(s));
+    assert.deepEqual(loaded.zombies.map(z => z.id), s.zombies.map(z => z.id), 'active crowd changed');
+    assert.deepEqual(everyone(loaded), everyone(s), 'zombies lost or duplicated');
+    assert(Math.abs(loaded.zombies[0].x - s.zombies[0].x) < 1e-6 && Math.abs(loaded.zombies[0].y - s.zombies[0].y) < 1e-6);
+    return loaded;
+  };
+  for (let i = 0; i < 120; i++) { s.player.invulnerable = 2; E.update(s, 1 / 60, { moveX: -1 }); }
+  roundTrip();
+  const z = s.zombies[0]; z.health = 1; s.player.cooldown = 0; if (!s.player.ammo) E.action(s, 'reload');
+  assert(E.attack(s, z.x, z.y, 'pistol')); assert.equal(s.zombies.length, budget - 1);
+  assert.equal(roundTrip().zombies.length, budget - 1);
+  go(2); go(1); const ids = s.zombies.map(v => v.id); assert.equal(new Set(ids).size, ids.length);
+  assert.throws(() => { const doc = JSON.parse(E.serialize(s)); doc.order.zombies[1] = doc.order.zombies[0]; E.deserialize(JSON.stringify(doc)); }, /order identity/);
+  assert.throws(() => { const doc = JSON.parse(E.serialize(s)); doc.order.zombies[0] = 'z:99,99:1'; E.deserialize(JSON.stringify(doc)); }, /order identity/);
+});
+check('ground pile labels survive streaming and reload, legacy piles default and bad labels are rejected', () => {
+  const s = E.create(7, 'calm', 'openworld'); s.zombies = []; s.humans = [];
+  let tree = null;
+  for (let i = 0; i < s.tiles.length && !tree; i++) if (s.tiles[i] === 5) { const x = i % 192, y = Math.floor(i / 192); if (x > 66 && x < 125 && y > 66 && y < 125 && !E.isSolid(s, x + 1, y) && !E.isSolid(s, x + 1, y - 1) && !E.isSolid(s, x + 1, y + 1)) tree = { x, y }; }
+  assert(tree, 'fixture tree in the centre sector');
+  s.player.x = (tree.x + 1.5) * 32; s.player.y = (tree.y + 0.5) * 32; s.player.inventory.fire_axe = 1; assert(E.action(s, 'equip:fire_axe'));
+  for (let i = 0; i < 200 && s.tiles[tree.y * 192 + tree.x] === 5; i++) { s.player.stamina = 100; E.update(s, 0.05, { attack: true, aimX: (tree.x + 0.5) * 32, aimY: (tree.y + 0.5) * 32 }); }
+  const pile = s.containers.find(c => c._ground); assert(pile && pile.label === 'Felled timber');
+  s.player.x += 128 * 32; W.maybeRecenter(s); s.player.x -= 128 * 32; W.maybeRecenter(s);
+  assert.equal(s.containers.find(c => c.id === pile.id).label, 'Felled timber', 'label lost by streaming');
+  const text = E.serialize(s);
+  assert.equal(E.deserialize(text).containers.find(c => c.id === pile.id).label, 'Felled timber', 'label lost by reload');
+  const doc = JSON.parse(text), saved = Object.values(doc.world.records).flatMap(r => r.ground).find(c => c.id === pile.id);
+  delete saved.label; assert.equal(E.deserialize(JSON.stringify(doc)).containers.find(c => c.id === pile.id).label, 'Dropped supplies');
+  for (const bad of ['', 'x'.repeat(101), 7, null]) { saved.label = bad; assert.throws(() => E.deserialize(JSON.stringify(doc)), /ground label/); }
+});
+check('cached sector exports stay exact through edits, streaming and reload', () => {
+  const s = E.create(3, 'standard', 'openworld');
+  const go = (cx, cy) => { s.player.x = (cx * 64 + 31.5 - s.world.originX) * 32; s.player.y = (cy * 64 + 31.5 - s.world.originY) * 32; W.maybeRecenter(s); E.update(s, 0.05, {}); };
+  // Reference: the uncached export rule, every journaled sector that differs from its generated state.
+  const reference = () => {
+    W.snapshot(s); const out = {};
+    for (const [k, r] of Object.entries(s.world.records)) {
+      const [cx, cy] = k.split(',').map(Number), base = W.generate(s.world.seed, s.world.difficulty, cx, cy);
+      if (Object.keys(r.tiles).length || Object.keys(r.containers).length || Object.keys(r.doorHealth).length || Object.keys(r.terrainHealth).length || r.structures.length || r.ground.length || r.explored.length ||
+        JSON.stringify(r.zombies) !== JSON.stringify(base.zombies) || JSON.stringify(r.vehicles) !== JSON.stringify(base.vehicles) || JSON.stringify(r.humans) !== JSON.stringify(base.humans)) out[k] = JSON.parse(JSON.stringify(r));
+    }
+    return out;
+  };
+  for (let i = 0; i < 6; i++) go(i, 0);
+  const first = W.exportWorld(s); assert.deepEqual(JSON.parse(JSON.stringify(first.records)), reference());
+  // An unchanged far sector reuses its frozen export instead of being regenerated on every autosave.
+  const again = W.exportWorld(s); assert.equal(again.records['1,0'], first.records['1,0']); assert(Object.isFrozen(again.records['1,0'].zombies));
+  // Edit the centre, then stream away so the edited record becomes inactive: the export must follow it.
+  s.zombies.find(v => v.health > 0).x += 7; assert(E.action(s, 'drop:food'));
+  go(9, 0); go(9, 3);
+  assert.deepEqual(JSON.parse(JSON.stringify(W.exportWorld(s).records)), reference());
+  const loaded = E.deserialize(E.serialize(s));
+  assert.deepEqual(JSON.parse(E.serialize(loaded)).world, JSON.parse(E.serialize(s)).world);
+});

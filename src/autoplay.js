@@ -51,7 +51,9 @@
     function score(id) { const w = S.Catalog.items[id].weapon; return w.damage / w.cooldown + w.range * .2 - w.staminaCost * .6; }
   }
   function supplies(s, field) { return owned(s, i => i.effect && i.effect[field] > 0 && !(i.effect.infection < 0)); }
-  function hasDressing(s) { return owned(s, i => i.effect && (i.effect.bleeding > 0 || i.effect.health > 0)).length > 0; }
+  // Matches the engine's bandage command, which only uses dressings that stop bleeding.
+  function hasDressing(s) { return owned(s, i => i.effect && i.effect.bleeding > 0).length > 0; }
+  function remedy(s) { return owned(s, i => i.effect && i.effect.health > 0 && !(i.effect.infection < 0)).sort((a, b) => S.Catalog.items[b].effect.health - S.Catalog.items[a].effect.health || a.localeCompare(b))[0]; }
   function danger(s) {
     return s.zombies.concat((s.humans || []).filter(h => h.faction === 'raider')).filter(h => h.health > 0 && distance(h, s.player) < 390)
       .map(h => ({ actor: h, d: distance(h, s.player), visible: S.Engine.hasLOS(s, s.player.x, s.player.y, h.x, h.y) }))
@@ -183,6 +185,7 @@
     if (p.vehicleId) return emit(pilot, output, 'vehicle', 'Stopping and leaving the vehicle to scavenge.');
     // Medical and basic needs are paid through the normal action dispatcher.
     if ((p.bleeding > .1 || p.health < 62) && hasDressing(s)) return emit(pilot, output, 'bandage', 'Treating injuries with carried supplies.');
+    if (p.health < 62 && remedy(s)) return emit(pilot, output, 'use:' + remedy(s), 'Treating injuries with carried supplies.');
     if (p.infection >= 3) {
       const treatment = owned(s, i => i.effect && i.effect.infection > 0)[0];
       if (treatment) return emit(pilot, output, 'use:' + treatment, 'Using carried treatment for infection.');
@@ -246,7 +249,8 @@
       const near = S.Engine.nearby(s);
       if (d < 67 && S.Engine.hasLOS(s, p.x, p.y, c.x, c.y) && near === 'Collect ' + c.label) {
         const result = emit(pilot, output, 'interact', 'Collecting ' + c.label + '.');
-        if (result.command) { pilot.pendingLoot = { key: pilot.target.key, at: pilot.clock + .5 }; pilot.target = null; pilot.path = []; }
+        // A repeat attempt keeps the first deadline, so a container that cannot be emptied is set aside.
+        if (result.command) { if (!pilot.pendingLoot || pilot.pendingLoot.key !== pilot.target.key) pilot.pendingLoot = { key: pilot.target.key, at: pilot.clock + .5 }; pilot.target = null; pilot.path = []; }
         return result;
       }
     }

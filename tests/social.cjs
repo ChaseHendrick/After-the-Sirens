@@ -3,6 +3,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 const { WebSocket } = require('ws');
 const https = require('node:https'), { execFileSync } = require('node:child_process');
 const { createServer } = require('../server/index.cjs');
+const vm = require('node:vm');
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 let passed = 0;
 async function check(name, test) { await test(); passed++; console.log('PASS ' + name); }
@@ -36,7 +37,9 @@ function tileAtDistance(host, player, minimum, maximum = Infinity) {
   const clients = [];
   const add = async (name, options = {}) => { const c = await connect(host, name, options); clients.push(c); return c; };
   try {
-    host = await createServer({ port: 0, public: true, autoTick: false, seed: 0, difficulty: 'calm', worldFile, ownerToken });
+    // This fixture admits many survivors from one loopback address; tests/multiplayer.cjs checks the default per-address budgets.
+    const joinLimits = { joinBurst: 200, survivorBurst: 200 };
+    host = await createServer({ port: 0, public: true, autoTick: false, seed: 0, difficulty: 'calm', worldFile, ownerToken, joinLimits });
     await check('owner sessions authenticate separately from ordinary public guests and reject guessed or malformed keys', async () => {
       near = await add('Nearby Survivor'); near.welcome = await near.wait('welcome');
       assert.equal(near.welcome.owner, false, 'first player / simulation anchor has no moderation privileges');
@@ -55,7 +58,21 @@ function tileAtDistance(host, player, minimum, maximum = Infinity) {
       assert.equal(event.senderId, near.welcome.id); assert.equal(event.name, 'Nearby Survivor'); assert.equal(event.owner, false); assert.equal(event.scope, 'world'); assert(Number.isSafeInteger(event.time));
       assert.equal((await far.wait('chat', m => m.id === event.id)).text, text);
       owner.send({ type: 'chat', text: 'Owner here.' }); assert.equal((await near.wait('chat', m => m.text === 'Owner here.')).owner, true);
-      assert(!JSON.stringify(owner.snapshot).includes(ownerToken));
+      host.snapshot(); for (let i = 0; i < 100 && !owner.snapshot; i++) await delay(10); assert(owner.snapshot && !JSON.stringify(owner.snapshot).includes(ownerToken));
+    });
+    await check('survivor names cannot imitate role labels and the chat log draws host-assigned roles as badges a name cannot forge', async () => {
+      for (const name of ['Alex [owner]', 'World', 'host', ' Console ', 'Pat [ Nearby ]', 'Bob \u202erenwo']) { const c = await add(name); assert.match((await c.wait('error')).message, /imitate/, name); }
+      const fan = await add('Owner Fan'); await fan.wait('welcome'); fan.send({ type: 'chat', text: 'Fan mail.' }); fan.send({ type: 'chat', text: 'Fan whisper.', scope: 'local' });
+      const guestEvent = await near.wait('chat', m => m.text === 'Fan mail.'), localEvent = await near.wait('chat', m => m.text === 'Fan whisper.'), ownerEvent = await near.wait('chat', m => m.text === 'Owner here.');
+      assert.equal(guestEvent.owner, false); assert.equal(guestEvent.name, 'Owner Fan');
+      // Render the host's real events through the shipped chat renderer with a minimal DOM.
+      const element = tag => ({ tag, className: '', textContent: '', children: [], append(...nodes) { for (const n of nodes) { this.children.push(n); this.textContent += typeof n === 'string' ? n : n.textContent; } }, appendChild(n) { this.children.push(n); }, remove() {} });
+      const context = vm.createContext({ window: {}, document: { createElement: element } }); vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/social.js'), 'utf8'), context);
+      const render = event => { const view = { nodes: { history: element('div'), unread: element('span') }, history: [], seen: new Set(), opened: true, unread: 0 }; context.window.Sirens.Social.prototype.append.call(view, event); return view.nodes.history.children[0].children[0]; };
+      const badges = node => node.children.filter(n => typeof n !== 'string').map(n => n.tag + '.' + n.className + ':' + n.textContent);
+      assert.deepEqual(badges(render(ownerEvent)), ['em.as-social-badge as-social-owner:owner']); assert.deepEqual(badges(render(guestEvent)), []); assert.deepEqual(badges(render(localEvent)), ['em.as-social-badge as-social-nearby:nearby']);
+      assert.deepEqual(badges(render({ ...guestEvent, name: 'Legacy [owner]' })), [], 'a legacy name containing the label is plain text without a badge');
+      await fan.close();
     });
     await check('chat identity injection, oversized text and replayed sequences are rejected before broadcast', async () => {
       const impostor = await add('Impostor'); await impostor.wait('welcome');
@@ -106,6 +123,13 @@ function tileAtDistance(host, player, minimum, maximum = Infinity) {
       const time = host.getState().time;
       for (const text of ['/time 3', '/kick "World Owner"', '/give me food 1', '/bans']) { const result = await near.command(text); assert.equal(result.ok, false); assert.match(result.message, /owner key/); }
       assert.equal(host.getState().time, time);
+    });
+    await check('guests locate only themselves while the owner may locate any survivor, including one that is offline', async () => {
+      for (const text of ['/where', '/where me', '/where "Nearby Survivor"', '/where ' + near.welcome.id]) assert((await near.command(text)).message.includes('global tile'), text);
+      const offline = await add('Offline Stash'); const welcome = await offline.wait('welcome'); await offline.close(); await delay(30);
+      for (const target of ['"World Owner"', owner.welcome.id.slice(0, 8), '"Offline Stash"', welcome.id.slice(0, 4), '"No Such Survivor"']) { const result = await near.command('/where ' + target); assert.equal(result.ok, false, target); assert.match(result.message, /Only the world owner/); }
+      assert((await owner.command('/where "Offline Stash"')).message.includes('Offline Stash is at global tile'));
+      assert((await near.command('/help')).message.includes('/where,') && !(await near.command('/help')).message.includes('/forget'));
     });
     await check('owners control time, weather, difficulty, announcements and atomic host saves without exposing their key', async () => {
       for (const text of ['/time 14.5', '/weather overcast', '/weather rain', '/difficulty hard']) assert((await owner.command(text)).ok, text);
@@ -174,9 +198,19 @@ function tileAtDistance(host, player, minimum, maximum = Infinity) {
       const list = await owner.command('/bans'); assert(list.ok && list.message.includes(bannedId));
       const saved = fs.readFileSync(worldFile, 'utf8'), document = JSON.parse(saved); assert.equal(document.bans.length, 1); assert.equal(document.bans[0].id, bannedId); assert(!saved.includes(bannedIdentity)); assert(!saved.includes(ownerToken));
     });
+    await check('owners forget only offline, unbanned survivors and a forgotten identity cannot restore its pack', async () => {
+      const leaver = await add('Forget Me'); const welcome = await leaver.wait('welcome');
+      assert.match((await near.command('/forget "Forget Me"')).message, /owner key/);
+      assert.match((await owner.command('/forget "Forget Me"')).message, /offline/); await leaver.close(); await delay(30);
+      assert.match((await owner.command('/forget me')).message, /offline/); assert.match((await owner.command('/forget ' + bannedId)).message, /unban/);
+      const result = await owner.command('/forget ' + welcome.id.slice(0, 8)); assert(result.ok, result.message); assert(!host.getPlayers().some(p => p.id === welcome.id));
+      assert(!JSON.parse(fs.readFileSync(worldFile, 'utf8')).players.some(p => p.id === welcome.id));
+      const back = await add('Forget Me', { identity: welcome.identity }); assert.match((await back.wait('error')).message, /Unknown survivor identity/);
+      assert.match((await owner.command('/help')).message, /\/forget TARGET/);
+    });
     await check('a restart retains bans and world controls, resets owner roles, and permits an owner to unban the saved survivor', async () => {
       const identity = owner.welcome.identity, ownerId = owner.welcome.id; await host.close();
-      host = await createServer({ port: 0, public: true, autoTick: false, worldFile, ownerToken });
+      host = await createServer({ port: 0, public: true, autoTick: false, worldFile, ownerToken, joinLimits });
       assert.equal(host.getState().time, 14.5); assert.equal(host.getState().difficulty, 'hard'); assert.equal(host.getState().weather, 'rain');
       const denied = await add('Moderation Target', { identity: bannedIdentity }); assert.match((await denied.wait('error')).message, /banned/);
       const formerOwner = await add('World Owner', { identity }); const welcome = await formerOwner.wait('welcome'); assert.equal(welcome.id, ownerId); assert.equal(welcome.owner, false); assert.equal((await formerOwner.command('/save')).ok, false); await formerOwner.close();
