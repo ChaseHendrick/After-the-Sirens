@@ -121,6 +121,12 @@ const ROOT = path.resolve(__dirname, '..'), output = path.join(ROOT, '.test-resu
       await page.locator('[data-touch="switch"]').tap(); await page.waitForTimeout(80); assert.equal((await inspect()).weapon, before.weapon);
     });
 
+    await check('a still thumb resting at the screen edge does not move the survivor', async () => {
+      const before = await inspect(); await press(1, 6, H * .6); await page.waitForTimeout(300);
+      const held = await inspect(); await release(1);
+      assert(held.touch.move, 'edge touch should hold the move stick'); assert(Math.hypot(held.x - before.x, held.y - before.y) < .5, 'an unmoved edge touch pushed the stick');
+    });
+
     await check('Pack pauses the run and ignores thumbs until it closes', async () => {
       await page.locator('.as-pack-button').tap(); await page.locator('[data-ui="inventory-overlay"]').waitFor({ state: 'visible' });
       const before = await inspect(); assert.equal(before.layer, false, 'touch controls should hide behind menus');

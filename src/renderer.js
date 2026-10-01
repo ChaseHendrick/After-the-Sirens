@@ -31,6 +31,14 @@
     const tint = (hex, amount) => '#' + [1, 3, 5].map(i => Math.max(0, Math.min(255, parseInt(hex.slice(i, i + 2), 16) + amount)).toString(16).padStart(2, '0')).join('');
     return { type, wall: tint(row[0], (variant - 1) * 6), floor: tint(row[1], (variant - 1) * 4), trim: row[2], accent: row[3], material: row[4], variant };
   }
+  // Minimap tile colors as packed RGBA words in the platform's byte order.
+  const MINI_WORDS = (function () {
+    const bytes = new Uint8ClampedArray(4), word = new Uint32Array(bytes.buffer);
+    return ['#35513d', '#7b806c', '#9c9877', '#bfbea0', '#41666a', '#263e32', '#c9ac75', '#acb391', '#92b8b4', '#b1b99a'].map(hex => {
+      bytes[0] = parseInt(hex.slice(1, 3), 16); bytes[1] = parseInt(hex.slice(3, 5), 16); bytes[2] = parseInt(hex.slice(5, 7), 16); bytes[3] = 255;
+      return word[0];
+    });
+  }());
   function surface(width, height) {
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
@@ -931,14 +939,17 @@
       const ground = this.lastFloor > 0 && Sirens.Stories && typeof Sirens.Stories.groundView === 'function' ? Sirens.Stories.groundView(state) || state : state;
       const mapTiles = ground.tiles || state.tiles;
       if (this.minimapState !== state || now - this.lastMini > 240) {
-        if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) this.miniTerrain = surface(state.width, state.height);
-        const m = this.miniTerrain.getContext('2d');
-        const tileColors = ['#35513d', '#7b806c', '#9c9877', '#bfbea0', '#41666a', '#263e32', '#c9ac75', '#acb391', '#92b8b4', '#b1b99a'];
-        m.fillStyle = '#102a29'; m.fillRect(0, 0, state.width, state.height);
-        for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) {
-          const i = y * state.width + x;
-          m.fillStyle = tileColors[mapTiles[i]] || '#35513d'; m.fillRect(x, y, 1, 1);
+        // One pixel per tile, written into a reused buffer. Only changed tiles are rewritten,
+        // and an unchanged map skips the upload entirely.
+        if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) { this.miniTerrain = surface(state.width, state.height); this.miniPixels = null; }
+        const m = this.miniTerrain.getContext('2d'), count = state.width * state.height;
+        if (!this.miniPixels) { this.miniPixels = m.createImageData(state.width, state.height); this.miniWords = new Uint32Array(this.miniPixels.data.buffer); this.miniTiles = new Int16Array(count).fill(-1); }
+        let changed = false;
+        for (let i = 0; i < count; i++) {
+          const t = mapTiles[i], key = t >= 0 && t < MINI_WORDS.length ? t : MINI_WORDS.length;
+          if (this.miniTiles[i] !== key) { this.miniTiles[i] = key; this.miniWords[i] = key < MINI_WORDS.length ? MINI_WORDS[key] : MINI_WORDS[0]; changed = true; }
         }
+        if (changed) m.putImageData(this.miniPixels, 0, 0);
         this.minimapState = state; this.lastMini = now;
       }
       c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);

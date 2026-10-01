@@ -757,7 +757,7 @@
     }
     if (['eat', 'drink', 'bandage'].includes(name) && Sirens.Catalog) {
       const field = name === 'eat' ? 'hunger' : name === 'drink' ? 'thirst' : 'bleeding';
-      if (field !== 'bleeding' && p[field] < 5 || field === 'bleeding' && p.bleeding === 0 && p.health >= 98) return false;
+      if (field !== 'bleeding' && p[field] < 5 || field === 'bleeding' && p.bleeding === 0 && p.health >= 98) { log(s, name === 'eat' ? 'You are not hungry right now.' : name === 'drink' ? 'You are not thirsty right now.' : 'You do not need a bandage right now.', 'info'); return false; }
       const preferred = name === 'eat' ? 'food' : name === 'drink' ? 'water' : 'bandage';
       const candidates = Object.keys(inv).filter(id => inv[id] > 0 && items[id] && items[id].effect && items[id].effect[field] > 0);
       candidates.sort((a, b) => a === preferred ? -1 : b === preferred ? 1 : items[b].effect[field] - items[a].effect[field]);

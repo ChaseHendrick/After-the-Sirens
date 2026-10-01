@@ -170,7 +170,11 @@ function selectSeed() {
     });
     await check('ordinary movement opens the cabin and business doors and loots a second generated location', async () => {
       const business = await container('Ranger shed supplies'); assert(business);
-      const before = await observe(); await walkTo(business.x, business.y); await press('KeyE'); const after = await observe();
+      const before = await observe(); await walkTo(business.x, business.y);
+      // Act on the visible prompt, as a player would: a wandering survivor or pet nearby takes E first.
+      const prompt = () => page.locator('[data-ui="interact-text"]').textContent();
+      await page.waitForFunction(() => /Ranger shed supplies/.test(document.querySelector('[data-ui="interact-text"]').textContent), null, { timeout: 6000 }).catch(() => {});
+      assert.match(await prompt(), /Ranger shed supplies/, 'the shed prompt never appeared'); await press('KeyE'); const after = await observe();
       assert(after.progression.totals.loot >= before.progression.totals.loot + 1); assert(after.progression.insight > before.progression.insight); assert(opened.size >= 2);
       const remaining = await container('Ranger shed supplies'); assert(Object.keys(remaining.items).length < Object.keys(business.items).length || Object.entries(business.items).some(([id, n]) => (remaining.items[id] || 0) < n));
       event('business-loot', { label: business.label || 'Ranger shed supplies', insight: after.progression.insight, inventory: after.player.inventory, leftovers: remaining.items });

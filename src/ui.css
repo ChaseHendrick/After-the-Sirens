@@ -417,7 +417,7 @@
 .as-touch-driving .as-touch-actions{display:none}
 .as-ui[data-input="touch"] button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .as-ui[data-input="touch"] .as-interact kbd{display:none}
-@media(max-width:650px){.as-touch-actions{bottom:184px;right:12px;grid-template-columns:repeat(2,56px);gap:8px}.as-ui .as-touch-actions button{width:56px;height:56px;font-size:10px}.as-ui[data-input="touch"] .as-objective{width:calc(100% - 160px)}.as-ui[data-input="touch"] .as-interact{left:14px;right:144px;transform:none;max-width:none;bottom:186px}}
+@media(max-width:650px){.as-ui[data-input="touch"] .as-autoplay span,.as-ui[data-input="touch"] .as-brain{display:none}.as-ui[data-input="touch"] .as-live-log{max-width:calc(100% - 160px)}.as-touch-actions{bottom:184px;right:12px;grid-template-columns:repeat(2,56px);gap:8px}.as-ui .as-touch-actions button{width:56px;height:56px;font-size:10px}.as-ui[data-input="touch"] .as-objective{width:calc(100% - 160px)}.as-ui[data-input="touch"] .as-interact{left:14px;right:144px;transform:none;max-width:none;bottom:186px}}
 @media(max-height:520px) and (min-width:651px){
   .as-status{top:8px;left:8px;width:186px;padding:8px 10px 9px}.as-status-top{margin-bottom:5px}.as-meters{gap:5px}.as-meter-label{font-size:10px}.as-needs-summary{font-size:9px;margin-top:5px}
   .as-objective{top:8px;left:204px;max-width:calc(100% - 370px);width:auto;padding:7px 10px}.as-objective p{font-size:11px;margin:2px 0 4px}.as-parts{font-size:8px;flex-direction:row;gap:10px}.as-autoplay{margin-top:5px}

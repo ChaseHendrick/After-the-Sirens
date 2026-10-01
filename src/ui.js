@@ -205,7 +205,8 @@
       this.root.addEventListener('click', this.handleClick);
       this.root.addEventListener('change', this.handleChange);
       this.root.addEventListener('input', this.handleInput);
-      this.root.addEventListener('keydown', this.handleKeydown);
+      // Dialog focus trapping listens on the document: after a click on dialog text focus sits on <body>.
+      document.addEventListener('keydown', this.handleKeydown);
       this.refreshContinue();
       this.refreshCategories();
       this.refreshMode();
@@ -291,13 +292,20 @@
         this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; this.nodes['recipe-search'].focus({ preventScroll: true });
         return;
       }
-      if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.inventoryOpen) button.blur(); return; }
+      if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.isBlocking()) button.blur(); return; }
       if (button.dataset.use) { this.invoke('useItem', button.dataset.use); this.refreshInventory(true); return; }
       if (button.dataset.equip) { this.invoke('equipItem', button.dataset.equip); this.refreshInventory(true); return; }
       if (button.dataset.drop) { this.invoke('dropItem', button.dataset.drop); this.refreshInventory(true); return; }
       if (button.dataset.craft) { this.invoke('craft', button.dataset.craft); this.refreshInventory(true); return; }
       if (button.dataset.build) { this.invoke('build', button.dataset.build); this.refreshInventory(true); return; }
       const command = button.dataset.command;
+      // The pause menu's New run replaces the only local save, so it asks once before acting.
+      if (command === 'restart' && this.screen === 'paused' && button.dataset.confirm !== 'armed') {
+        button.dataset.confirm = 'armed'; button.textContent = 'Replace saved run?'; button.title = 'Click again to start a new run. Your current save will be replaced.';
+        clearTimeout(this.restartTimer); this.restartTimer = setTimeout(() => this.disarmRestart(), 5000);
+        return;
+      }
+      if (command === 'restart') this.disarmRestart();
       if (command === 'start') {
         const seed = Math.floor(clamp(this.nodes.seed.value, 0, 2147483647));
         this.nodes.seed.value = seed;
@@ -391,8 +399,15 @@
       else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     }
 
+    disarmRestart() {
+      clearTimeout(this.restartTimer);
+      const button = this.root.querySelector('.as-save-actions [data-command="restart"]');
+      if (button && button.dataset.confirm) { delete button.dataset.confirm; button.textContent = 'New run'; button.removeAttribute('title'); }
+    }
+
     showScreen(name) {
       if (!['title', 'playing', 'paused', 'dead', 'won'].includes(name)) return;
+      this.disarmRestart();
       this.screen = name;
       this.inventoryOpen = false;
       if (this.journal) this.journal.close();
@@ -405,7 +420,7 @@
       if (name === 'dead' || name === 'won') this.renderEndStats();
       const panel = this.root.querySelector(`[data-screen="${name}"]`);
       if (panel && !panel.hidden) {
-        const focus = panel.querySelector('button:not(:disabled)');
+        const focus = Array.from(panel.querySelectorAll('button:not(:disabled)')).find((el) => el.getClientRects().length > 0);
         if (focus) focus.focus({ preventScroll: true });
       } else {
         const active = document.activeElement;
@@ -909,11 +924,11 @@
 
     destroy() {
       this.destroyed = true;
-      clearTimeout(this.toastTimer);
+      clearTimeout(this.toastTimer); clearTimeout(this.restartTimer);
       this.root.removeEventListener('click', this.handleClick);
       this.root.removeEventListener('change', this.handleChange);
       this.root.removeEventListener('input', this.handleInput);
-      this.root.removeEventListener('keydown', this.handleKeydown);
+      document.removeEventListener('keydown', this.handleKeydown);
       this.root.replaceChildren();
     }
   }

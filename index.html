@@ -442,7 +442,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 .as-touch-driving .as-touch-actions{display:none}
 .as-ui[data-input="touch"] button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .as-ui[data-input="touch"] .as-interact kbd{display:none}
-@media(max-width:650px){.as-touch-actions{bottom:184px;right:12px;grid-template-columns:repeat(2,56px);gap:8px}.as-ui .as-touch-actions button{width:56px;height:56px;font-size:10px}.as-ui[data-input="touch"] .as-objective{width:calc(100% - 160px)}.as-ui[data-input="touch"] .as-interact{left:14px;right:144px;transform:none;max-width:none;bottom:186px}}
+@media(max-width:650px){.as-ui[data-input="touch"] .as-autoplay span,.as-ui[data-input="touch"] .as-brain{display:none}.as-ui[data-input="touch"] .as-live-log{max-width:calc(100% - 160px)}.as-touch-actions{bottom:184px;right:12px;grid-template-columns:repeat(2,56px);gap:8px}.as-ui .as-touch-actions button{width:56px;height:56px;font-size:10px}.as-ui[data-input="touch"] .as-objective{width:calc(100% - 160px)}.as-ui[data-input="touch"] .as-interact{left:14px;right:144px;transform:none;max-width:none;bottom:186px}}
 @media(max-height:520px) and (min-width:651px){
   .as-status{top:8px;left:8px;width:186px;padding:8px 10px 9px}.as-status-top{margin-bottom:5px}.as-meters{gap:5px}.as-meter-label{font-size:10px}.as-needs-summary{font-size:9px;margin-top:5px}
   .as-objective{top:8px;left:204px;max-width:calc(100% - 370px);width:auto;padding:7px 10px}.as-objective p{font-size:11px;margin:2px 0 4px}.as-parts{font-size:8px;flex-direction:row;gap:10px}.as-autoplay{margin-top:5px}
@@ -4619,7 +4619,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
     if (['eat', 'drink', 'bandage'].includes(name) && Sirens.Catalog) {
       const field = name === 'eat' ? 'hunger' : name === 'drink' ? 'thirst' : 'bleeding';
-      if (field !== 'bleeding' && p[field] < 5 || field === 'bleeding' && p.bleeding === 0 && p.health >= 98) return false;
+      if (field !== 'bleeding' && p[field] < 5 || field === 'bleeding' && p.bleeding === 0 && p.health >= 98) { log(s, name === 'eat' ? 'You are not hungry right now.' : name === 'drink' ? 'You are not thirsty right now.' : 'You do not need a bandage right now.', 'info'); return false; }
       const preferred = name === 'eat' ? 'food' : name === 'drink' ? 'water' : 'bandage';
       const candidates = Object.keys(inv).filter(id => inv[id] > 0 && items[id] && items[id].effect && items[id].effect[field] > 0);
       candidates.sort((a, b) => a === preferred ? -1 : b === preferred ? 1 : items[b].effect[field] - items[a].effect[field]);
@@ -5198,6 +5198,14 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const tint = (hex, amount) => '#' + [1, 3, 5].map(i => Math.max(0, Math.min(255, parseInt(hex.slice(i, i + 2), 16) + amount)).toString(16).padStart(2, '0')).join('');
     return { type, wall: tint(row[0], (variant - 1) * 6), floor: tint(row[1], (variant - 1) * 4), trim: row[2], accent: row[3], material: row[4], variant };
   }
+  // Minimap tile colors as packed RGBA words in the platform's byte order.
+  const MINI_WORDS = (function () {
+    const bytes = new Uint8ClampedArray(4), word = new Uint32Array(bytes.buffer);
+    return ['#35513d', '#7b806c', '#9c9877', '#bfbea0', '#41666a', '#263e32', '#c9ac75', '#acb391', '#92b8b4', '#b1b99a'].map(hex => {
+      bytes[0] = parseInt(hex.slice(1, 3), 16); bytes[1] = parseInt(hex.slice(3, 5), 16); bytes[2] = parseInt(hex.slice(5, 7), 16); bytes[3] = 255;
+      return word[0];
+    });
+  }());
   function surface(width, height) {
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
@@ -6098,14 +6106,17 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const ground = this.lastFloor > 0 && Sirens.Stories && typeof Sirens.Stories.groundView === 'function' ? Sirens.Stories.groundView(state) || state : state;
       const mapTiles = ground.tiles || state.tiles;
       if (this.minimapState !== state || now - this.lastMini > 240) {
-        if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) this.miniTerrain = surface(state.width, state.height);
-        const m = this.miniTerrain.getContext('2d');
-        const tileColors = ['#35513d', '#7b806c', '#9c9877', '#bfbea0', '#41666a', '#263e32', '#c9ac75', '#acb391', '#92b8b4', '#b1b99a'];
-        m.fillStyle = '#102a29'; m.fillRect(0, 0, state.width, state.height);
-        for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) {
-          const i = y * state.width + x;
-          m.fillStyle = tileColors[mapTiles[i]] || '#35513d'; m.fillRect(x, y, 1, 1);
+        // One pixel per tile, written into a reused buffer. Only changed tiles are rewritten,
+        // and an unchanged map skips the upload entirely.
+        if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) { this.miniTerrain = surface(state.width, state.height); this.miniPixels = null; }
+        const m = this.miniTerrain.getContext('2d'), count = state.width * state.height;
+        if (!this.miniPixels) { this.miniPixels = m.createImageData(state.width, state.height); this.miniWords = new Uint32Array(this.miniPixels.data.buffer); this.miniTiles = new Int16Array(count).fill(-1); }
+        let changed = false;
+        for (let i = 0; i < count; i++) {
+          const t = mapTiles[i], key = t >= 0 && t < MINI_WORDS.length ? t : MINI_WORDS.length;
+          if (this.miniTiles[i] !== key) { this.miniTiles[i] = key; this.miniWords[i] = key < MINI_WORDS.length ? MINI_WORDS[key] : MINI_WORDS[0]; changed = true; }
         }
+        if (changed) m.putImageData(this.miniPixels, 0, 0);
         this.minimapState = state; this.lastMini = now;
       }
       c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -6172,7 +6183,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     ['Appearance', 'Choose skin, hair, coat color, and a cap or beanie in Appearance. These choices are free and stay in your save. Equipped clothing determines protection, and backpacks determine carrying capacity.'],
     ['Pets and care', 'Approach a stray dog or cat on the ground floor and use E, or Befriend in Pets, for one ration. Keep up to two pets. Feed a nearby pet one ration for 25 care; choose Follow or Stay and mark its location. At 40 care or more, a pet nearby slows fatigue by 15 percent. Cared-for dogs alert you to nearby dead. Pets move in the loaded ground floor, wait when you drive or go upstairs, and receive no combat damage in this build.'],
     ['Groups and battles', 'Forces records three groups, their reputation, alliances, and support. Aid spends two stored rations for three reputation. Alliance needs three reputation and stored food, bandages, and scrap. Allied support sends up to eight people to defend home, with a 180-second cooldown. You can deliberately stage a four-wave horde siege or a two-wave raider battle. Prepare supplies, allies, and defenses before beginning; leaving the area counts as withdrawal.'],
-    ['Saves and controls', 'Escape pauses or closes the current menu. I opens Pack and Crafting; J opens this journal. Details expands the HUD. Autosave runs every 30 seconds of play. Export a portable save in the pause menu to keep a copy. Sound can be muted there too.']
+    ['Saves and controls', 'Escape pauses or closes the current menu. I opens Pack and Crafting; J opens this journal. Details expands the HUD. Autosave runs every 5 seconds of play and when you leave the page. Export a portable save in the pause menu to keep a copy. Sound can be muted there too.']
   ]);
   class Journal {
     constructor(root) {
@@ -6598,7 +6609,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       this.root.addEventListener('click', this.handleClick);
       this.root.addEventListener('change', this.handleChange);
       this.root.addEventListener('input', this.handleInput);
-      this.root.addEventListener('keydown', this.handleKeydown);
+      // Dialog focus trapping listens on the document: after a click on dialog text focus sits on <body>.
+      document.addEventListener('keydown', this.handleKeydown);
       this.refreshContinue();
       this.refreshCategories();
       this.refreshMode();
@@ -6684,13 +6696,20 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         this.refreshInventory(true); this.nodes.recipes.scrollTop = 0; this.nodes['recipe-search'].focus({ preventScroll: true });
         return;
       }
-      if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.inventoryOpen) button.blur(); return; }
+      if (button.dataset.action) { this.invoke('action', button.dataset.action); this.refreshInventory(true); if (event.detail > 0 && !this.isBlocking()) button.blur(); return; }
       if (button.dataset.use) { this.invoke('useItem', button.dataset.use); this.refreshInventory(true); return; }
       if (button.dataset.equip) { this.invoke('equipItem', button.dataset.equip); this.refreshInventory(true); return; }
       if (button.dataset.drop) { this.invoke('dropItem', button.dataset.drop); this.refreshInventory(true); return; }
       if (button.dataset.craft) { this.invoke('craft', button.dataset.craft); this.refreshInventory(true); return; }
       if (button.dataset.build) { this.invoke('build', button.dataset.build); this.refreshInventory(true); return; }
       const command = button.dataset.command;
+      // The pause menu's New run replaces the only local save, so it asks once before acting.
+      if (command === 'restart' && this.screen === 'paused' && button.dataset.confirm !== 'armed') {
+        button.dataset.confirm = 'armed'; button.textContent = 'Replace saved run?'; button.title = 'Click again to start a new run. Your current save will be replaced.';
+        clearTimeout(this.restartTimer); this.restartTimer = setTimeout(() => this.disarmRestart(), 5000);
+        return;
+      }
+      if (command === 'restart') this.disarmRestart();
       if (command === 'start') {
         const seed = Math.floor(clamp(this.nodes.seed.value, 0, 2147483647));
         this.nodes.seed.value = seed;
@@ -6784,8 +6803,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     }
 
+    disarmRestart() {
+      clearTimeout(this.restartTimer);
+      const button = this.root.querySelector('.as-save-actions [data-command="restart"]');
+      if (button && button.dataset.confirm) { delete button.dataset.confirm; button.textContent = 'New run'; button.removeAttribute('title'); }
+    }
+
     showScreen(name) {
       if (!['title', 'playing', 'paused', 'dead', 'won'].includes(name)) return;
+      this.disarmRestart();
       this.screen = name;
       this.inventoryOpen = false;
       if (this.journal) this.journal.close();
@@ -6798,7 +6824,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (name === 'dead' || name === 'won') this.renderEndStats();
       const panel = this.root.querySelector(`[data-screen="${name}"]`);
       if (panel && !panel.hidden) {
-        const focus = panel.querySelector('button:not(:disabled)');
+        const focus = Array.from(panel.querySelectorAll('button:not(:disabled)')).find((el) => el.getClientRects().length > 0);
         if (focus) focus.focus({ preventScroll: true });
       } else {
         const active = document.activeElement;
@@ -7302,11 +7328,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
     destroy() {
       this.destroyed = true;
-      clearTimeout(this.toastTimer);
+      clearTimeout(this.toastTimer); clearTimeout(this.restartTimer);
       this.root.removeEventListener('click', this.handleClick);
       this.root.removeEventListener('change', this.handleChange);
       this.root.removeEventListener('input', this.handleInput);
-      this.root.removeEventListener('keydown', this.handleKeydown);
+      document.removeEventListener('keydown', this.handleKeydown);
       this.root.replaceChildren();
     }
   }
@@ -7648,7 +7674,6 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   // and the same commands as the keyboard; the simulation never sees touch events.
   const Sirens = window.Sirens = window.Sirens || {};
   const RADIUS = 54, DEAD_ZONE = .18, ATTACK_ZONE = .38, TAP_MS = 260, TAP_TRAVEL = 14, STRIKE_MS = 150, MOVE_SHARE = .45;
-  const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 
   function stickVector(dx, dy) {
     const length = Math.hypot(dx, dy) / RADIUS;
@@ -7716,9 +7741,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const width = rect && rect.width || window.innerWidth, left = rect && rect.left || 0;
       const kind = event.clientX - left < width * MOVE_SHARE ? 'move' : 'aim';
       if (this.sticks[kind]) return true;
-      const margin = RADIUS + 8;
-      const ox = clamp(event.clientX, margin, window.innerWidth - margin), oy = clamp(event.clientY, margin, window.innerHeight - margin);
-      this.sticks[kind] = { id: event.pointerId, ox, oy, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, started: performance.now(), travel: 0 };
+      // The stick centres on the touch itself, even near an edge, so a new touch never starts pushed.
+      this.sticks[kind] = { id: event.pointerId, ox: event.clientX, oy: event.clientY, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, started: performance.now(), travel: 0 };
       this.draw(kind);
       return true;
     }
@@ -7862,13 +7886,17 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     screen = name;
     if (name !== 'playing') S.Effects.audio.suspend();
     ui.showScreen(name);
+    const mapWasHidden = mapShell.hidden;
     mapShell.hidden = name === 'title';
+    // The minimap is measured while visible; measuring it hidden falls back to a mismatched size.
+    if (mapWasHidden && !mapShell.hidden) renderer.resize();
   }
 
   function toast(text, toneName) { ui.toast(text, toneName || 'info'); }
 
+  // A finished run (death or rescue) is kept for its record but is not offered as Continue.
   function hasSave() {
-    try { return !!localStorage.getItem(SAVE_KEY); } catch (_) { return false; }
+    try { const data = localStorage.getItem(SAVE_KEY); if (!data) return false; const saved = JSON.parse(data); return !(saved && saved.state && saved.state.ended === true); } catch (_) { return false; }
   }
 
   function save(silent) {
@@ -7907,6 +7935,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     try {
       const data = localStorage.getItem(SAVE_KEY);
       if (!data) { toast('No local save found. Start a new run.', 'warning'); return; }
+      if (!hasSave()) { toast('That run has ended. Start a new run.', 'warning'); return; }
       state = S.Engine.deserialize(data);
       active = true;
       accumulator = 0;
@@ -8018,7 +8047,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   const autoPanel = document.createElement('div'); autoPanel.className = 'as-autoplay';
   autoPanel.innerHTML = '<button type="button" aria-pressed="false" data-autoplay-toggle>AI play: Off</button><span data-autoplay-status>You are in control.</span><details class="as-brain"><summary>Neural activity</summary><div data-brain-view>Enable AI play to train its local controller.</div></details>';
   document.querySelector('.as-objective').appendChild(autoPanel);
-  const autoButton = autoPanel.querySelector('button'); autoButton.disabled = !pilot;
+  const autoButton = autoPanel.querySelector('button'), autoStatus = autoPanel.querySelector('[data-autoplay-status]'); autoButton.disabled = !pilot;
   autoButton.addEventListener('click', function () {
     if (!pilot) return; S.Autoplay.toggle(pilot); clearInput(); autoButton.blur();
     toast(S.Autoplay.status(pilot).enabled ? 'AI play is on. Manual movement or combat returns control to you.' : 'AI play is off. You are in control.');
@@ -8031,6 +8060,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
   }
   autoPanel.querySelector('details').addEventListener('toggle', function () { renderBrain(true); });
+  autoPanel.querySelector('summary').addEventListener('click', function (event) { if (event.detail > 0) event.currentTarget.blur(); });
   function stopAutoplay() { if (pilot && S.Autoplay.status(pilot).enabled) S.Autoplay.toggle(pilot, false); autoInput = null; }
   function autoCommand(command) {
     if (networkReady) network.sendAction(command);
@@ -8114,19 +8144,26 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   setScreen('title');
   ui.update(state, frameInfo);
 
+  const heldKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC']);
   const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyJ', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape']);
 
   addEventListener('keydown', function (event) {
     if (event.defaultPrevented || social && social.isBlocking()) return;
     const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
     const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
-    if (buttonActivation) return;
+    // A key still held from play must not activate a button that just received focus,
+    // such as Try again on the death screen.
+    if (buttonActivation) { if (event.repeat) event.preventDefault(); return; }
     if (editing && event.code !== 'Escape') return;
     if (controlledKeys.has(event.code)) { event.preventDefault(); if (touch && event.code !== 'Escape') touch.enable(false); }
-    if (event.repeat) return;
+    if (event.repeat) {
+      // Menus clear held keys; a key still held when play resumes is picked up again.
+      if (heldKeys.has(event.code) && !keys.has(event.code) && gameAcceptsInput()) keys.add(event.code);
+      return;
+    }
     if (event.code === 'Escape') {
-      if (state.conversation) applyAction('closeConversation');
-      else if (screen === 'paused') resume();
+      if (screen === 'paused') resume();
+      else if (state.conversation) applyAction('closeConversation');
       else if (active && screen === 'playing') {
         if (ui.journal && ui.journal.open) ui.toggleJournal();
         else if (ui.isBlocking()) ui.toggleInventory();
@@ -8186,7 +8223,19 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     if (event.pointerType === 'touch') { if (touch) touch.up(event); return; }
     if (event.button === 0) pointer.down = false;
     if (event.button === 2) pointer.shoot = false;
+    syncButtons(event);
   });
+  // Browsers report a second mouse button pressed or released during a drag as pointermove,
+  // so held attack state follows the buttons bitmask rather than only down/up events.
+  function syncButtons(event) {
+    if (!(event.buttons & 1)) pointer.down = false;
+    if (!(event.buttons & 2)) pointer.shoot = false;
+    if ((pointer.down || pointer.shoot) && gameAcceptsInput()) {
+      if (event.button === 0 && event.buttons & 1) pointer.down = true;
+      if (event.button === 2 && event.buttons & 2) pointer.shoot = true;
+    }
+  }
+  addEventListener('pointermove', function (event) { if (event.pointerType !== 'touch') syncButtons(event); });
   canvas.addEventListener('pointercancel', function (event) { if (event.pointerType === 'touch' && touch) touch.up(event); else clearInput(); });
 
   function inputSnapshot() {
@@ -8226,7 +8275,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const choice = S.Autoplay.step(pilot, state, elapsed); autoInput = choice.input;
       if (choice.command) autoCommand(choice.command);
     }
-    if (pilot) { const pilotStatus = S.Autoplay.status(pilot); autoButton.textContent = 'AI play: ' + (pilotStatus.enabled ? 'On' : 'Off'); autoButton.setAttribute('aria-pressed', String(pilotStatus.enabled)); autoPanel.querySelector('span').textContent = pilotStatus.enabled ? pilotStatus.text : 'You are in control.'; }
+    if (pilot) {
+      // Write only changed text so an idle HUD does not force a layout every frame.
+      const pilotStatus = S.Autoplay.status(pilot), label = 'AI play: ' + (pilotStatus.enabled ? 'On' : 'Off'), text = pilotStatus.enabled ? pilotStatus.text : 'You are in control.';
+      if (autoButton.textContent !== label) { autoButton.textContent = label; autoButton.setAttribute('aria-pressed', String(pilotStatus.enabled)); }
+      if (autoStatus.textContent !== text) autoStatus.textContent = text;
+    }
     if (networkReady && active) {
       networkSendTime += elapsed; S.Effects.advance(state, elapsed);
       if (networkSendTime >= .05) {

@@ -47,13 +47,17 @@
     screen = name;
     if (name !== 'playing') S.Effects.audio.suspend();
     ui.showScreen(name);
+    const mapWasHidden = mapShell.hidden;
     mapShell.hidden = name === 'title';
+    // The minimap is measured while visible; measuring it hidden falls back to a mismatched size.
+    if (mapWasHidden && !mapShell.hidden) renderer.resize();
   }
 
   function toast(text, toneName) { ui.toast(text, toneName || 'info'); }
 
+  // A finished run (death or rescue) is kept for its record but is not offered as Continue.
   function hasSave() {
-    try { return !!localStorage.getItem(SAVE_KEY); } catch (_) { return false; }
+    try { const data = localStorage.getItem(SAVE_KEY); if (!data) return false; const saved = JSON.parse(data); return !(saved && saved.state && saved.state.ended === true); } catch (_) { return false; }
   }
 
   function save(silent) {
@@ -92,6 +96,7 @@
     try {
       const data = localStorage.getItem(SAVE_KEY);
       if (!data) { toast('No local save found. Start a new run.', 'warning'); return; }
+      if (!hasSave()) { toast('That run has ended. Start a new run.', 'warning'); return; }
       state = S.Engine.deserialize(data);
       active = true;
       accumulator = 0;
@@ -203,7 +208,7 @@
   const autoPanel = document.createElement('div'); autoPanel.className = 'as-autoplay';
   autoPanel.innerHTML = '<button type="button" aria-pressed="false" data-autoplay-toggle>AI play: Off</button><span data-autoplay-status>You are in control.</span><details class="as-brain"><summary>Neural activity</summary><div data-brain-view>Enable AI play to train its local controller.</div></details>';
   document.querySelector('.as-objective').appendChild(autoPanel);
-  const autoButton = autoPanel.querySelector('button'); autoButton.disabled = !pilot;
+  const autoButton = autoPanel.querySelector('button'), autoStatus = autoPanel.querySelector('[data-autoplay-status]'); autoButton.disabled = !pilot;
   autoButton.addEventListener('click', function () {
     if (!pilot) return; S.Autoplay.toggle(pilot); clearInput(); autoButton.blur();
     toast(S.Autoplay.status(pilot).enabled ? 'AI play is on. Manual movement or combat returns control to you.' : 'AI play is off. You are in control.');
@@ -216,6 +221,7 @@
     }
   }
   autoPanel.querySelector('details').addEventListener('toggle', function () { renderBrain(true); });
+  autoPanel.querySelector('summary').addEventListener('click', function (event) { if (event.detail > 0) event.currentTarget.blur(); });
   function stopAutoplay() { if (pilot && S.Autoplay.status(pilot).enabled) S.Autoplay.toggle(pilot, false); autoInput = null; }
   function autoCommand(command) {
     if (networkReady) network.sendAction(command);
@@ -299,19 +305,26 @@
   setScreen('title');
   ui.update(state, frameInfo);
 
+  const heldKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC']);
   const controlledKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC', 'KeyE', 'KeyI', 'KeyJ', 'KeyF', 'KeyR', 'KeyB', 'KeyV', 'KeyG', 'PageUp', 'PageDown', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape']);
 
   addEventListener('keydown', function (event) {
     if (event.defaultPrevented || social && social.isBlocking()) return;
     const editing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
     const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
-    if (buttonActivation) return;
+    // A key still held from play must not activate a button that just received focus,
+    // such as Try again on the death screen.
+    if (buttonActivation) { if (event.repeat) event.preventDefault(); return; }
     if (editing && event.code !== 'Escape') return;
     if (controlledKeys.has(event.code)) { event.preventDefault(); if (touch && event.code !== 'Escape') touch.enable(false); }
-    if (event.repeat) return;
+    if (event.repeat) {
+      // Menus clear held keys; a key still held when play resumes is picked up again.
+      if (heldKeys.has(event.code) && !keys.has(event.code) && gameAcceptsInput()) keys.add(event.code);
+      return;
+    }
     if (event.code === 'Escape') {
-      if (state.conversation) applyAction('closeConversation');
-      else if (screen === 'paused') resume();
+      if (screen === 'paused') resume();
+      else if (state.conversation) applyAction('closeConversation');
       else if (active && screen === 'playing') {
         if (ui.journal && ui.journal.open) ui.toggleJournal();
         else if (ui.isBlocking()) ui.toggleInventory();
@@ -371,7 +384,19 @@
     if (event.pointerType === 'touch') { if (touch) touch.up(event); return; }
     if (event.button === 0) pointer.down = false;
     if (event.button === 2) pointer.shoot = false;
+    syncButtons(event);
   });
+  // Browsers report a second mouse button pressed or released during a drag as pointermove,
+  // so held attack state follows the buttons bitmask rather than only down/up events.
+  function syncButtons(event) {
+    if (!(event.buttons & 1)) pointer.down = false;
+    if (!(event.buttons & 2)) pointer.shoot = false;
+    if ((pointer.down || pointer.shoot) && gameAcceptsInput()) {
+      if (event.button === 0 && event.buttons & 1) pointer.down = true;
+      if (event.button === 2 && event.buttons & 2) pointer.shoot = true;
+    }
+  }
+  addEventListener('pointermove', function (event) { if (event.pointerType !== 'touch') syncButtons(event); });
   canvas.addEventListener('pointercancel', function (event) { if (event.pointerType === 'touch' && touch) touch.up(event); else clearInput(); });
 
   function inputSnapshot() {
@@ -411,7 +436,12 @@
       const choice = S.Autoplay.step(pilot, state, elapsed); autoInput = choice.input;
       if (choice.command) autoCommand(choice.command);
     }
-    if (pilot) { const pilotStatus = S.Autoplay.status(pilot); autoButton.textContent = 'AI play: ' + (pilotStatus.enabled ? 'On' : 'Off'); autoButton.setAttribute('aria-pressed', String(pilotStatus.enabled)); autoPanel.querySelector('span').textContent = pilotStatus.enabled ? pilotStatus.text : 'You are in control.'; }
+    if (pilot) {
+      // Write only changed text so an idle HUD does not force a layout every frame.
+      const pilotStatus = S.Autoplay.status(pilot), label = 'AI play: ' + (pilotStatus.enabled ? 'On' : 'Off'), text = pilotStatus.enabled ? pilotStatus.text : 'You are in control.';
+      if (autoButton.textContent !== label) { autoButton.textContent = label; autoButton.setAttribute('aria-pressed', String(pilotStatus.enabled)); }
+      if (autoStatus.textContent !== text) autoStatus.textContent = text;
+    }
     if (networkReady && active) {
       networkSendTime += elapsed; S.Effects.advance(state, elapsed);
       if (networkSendTime >= .05) {

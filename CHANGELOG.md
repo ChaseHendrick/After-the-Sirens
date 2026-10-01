@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Add touch controls for phones and tablets. Drag the left side to move or drive; drag the right side to aim and attack, or tap to strike toward a point. Use, Swap, Run and Sneak buttons cover the remaining on-foot actions, and Drive appears beside a car because a nearby survivor or pet otherwise takes Use, as it takes E. Touch feeds the ordinary input snapshot, so singleplayer and multiplayer receive the same commands as keyboard play.
+- Fit short landscape screens: a compact HUD and a two-column title keep Start, the hotbar and the vehicle panel visible at phone sizes.
+- Fix attacks that kept running after pressing and releasing both mouse buttons, Space held into a death or pause screen activating its focused button, focus escaping Pack and Journal after clicking dialog text, an unfocused pause menu, Escape closing a hidden conversation instead of resuming, the Neural activity toggle capturing Space, held movement keys ignored after closing a menu, and silent refusals for Eat, Drink and Bandage.
+- Ask before New run in the pause menu replaces the only local save. Do not offer a finished run as Continue. Correct the field guide's autosave interval.
+- Repaint the minimap from a reused pixel buffer only when tiles change, removing about 37,000 canvas calls every quarter second, and size it after it becomes visible.
+
 ## 0.5.0
 
 - Expand the original catalogue to 3,455 items and 4,457 crafting and salvage recipes across 38 families. Add ingredient preparations, metal/timber/textile processing, material weapons and field tools, protective garments, carrying designs and ranged assemblies. Retain existing IDs and saved runs.

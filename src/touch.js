@@ -5,7 +5,6 @@
   // and the same commands as the keyboard; the simulation never sees touch events.
   const Sirens = window.Sirens = window.Sirens || {};
   const RADIUS = 54, DEAD_ZONE = .18, ATTACK_ZONE = .38, TAP_MS = 260, TAP_TRAVEL = 14, STRIKE_MS = 150, MOVE_SHARE = .45;
-  const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 
   function stickVector(dx, dy) {
     const length = Math.hypot(dx, dy) / RADIUS;
@@ -73,9 +72,8 @@
       const width = rect && rect.width || window.innerWidth, left = rect && rect.left || 0;
       const kind = event.clientX - left < width * MOVE_SHARE ? 'move' : 'aim';
       if (this.sticks[kind]) return true;
-      const margin = RADIUS + 8;
-      const ox = clamp(event.clientX, margin, window.innerWidth - margin), oy = clamp(event.clientY, margin, window.innerHeight - margin);
-      this.sticks[kind] = { id: event.pointerId, ox, oy, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, started: performance.now(), travel: 0 };
+      // The stick centres on the touch itself, even near an edge, so a new touch never starts pushed.
+      this.sticks[kind] = { id: event.pointerId, ox: event.clientX, oy: event.clientY, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, started: performance.now(), travel: 0 };
       this.draw(kind);
       return true;
     }
