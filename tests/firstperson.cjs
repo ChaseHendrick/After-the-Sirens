@@ -136,4 +136,39 @@ check('the view helpers leave the save and the simulation RNG untouched', () => 
   assert.equal(E.serialize(s), before); assert.equal(s._rng, rng);
 });
 
+
+// The renderer itself, on a stub canvas: these checks count work and pixels instead of timing frames.
+function stubCanvas() { return { width: 0, height: 0, getContext() { return { createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }), putImageData() {} }; } }; }
+global.document = global.document || { createElement: () => stubCanvas() };
+function frameOptions(yaw, width, height) { return { width: width || 1440, height: height || 900, yaw, clock: 0, delta: 1 / 60, motion: false, themes: null, originX: 0, originY: 0, pose: null, look: null, items: S.Catalog.items }; }
+
+check('very short and very tall views keep the screen aspect instead of stretching the buffer', () => {
+  const v = new F.View();
+  for (const [w, h] of [[568, 212], [1024, 260], [320, 240], [1440, 900], [390, 1600], [3840, 2160]]) {
+    v.ensureSize(w, h); const ratio = v.w / v.h, want = w / h;
+    assert(Math.abs(ratio - want) / want < .03, `${w}x${h} buffer ${v.w}x${v.h} has aspect ${ratio.toFixed(3)}, screen ${want.toFixed(3)}`);
+    assert(v.w <= 1280 && v.h <= 720 && v.h >= 120 || v.w === 1280, `${w}x${h} buffer ${v.w}x${v.h} is out of bounds`);
+  }
+});
+
+check('a swarm pressed against the eye costs a bounded number of sprite pixel visits', () => {
+  const s = field(), v = new F.View(), template = { health: 64, state: 'chase', angle: Math.PI, windup: 0, _stun: 0, _path: [] };
+  // Eighty dead within about a tile, spread across the view straight ahead (yaw 0 looks along +x).
+  for (let i = 0; i < 80; i++) { const d = .65 + (i % 10) * .06, a = ((i * .618) % 1 - .5) * 1.2; s.zombies.push(Object.assign({ id: 'swarm-' + i, x: s.player.x + Math.cos(a) * d * T, y: s.player.y + Math.sin(a) * d * T }, template)); }
+  v.render(s, frameOptions(0)); const info = v.describe(1440), pixels = info.width * info.height;
+  assert(info.visible.some(e => e.kind === 'zombie'), 'no zombie was drawn');
+  console.log('  swarm visits ' + info.visits + ' = ' + (info.visits / pixels).toFixed(2) + ' buffers');
+  assert(info.visits < 6 * pixels, 'sprite pixel visits ' + info.visits + ' exceed six buffers of ' + pixels);
+});
+
+check('health bars and markers never paint over a nearer wall below its top', () => {
+  const v = new F.View(); v.ensureSize(1440, 900); const W = v.w;
+  v.out.fill(0); v.zpix.fill(Infinity); v.zcol.fill(Infinity); v.topRow.fill(0);
+  v.zcol[100] = 2; v.topRow[100] = 150;
+  v.plot(200 * W + 100, 0xff0000, 5, 256, 0, 0, 0); assert.equal(v.out[200 * W + 100], 0, 'a bar behind the wall painted over it');
+  v.plot(100 * W + 100, 0xff0000, 5, 256, 0, 0, 0); assert.notEqual(v.out[100 * W + 100], 0, 'a bar above the wall top was clipped');
+  v.plot(200 * W + 101, 0xff0000, 5, 256, 0, 0, 0); assert.notEqual(v.out[200 * W + 101], 0, 'a bar in an open column was clipped');
+  v.plot(200 * W + 100, 0xff0000, 1.5, 256, 0, 0, 0); assert.notEqual(v.out[200 * W + 100], 0, 'a bar nearer than the wall was clipped');
+});
+
 console.log(passed + ' first-person checks passed.');

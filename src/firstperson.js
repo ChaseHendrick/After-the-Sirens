@@ -7,7 +7,9 @@
   const TILE = 32, TAU = Math.PI * 2, INF = 1e9;
   // Heights in tiles. Walls stand two tiles, the eye sits just above one, and door and window openings
   // are cut into the wall at familiar proportions.
-  const WALL = 2, EYE = 1.06, VIEW = 20, TREE_VIEW = 17, RAY = 26, FRAMES = 2, MIP = 9, LINES = 15, CEILING_REACH = 24;
+  const WALL = 2, EYE = 1.06, VIEW = 20, TREE_VIEW = 17, RAY = 26, FRAMES = 3, MIP = 9, LINES = 15, CEILING_REACH = 24;
+  // A crowd pressed against the eye fills the screen; past the nearest few, closer bodies are hidden behind them anyway.
+  const CLOSE = 1.2, CLOSE_LIMIT = 8, ACTORS = new Set(['zombie', 'human', 'partner', 'pet']);
   const HORIZON = .46, VFOV = .92, MIN_HFOV = 1.05, MAX_HFOV = 1.6;
   // How a ray treats each tile code: 1 stops at an opaque face (wall, closed door, closed window),
   // 2 passes a see-through frame (open doorway, broken or raised window). Trees and water are billboards and floor.
@@ -431,11 +433,13 @@
     ensureSize(cssWidth, cssHeight) {
       const width = Math.max(1, finite(cssWidth, 640)), height = Math.max(1, finite(cssHeight, 400));
       // About one buffer pixel per 2.5 CSS pixels keeps the chunky look and a bounded per-frame cost.
-      const w = clamp(Math.round(width / 2.5), 240, 640), h = clamp(Math.round(w * height / width), 120, 720);
+      let w = clamp(Math.round(width / 2.5), 240, 640), h = Math.round(w * height / width);
+      // Very short or very tall views widen or narrow the buffer instead of stretching it, so the horizon and crosshair agree.
+      if (h < 120) { h = 120; w = clamp(Math.round(h * width / height), 1, 1280); } else if (h > 720) { h = 720; w = clamp(Math.round(h * width / height), 1, 1280); }
       if (w === this.w && h === this.h) return;
       this.w = w; this.h = h; this.canvas.width = w; this.canvas.height = h;
       this.image = this.ctx.createImageData(w, h); this.out = new Uint32Array(this.image.data.buffer);
-      this.zpix = new Float32Array(w * h); this.zcol = new Float32Array(w); this.topRow = new Int16Array(w); this.bottomRow = new Int16Array(w);
+      this.zpix = new Float32Array(w * h); this.open = new Int16Array(w); this.zcol = new Float32Array(w); this.topRow = new Int16Array(w); this.bottomRow = new Int16Array(w);
       this.frameCount = new Uint8Array(w); this.frameDepth = new Float32Array(w * FRAMES); this.frameTile = new Int8Array(w * FRAMES); this.frameSide = new Int8Array(w * FRAMES); this.frameU = new Float32Array(w * FRAMES); this.frameIndex = new Int32Array(w * FRAMES); this.ridgeRows = new Float32Array(w);
       this.rowDist = new Float32Array(h); this.rowMul = new Int32Array(h); this.rowR = new Int32Array(h); this.rowG = new Int32Array(h); this.rowB = new Int32Array(h);
       this.skyRow = new Uint32Array(h);
@@ -535,7 +539,7 @@
       const bottomRow = this.bottomRow, frameCount = this.frameCount, frameDepth = this.frameDepth, frameTile = this.frameTile, frameSide = this.frameSide, frameU = this.frameU, frameIndex = this.frameIndex;
       // Depth per pixel only matters where something nearer than a sprite can cover it: ceilings, frames and other
       // sprites. Walls clip sprites per column, and the floor in front of a sprite lies below its feet.
-      zpix.fill(INF);
+      zpix.fill(INF); this.open.fill(H); this.visits = 0;
       const terrain = state._terrainHealth || null, grass = art.grass, roads = art.road, water = art.water, sill = art.threshold, ceiling = art.ceiling.data;
       const shift = motion ? (finite(o.clock, 0) * 4) | 0 : 0, edge = mix(env.fog, 0x14231d, .5), voidColor = 0x0c1c20, curb = 0x7d7f6c, stripe = 0xb9a76b;
       for (let x = 0; x < W; x++) {
@@ -640,7 +644,13 @@
       for (let i = 0; i < this.count; i++) order[i] = this.pool[i];
       order.sort(byDepth);
       this.seenCount = 0;
-      for (let i = 0; i < order.length; i++) { const s = order[i]; this.drawSprite(s); if (s.drawn) this.remember(s); }
+      // Near to far: each sprite pixel is covered once, so a column whose every row is covered is skipped outright.
+      let close = 0;
+      for (let i = 0; i < order.length; i++) {
+        const s = order[i];
+        if (s.depth < CLOSE && ACTORS.has(s.kind) && ++close > CLOSE_LIMIT) { s.drawn = 0; continue; }
+        this.drawSprite(s); if (s.drawn) this.remember(s);
+      }
       this.waypoint(state);
       this.viewModel(state, o);
       if (!LITTLE) for (let i = 0; i < out.length; i++) { const c = out[i]; out[i] = ((c & 255) << 24 | (c >> 8 & 255) << 16 | (c >> 16 & 255) << 8 | c >>> 24) >>> 0; }
@@ -780,7 +790,7 @@
     }
 
     drawSprite(s) {
-      const W = this.w, H = this.h, out = this.out, zpix = this.zpix, zcol = this.zcol, topRow = this.topRow, tex = s.tex, depth = s.depth, scale = this.proj / depth;
+      const W = this.w, H = this.h, out = this.out, zpix = this.zpix, zcol = this.zcol, topRow = this.topRow, open = this.open, tex = s.tex, depth = s.depth, scale = this.proj / depth;
       const sw = s.ww * scale, sh = s.wh * scale, bottom = this.horizon + (EYE - s.z) * scale, top = bottom - sh, left = s.sx - sw / 2;
       s.top = top;
       const x0 = Math.max(0, Math.ceil(left - .5)), x1 = Math.min(W, Math.ceil(left + sw - .5)), y0 = Math.max(0, Math.ceil(top - .5)), y1 = Math.min(H, Math.ceil(bottom - .5));
@@ -789,8 +799,10 @@
       const tw = tex.w, th = tex.h, data = tex.data, du = tw / sw, dv = th / sh, flash = s.flash, mirror = s.mirror;
       let drawn = 0;
       for (let x = x0; x < x1; x++) {
+        if (!open[x]) continue;
         // Behind the column's wall only the part above the wall top can show (a tree over a roofline).
         let hi = y1; if (depth >= zcol[x]) { hi = Math.min(hi, topRow[x]); if (hi <= y0) continue; }
+        this.visits += hi - y0;
         let u = ((x + .5 - left) * du) | 0; if (u >= tw) u = tw - 1; if (mirror) u = tw - 1 - u;
         let v = (y0 + .5 - top) * dv;
         for (let y = y0, i = y0 * W + x; y < hi; y++, i += W, v += dv) {
@@ -799,7 +811,7 @@
           const c = data[vi * tw + u]; if (c < 0) continue;
           let r = ((c >> 16 & 255) * m >> 8) + ar, g = ((c >> 8 & 255) * m >> 8) + ag, b = ((c & 255) * m >> 8) + ab;
           if (flash) { r = (r + 238) >> 1; g = (g + 228) >> 1; b = (b + 200) >> 1; }
-          out[i] = 0xff000000 | b << 16 | g << 8 | r; zpix[i] = depth; drawn++;
+          out[i] = 0xff000000 | b << 16 | g << 8 | r; zpix[i] = depth; drawn++; open[x]--;
         }
       }
       s.drawn = drawn;
@@ -823,7 +835,9 @@
       for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) this.plot(yy * W + xx, color, depth, m, ar, ag, ab);
     }
     plot(i, c, depth, m, ar, ag, ab) {
-      if (depth >= this.zpix[i]) return;
+      // Bars and markers obey the same wall clip as their sprite: nothing paints over a nearer wall below its top.
+      const x = i % this.w;
+      if (depth >= this.zpix[i] || depth >= this.zcol[x] && (i - x) / this.w >= this.topRow[x]) return;
       this.out[i] = 0xff000000 | (((c & 255) * m >> 8) + ab) << 16 | (((c >> 8 & 255) * m >> 8) + ag) << 8 | (((c >> 16 & 255) * m >> 8) + ar);
       this.zpix[i] = depth;
     }
@@ -1073,7 +1087,7 @@
     describe(cssWidth) {
       const k = finite(cssWidth, this.w) / Math.max(1, this.w), visible = [];
       for (let i = 0; i < this.seenCount; i++) { const s = this.seen[i]; visible.push({ kind: s.kind, id: s.id, x: s.x, y: s.y, depth: Math.round(s.depth * TILE * 10) / 10, column: Math.round(s.column * k), pixels: s.pixels }); }
-      return { width: this.w, height: this.h, fov: Math.round(2 * Math.atan(this.plane || 1) * 1000) / 1000, horizon: Math.round(this.horizon * k), visible };
+      return { width: this.w, height: this.h, fov: Math.round(2 * Math.atan(this.plane || 1) * 1000) / 1000, horizon: Math.round(this.horizon * k), visits: this.visits || 0, visible };
     }
   }
 
