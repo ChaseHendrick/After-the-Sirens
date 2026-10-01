@@ -82,4 +82,13 @@ check('legacy rescue saves remain valid and invalid world data is rejected',()=>
   // Exact v2 layout is checked below once the engine serializer contract is finalized.
   assert(malformed.version===2);
 });
+check('a transmitting radio left outside the active window keeps every save loadable',()=>{
+  const s=E.create(5,'calm','openworld');s.zombies=[];s.humans=[];s.player.x=s.goal.radioX;s.player.y=s.goal.radioY+40;s.player.inventory.parts=5;assert(E.interact(s));assert(s.goal.active);
+  steps(s,4.2);assert(s.noises.some(n=>n.radius===720),'radio should be heard while loaded');
+  // Explicit sector-position fixture, followed by the production recenter operation.
+  for(const cx of [1,2]){s.player.x=(cx*64+31.5-s.world.originX)*32;s.player.y=(31.5-s.world.originY)*32;W.maybeRecenter(s);}
+  assert(s.goal.radioX<0,'radio must be outside the window');
+  for(let i=0;i<12;i++){steps(s,1);const loaded=E.deserialize(E.serialize(s));assert(loaded.goal.active);}
+  assert(s.noises.every(n=>n.x>=0&&n.y>=0&&n.x<s.width*32&&n.y<s.height*32));
+});
 console.log('Completed '+checks+' open world and content checks. Catalogue: '+Object.keys(C.items).length+' items, '+C.recipes.length+' recipes.');

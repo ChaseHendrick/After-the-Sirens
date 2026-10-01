@@ -16,7 +16,7 @@ function restoreBans(value, records) {
   return bans;
 }
 function createSocial(api) {
-  const { connections, records, send, save, snapshot, withPlayer, localPlayer, inScene, engine: E, catalog, bans } = api;
+  const { connections, records, send, save, changed, forget, withPlayer, localPlayer, inScene, engine: E, catalog, bans } = api;
   let serial = 0;
   const history = [];
   function response(connection, seq, ok, message) { send(connection.socket, { type: 'command-result', seq, ok, message }); }
@@ -79,8 +79,8 @@ function createSocial(api) {
       const args = parseCommand(message.text), name = args.shift().slice(1).toLowerCase();
       if (name === 'help') {
         if (args.length) throw new Error('Use /help.');
-        const basic = '/help, /players, /where [TARGET], /items [SEARCH]. Chat scope can be World or Nearby. Nearby chat and voice reach 20 tiles on the same floor.';
-        response(connection, seq, true, basic + (connection.owner ? ' Owner: /kick TARGET [REASON], /ban TARGET [REASON], /unban ID, /bans, /announce TEXT, /save, /time HOUR, /weather clear|overcast|rain, /difficulty calm|standard|hard, /give [TARGET] ITEM COUNT (1 to 100), /heal [TARGET], /tp [TARGET] GLOBAL_TILE_X GLOBAL_TILE_Y. TARGET may be me, an ID prefix, or a quoted name. Teleports require a clear tile in the loaded region.' : ' World controls and moderation require the owner key.')); return;
+        const basic = '/help, /players, /where, /items [SEARCH]. Chat scope can be World or Nearby. Nearby chat and voice reach 20 tiles on the same floor.';
+        response(connection, seq, true, basic + (connection.owner ? ' Owner: /where TARGET, /kick TARGET [REASON], /ban TARGET [REASON], /unban ID, /bans, /forget TARGET, /announce TEXT, /save, /time HOUR, /weather clear|overcast|rain, /difficulty calm|standard|hard, /give [TARGET] ITEM COUNT (1 to 100), /heal [TARGET], /tp [TARGET] GLOBAL_TILE_X GLOBAL_TILE_Y. TARGET may be me, an ID prefix, or a quoted name. Teleports require a clear tile in the loaded region.' : ' World controls and moderation require the owner key.')); return;
       }
       if (name === 'players') {
         if (args.length) throw new Error('Use /players.');
@@ -88,6 +88,8 @@ function createSocial(api) {
       }
       if (name === 'where') {
         if (args.length > 1) throw new Error('Use /where [TARGET].');
+        // Offline positions are not in snapshots; only owners may locate another survivor.
+        if (args.length && !connection.owner && !['me', '@me', connection.record.id, connection.record.name.toLowerCase()].includes(args[0].toLowerCase())) throw new Error('Only the world owner can locate other survivors. Use /where for your own position.');
         const record = findTarget(args[0], connection);
         response(connection, seq, true, record.name + ' is at global tile ' + Math.floor(record.player.x / 32) + ', ' + Math.floor(record.player.y / 32) + ' on the ground floor.'); return;
       }
@@ -111,6 +113,12 @@ function createSocial(api) {
         const matches = [...bans.values()].filter(ban => ban.id === args[0] || ban.id.startsWith(args[0].toLowerCase()));
         if (matches.length !== 1) throw new Error('Use one unique banned survivor ID from /bans.');
         bans.delete(matches[0].identityHash); await save(); result = matches[0].name + ' may join again.';
+      } else if (name === 'forget') {
+        if (args.length !== 1) throw new Error('Use /forget TARGET.');
+        const record = findTarget(args[0], connection);
+        if (record.id === connection.record.id || connections.has(record.id)) throw new Error('Only offline survivors can be forgotten. Kick a connected survivor first.');
+        if (bans.has(record.identityHash)) throw new Error('Banned survivors stay on record. Use /unban first.');
+        forget(record); await save(); result = record.name + ' was forgotten. That saved survivor, pack and identity were removed.';
       } else if (name === 'bans') {
         if (args.length) throw new Error('Use /bans.');
         result = [...bans.values()].map(ban => ban.name + ' [' + ban.id + ']: ' + ban.reason).join('\n') || 'No survivors are banned.';
@@ -161,8 +169,8 @@ function createSocial(api) {
         const active = connections.get(record.id); if (active) { active.input = {}; active.lastInput = 0; }
         updatePeers(); result = record.name + ' moved to global tile ' + x + ', ' + y + '.';
       } else throw new Error('Unknown command. Use /help.');
-      if (!['save', 'bans', 'kick', 'ban', 'unban', 'announce'].includes(name)) await save();
-      snapshot(); response(connection, seq, true, result);
+      if (!['save', 'bans', 'kick', 'ban', 'unban', 'announce', 'forget'].includes(name)) await save();
+      changed(); response(connection, seq, true, result);
     } catch (error) { response(connection, seq, false, error.message || 'The command could not be completed.'); }
   }
   function validate(message) {

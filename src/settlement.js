@@ -186,8 +186,8 @@
       else {
         q.role = match[2]; q.human = (s.humans || []).find(h => h.id === match[1] && h.health > 0 && h.faction === 'survivor' && h.following);
         if (!q.human) missing.push('Recruit a living companion first');
-        if (!Object.hasOwn(base.jobs, match[1]) && Object.keys(base.jobs).length >= limits.records) missing.push('The companion work record is full');
-        if (!Object.hasOwn(base.moods, match[1]) && Object.keys(base.moods).length >= limits.records) missing.push('The companion morale record is full');
+        if (!room(s, base.jobs, match[1], false)) missing.push('The companion work record is full');
+        if (!room(s, base.moods, match[1], false)) missing.push('The companion morale record is full');
         if (q.role !== 'follow' && !base.home) missing.push('Claim a base first');
         if (q.role === 'gather' && !stockTool(base)) missing.push('Store a mining pick at your base');
       }
@@ -206,7 +206,7 @@
     else if (command === 'harvest') { add(inv, q.result); base.plots = base.plots.filter(p => p.id !== q.plot.id); increment(base, 'harvested', 1); gain(s, 5); write(s, 'Harvested 2 carrot bundles and 1 seed. Plant again to keep the garden going.'); }
     else if (command.startsWith('store:')) { add(base.stock, { [q.item]: 1 }); increment(base, 'delivered', 1); }
     else if (command.startsWith('take:')) { pay(base.stock, { [q.item]: 1 }); add(inv, q.result); }
-    else if (command.startsWith('job:')) { base.jobs[q.human.id] = { role: q.role, timer: 0 }; if (!Object.hasOwn(base.moods, q.human.id)) base.moods[q.human.id] = 60; write(s, q.human.name + ' assigned to ' + q.role + '. Food in the stockpile supports morale.'); }
+    else if (command.startsWith('job:')) { room(s, base.jobs, q.human.id, true); room(s, base.moods, q.human.id, true); base.jobs[q.human.id] = { role: q.role, timer: 0 }; if (!Object.hasOwn(base.moods, q.human.id)) base.moods[q.human.id] = 60; write(s, q.human.name + ' assigned to ' + q.role + '. Food in the stockpile supports morale.'); }
     if (S.Effects) S.Effects.emit(s, 'ui'); return true;
   }
   function nearby(s) {
@@ -216,6 +216,19 @@
   }
   function interact(s) { const near = nearestPlot(s); if (!near || s.ended || s.player.vehicleId) return false; return action(s, near.plot.progress >= limits.growthTime ? 'harvest' : 'water'); }
   function activeCompanion(s, h) { return h && h.health > 0 && h.faction === 'survivor' && h.following && onGround(s); }
+  // Work and morale records belong to living recruits. People here who died or stopped following lose theirs.
+  function prune(s) {
+    if (!onGround(s)) return; const base = ensure(s);
+    for (const h of s.humans || []) if (!activeCompanion(s, h)) { delete base.jobs[h.id]; delete base.moods[h.id]; }
+  }
+  // A full table frees the record of someone who is not an active companion here (for example a recruit lost far away).
+  function room(s, records, id, apply) {
+    if (Object.hasOwn(records, id) || Object.keys(records).length < limits.records) return true;
+    if (!onGround(s)) return false;
+    const active = new Set((s.humans || []).filter(h => activeCompanion(s, h)).map(h => h.id)), spare = Object.keys(records).find(k => !active.has(k));
+    if (spare && apply) delete records[spare];
+    return !!spare;
+  }
   function combatMultiplier(s, h) { return activeCompanion(s, h) ? .7 + .5 * (Object.hasOwn(ensure(s).moods, h.id) ? ensure(s).moods[h.id] : 60) / 100 : 1; }
   function stockTool(base) {
     return Object.keys(base.stock).filter(id => base.stock[id] > 0 && (id === 'iron_pick' || id === 'stone_pick' || metadata(id) && metadata(id).miningDamage > 0))
@@ -264,10 +277,10 @@
       if (s.weather !== 'rain') p.moisture = Math.max(0, p.moisture - dt * .6);
     }
     base.clock += dt;
-    if (base.clock < 60) return; base.clock %= 60;
+    if (base.clock < 60) return; base.clock %= 60; prune(s);
     const companions = (s.humans || []).filter(h => activeCompanion(s, h)).sort((a, b) => a.id.localeCompare(b.id));
     for (const h of companions) {
-      if (!Object.hasOwn(base.moods, h.id) && Object.keys(base.moods).length >= limits.records) continue;
+      if (!room(s, base.moods, h.id, true)) continue;
       const old = Object.hasOwn(base.moods, h.id) ? base.moods[h.id] : 60;
       const food = Object.keys(base.stock).filter(id => base.stock[id] > 0 && metadata(id) && metadata(id).effect && metadata(id).effect.hunger > 0).sort((a, b) => a === 'food' ? -1 : b === 'food' ? 1 : a.localeCompare(b))[0];
       if (food) { pay(base.stock, { [food]: 1 }); base.moods[h.id] = Math.min(100, old + 12); }

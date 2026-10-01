@@ -29,6 +29,8 @@
   function clearFoot(s, x, y) {
     return [[-10, -10], [-10, 10], [10, -10], [10, 10]].every(p => !S.Engine.isSolid(s, (x + p[0]) / T, (y + p[1]) / T));
   }
+  // The driver sits at the car's centre. The eight footprint points alone let a wall corner reach that seat.
+  function seat(s, x, y) { return [[-9, -9], [-9, 9], [9, -9], [9, 9]].every(p => !S.Engine.isSolid(s, (x + p[0]) / T, (y + p[1]) / T)); }
   function toggle(s) {
     const v = closest(s), p = s.player;
     if (!v) { log(s, 'Approach a parked car to drive.', 'info'); return false; }
@@ -69,10 +71,11 @@
     const turn = steer * Math.min(1, Math.abs(v.speed) / 65) * 1.65 * dt * (v.speed < 0 ? -1 : 1);
     const nextAngle = (v.angle + turn + TAU) % TAU;
     if (clear(s, v.x, v.y, nextAngle)) v.angle = nextAngle;
-    const steps = Math.max(1, Math.ceil(Math.abs(v.speed * dt) / 4));
+    const steps = Math.max(1, Math.ceil(Math.abs(v.speed * dt) / 4)), seated = seat(s, v.x, v.y);
     for (let i = 0; i < steps; i++) {
       const x = v.x + Math.cos(v.angle) * v.speed * dt / steps, y = v.y + Math.sin(v.angle) * v.speed * dt / steps;
-      if (clear(s, x, y, v.angle)) { v.x = x; v.y = y; }
+      // A car already wedged by an older build may still drive clear; otherwise the seat must stay clear too.
+      if (clear(s, x, y, v.angle) && (!seated || seat(s, x, y))) { v.x = x; v.y = y; }
       else {
         if (Math.abs(v.speed) > 35) { v.condition = Math.max(0, v.condition - Math.abs(v.speed) * 0.035); log(s, 'Collision damaged the car.', 'warn'); if (S.Effects) S.Effects.emit(s, 'stone'); }
         v.speed = 0; break;

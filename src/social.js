@@ -82,7 +82,9 @@
       if (!message || typeof message.text !== 'string' || typeof message.name !== 'string') return;
       const key = typeof message.id === 'string' || Number.isSafeInteger(message.id) ? String(message.id) : null; if (key && this.seen.has(key)) return;
       const row = document.createElement('article'); row.className = 'as-social-line' + (message.system ? ' as-social-system' : '') + (message.error ? ' as-social-error' : '');
-      const name = document.createElement('strong'); name.textContent = message.name.slice(0, 24) + (message.owner ? ' [owner]' : '') + (message.scope === 'local' ? ' [nearby]' : '');
+      const name = document.createElement('strong'); name.textContent = message.name.slice(0, 24);
+      // Host-assigned roles render as styled badges, never as text that a survivor name could imitate.
+      for (const [flag, label] of [[message.owner === true, 'owner'], [message.scope === 'local', 'nearby']]) if (flag) { const badge = document.createElement('em'); badge.className = 'as-social-badge as-social-' + label; badge.textContent = label; name.append(' ', badge); }
       const text = document.createElement('span'); text.textContent = message.text.slice(0, 2000); row.append(name, text); this.nodes.history.appendChild(row);
       this.history.push({ key, row }); if (key) this.seen.add(key);
       if (this.history.length > MAX_HISTORY) { const old = this.history.shift(); old.row.remove(); if (old.key) this.seen.delete(old.key); }

@@ -31,6 +31,14 @@
     const tint = (hex, amount) => '#' + [1, 3, 5].map(i => Math.max(0, Math.min(255, parseInt(hex.slice(i, i + 2), 16) + amount)).toString(16).padStart(2, '0')).join('');
     return { type, wall: tint(row[0], (variant - 1) * 6), floor: tint(row[1], (variant - 1) * 4), trim: row[2], accent: row[3], material: row[4], variant };
   }
+  // Minimap tile colors as packed RGBA words in the platform's byte order.
+  const MINI_WORDS = (function () {
+    const bytes = new Uint8ClampedArray(4), word = new Uint32Array(bytes.buffer);
+    return ['#35513d', '#7b806c', '#9c9877', '#bfbea0', '#41666a', '#263e32', '#c9ac75', '#acb391', '#92b8b4', '#b1b99a'].map(hex => {
+      bytes[0] = parseInt(hex.slice(1, 3), 16); bytes[1] = parseInt(hex.slice(3, 5), 16); bytes[2] = parseInt(hex.slice(5, 7), 16); bytes[3] = 255;
+      return word[0];
+    });
+  }());
   function surface(width, height) {
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
@@ -57,6 +65,9 @@
       this.width = 1; this.height = 1; this.dpr = 1;
       this.camera = { x: 0, y: 0, ready: false };
       this.zoom = 1; this.ambientMotion = true;
+      // 'top' is the original camera; 'first' delegates to the raycast view. main.js owns the yaw.
+      this.viewMode = 'top'; this.viewYaw = 0; this.firstPerson = null;
+      this.drawTimes = new Float32Array(120); this.drawCount = 0;
       this.lastOriginX = 0; this.lastOriginY = 0; this.lastRevision = 0;
       this.lastFloor = 0;
       this.clock = 0; this.lastTime = 0; this.lastMini = -1000;
@@ -203,6 +214,21 @@
       return x > this.left - m && y > this.top - m && x < this.right + m && y < this.bottom + m;
     }
 
+    setView(mode) {
+      const next = mode === 'first' && Sirens.FirstPerson ? 'first' : 'top';
+      if (next !== this.viewMode) { this.viewMode = next; this.drawCount = 0; this.camera.ready = false; }
+      return this.viewMode;
+    }
+
+    // Read-only view diagnostics: draw-time statistics for the current mode and, in first person,
+    // the buffer size and the sprites the last frame actually drew.
+    viewInfo() {
+      const times = Array.from(this.drawTimes.subarray(0, Math.min(this.drawCount, this.drawTimes.length))).sort((a, b) => a - b);
+      const mean = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0, round = (n) => Math.round(n * 100) / 100;
+      return { mode: this.viewMode, draw: { mean: round(mean), p95: round(times.length ? times[Math.floor((times.length - 1) * .95)] : 0), max: round(times.length ? times[times.length - 1] : 0), samples: times.length },
+        firstPerson: this.viewMode === 'first' && this.firstPerson ? this.firstPerson.describe(this.width) : null };
+    }
+
     draw(state, frameInfo) {
       if (!state || !state.player) return;
       frameInfo = frameInfo || {};
@@ -211,6 +237,7 @@
       this.lastTime = now; if (this.ambientMotion) this.clock += delta;
       const p = state.player;
       this.syncOrigin(state);
+      if (this.viewMode === 'first' && Sirens.FirstPerson) { this.drawFirstPerson(state, now, delta); this.drawTimes[this.drawCount++ % this.drawTimes.length] = performance.now() - now; return; }
       const ease = 1 - Math.exp(-12 * delta);
       this.camera.x += (p.x - this.camera.x) * ease;
       this.camera.y += (p.y - this.camera.y) * ease;
@@ -284,6 +311,25 @@
       this.drawWeather(state);
       ctx.fillStyle = this.vignette; ctx.fillRect(0, 0, this.width, this.height);
       this.drawWaypoint(state);
+      this.drawMinimap(state, now);
+      this.drawTimes[this.drawCount++ % this.drawTimes.length] = performance.now() - now;
+    }
+
+    drawFirstPerson(state, now, delta) {
+      const p = state.player, ctx = this.ctx, viewWidth = this.width / this.zoom, viewHeight = this.height / this.zoom;
+      // The top-down camera stays on the survivor so screenToWorld and a switch back remain stable.
+      this.camera.x = p.x; this.camera.y = p.y;
+      this.left = Math.floor(p.x - viewWidth / 2); this.top = Math.floor(p.y - viewHeight / 2); this.right = this.left + viewWidth; this.bottom = this.top + viewHeight;
+      this.prepareBuildings(state);
+      const fp = this.firstPerson || (this.firstPerson = new Sirens.FirstPerson.View());
+      fp.render(state, { width: this.width, height: this.height, yaw: this.viewYaw, clock: this.clock, delta, motion: this.ambientMotion, themes: this.themes,
+        originX: this.lastOriginX, originY: this.lastOriginY, pose: Sirens.Effects ? Sirens.Effects.pose(state) : null, look: Sirens.Personal ? Sirens.Personal.look(state) : null, items: Sirens.Engine && Sirens.Engine.items || {} });
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(fp.canvas, 0, 0, this.width, this.height);
+      this.drawLighting(state);
+      this.drawWeather(state);
+      ctx.fillStyle = this.vignette; ctx.fillRect(0, 0, this.width, this.height);
+      fp.overlay(ctx, this.width, this.height);
       this.drawMinimap(state, now);
     }
 
@@ -931,14 +977,17 @@
       const ground = this.lastFloor > 0 && Sirens.Stories && typeof Sirens.Stories.groundView === 'function' ? Sirens.Stories.groundView(state) || state : state;
       const mapTiles = ground.tiles || state.tiles;
       if (this.minimapState !== state || now - this.lastMini > 240) {
-        if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) this.miniTerrain = surface(state.width, state.height);
-        const m = this.miniTerrain.getContext('2d');
-        const tileColors = ['#35513d', '#7b806c', '#9c9877', '#bfbea0', '#41666a', '#263e32', '#c9ac75', '#acb391', '#92b8b4', '#b1b99a'];
-        m.fillStyle = '#102a29'; m.fillRect(0, 0, state.width, state.height);
-        for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) {
-          const i = y * state.width + x;
-          m.fillStyle = tileColors[mapTiles[i]] || '#35513d'; m.fillRect(x, y, 1, 1);
+        // One pixel per tile, written into a reused buffer. Only changed tiles are rewritten,
+        // and an unchanged map skips the upload entirely.
+        if (!this.miniTerrain || this.miniTerrain.width !== state.width || this.miniTerrain.height !== state.height) { this.miniTerrain = surface(state.width, state.height); this.miniPixels = null; }
+        const m = this.miniTerrain.getContext('2d'), count = state.width * state.height;
+        if (!this.miniPixels) { this.miniPixels = m.createImageData(state.width, state.height); this.miniWords = new Uint32Array(this.miniPixels.data.buffer); this.miniTiles = new Int16Array(count).fill(-1); }
+        let changed = false;
+        for (let i = 0; i < count; i++) {
+          const t = mapTiles[i], key = t >= 0 && t < MINI_WORDS.length ? t : MINI_WORDS.length;
+          if (this.miniTiles[i] !== key) { this.miniTiles[i] = key; this.miniWords[i] = key < MINI_WORDS.length ? MINI_WORDS[key] : MINI_WORDS[0]; changed = true; }
         }
+        if (changed) m.putImageData(this.miniPixels, 0, 0);
         this.minimapState = state; this.lastMini = now;
       }
       c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -949,9 +998,16 @@
       c.strokeStyle = '#bcbf9030'; c.lineWidth = 1; c.strokeRect(ox + .5, oy + .5, mapSize - 1, mapSize - 1);
       const scaleX = mapSize / (state.width * state.tileSize), scaleY = mapSize / (state.height * state.tileSize);
       c.strokeStyle = '#d4ddad55'; c.lineWidth = 1;
-      const vx = Math.max(ox, ox + this.left * scaleX), vy = Math.max(oy, oy + this.top * scaleY);
-      const vr = Math.min(ox + mapSize, ox + this.right * scaleX), vb = Math.min(oy + mapSize, oy + this.bottom * scaleY);
-      c.strokeRect(vx, vy, Math.max(0, vr - vx), Math.max(0, vb - vy));
+      const first = this.viewMode === 'first';
+      if (first) {
+        // In first person a view cone replaces the top-down viewport outline.
+        const cx = ox + state.player.x * scaleX, cy = oy + state.player.y * scaleY, half = Math.atan(this.firstPerson && this.firstPerson.plane || .8), reach = Math.max(8, 14 * state.tileSize * scaleX);
+        c.fillStyle = '#e8d9a424'; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, reach, this.viewYaw - half, this.viewYaw + half); c.closePath(); c.fill(); c.stroke();
+      } else {
+        const vx = Math.max(ox, ox + this.left * scaleX), vy = Math.max(oy, oy + this.top * scaleY);
+        const vr = Math.min(ox + mapSize, ox + this.right * scaleX), vb = Math.min(oy + mapSize, oy + this.bottom * scaleY);
+        c.strokeRect(vx, vy, Math.max(0, vr - vx), Math.max(0, vb - vy));
+      }
       if (state.goal) {
         const gx = ox + state.goal.radioX * scaleX, gy = oy + state.goal.radioY * scaleY;
         c.fillStyle = '#162b2b'; c.beginPath(); c.arc(gx, gy, 5, 0, TAU); c.fill();
@@ -964,7 +1020,7 @@
         c.fillStyle = '#19332c'; c.strokeStyle = '#eac78b'; c.lineWidth = 1.5; c.beginPath();
         c.moveTo(wx, wy - 4); c.lineTo(wx + 4, wy); c.lineTo(wx, wy + 4); c.lineTo(wx - 4, wy); c.closePath(); c.fill(); c.stroke();
       }
-      const px = ox + state.player.x * scaleX, py = oy + state.player.y * scaleY, angle = state.player.angle || 0;
+      const px = ox + state.player.x * scaleX, py = oy + state.player.y * scaleY, angle = first ? this.viewYaw : state.player.angle || 0;
       c.save(); c.translate(px, py); c.rotate(angle);
       c.fillStyle = '#142b29'; c.beginPath(); c.moveTo(7, 0); c.lineTo(-4, -5); c.lineTo(-4, 5); c.closePath(); c.fill();
       c.fillStyle = '#f3e6b0'; c.beginPath(); c.moveTo(5, 0); c.lineTo(-2, -3); c.lineTo(-2, 3); c.closePath(); c.fill(); c.restore();

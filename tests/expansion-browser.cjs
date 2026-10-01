@@ -225,7 +225,9 @@ const { pathToFileURL } = require('node:url');
       assert(Object.values(exported.doc.world.records).some(r => r.humans.some(h => h.id === 'h:0,0:0' && h.following)));
     });
     await check('import restores expanded state after a fresh run, then Page Down restores its ground actors', async () => {
-      await page.locator('.as-overlay[data-screen="paused"] [data-command="restart"]').click();
+      const newRun = page.locator('.as-overlay[data-screen="paused"] [data-command="restart"]');
+      await newRun.click(); assert.equal(await read(() => Sirens.App.getScreen()), 'paused', 'New run must ask before replacing the save');
+      assert.match(await newRun.textContent(), /Replace saved run/); await newRun.click();
       await until(() => Sirens.App.getScreen() === 'playing' && Sirens.App.getState().stories.floor === 0);
       await page.keyboard.press('Escape');
       await until(() => Sirens.App.getScreen() === 'paused');

@@ -105,12 +105,13 @@ const fs=require('node:fs');
       await page.setViewportSize({width:1440,height:960});
     });
     await check('death, title return, restart and victory screens work',async()=>{
-      await page.evaluate(()=>{Sirens.App.getState().player.health=0;});await page.waitForTimeout(180);assert.equal(await screen(),'dead');
+      // The end screens appear on the next simulation frame; a frame after a large viewport resize can take longer than a fixed sleep.
+      await page.evaluate(()=>{Sirens.App.getState().player.health=0;});await page.waitForFunction(()=>Sirens.App.getScreen()==='dead',null,{timeout:3000});
       await page.locator('.as-overlay[data-screen="dead"] [data-command="title"]').click();assert.equal(await screen(),'title');assert(!(await page.locator('#map-shell').isVisible()));
       await page.locator('[data-ui="mode"]').selectOption('rescue');
       await page.locator('[data-command="start"]').click();
       await page.evaluate(()=>{const s=Sirens.App.getState();s.zombies=[];s.player.x=s.goal.radioX;s.player.y=s.goal.radioY;s.player.inventory.parts=s.goal.required;Sirens.Engine.interact(s);s.goal.countdown=.03;});
-      await page.waitForTimeout(200);assert.equal(await screen(),'won');
+      await page.waitForFunction(()=>Sirens.App.getScreen()==='won',null,{timeout:3000});
       await page.locator('.as-overlay[data-screen="won"] [data-command="restart"]').click();assert.equal(await screen(),'playing');
     });
     await check('keyboard and pointer stress remain finite and error-free',async()=>{

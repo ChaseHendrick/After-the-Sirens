@@ -53,6 +53,8 @@ This record defines the engineering direction. Completion must be assessed throu
 
 The renderer shows the loaded terrain and entities throughout its viewport, independent of explored tiles and player line of sight. Simulation collision, targeting and AI line of sight retain their existing rules. The minimap shows the whole active neighborhood. Ground and upper floors remain separate scenes.
 
+`FirstPerson` (0.6) is a second presentation of the same state. It casts one grid ray per column of a low-resolution buffer (one pixel per 2.5 CSS pixels, clamped to 240 to 640 wide) with perpendicular distances, draws themed walls, see-through frames for open doorways and broken windows, row-cast floors and ceilings over roofed tiles, then depth-tested billboards near to far, and scales the buffer up with smoothing off. main.js owns the view yaw and turns forward/strafe input into ordinary world-axis movement and an aim point straight ahead, so the engine, saves, the RNG and the multiplayer protocol do not know which view is on screen.
+
 `Effects` owns per-run animation poses and a bounded event queue in a WeakMap, with no saved fields or simulation RNG calls. The engine emits events for accepted actions and measures actual movement before world rebasing. The renderer reads poses; the browser loop drains events into an original Web Audio graph. Audio has a master mute gain, compressor, a 40-voice cap, and two reusable ambience/engine sources that stop while paused or in menus. A local fixed noise stream supplies sound textures independently of the world seed.
 
 ## Connected survival and menus in 0.4

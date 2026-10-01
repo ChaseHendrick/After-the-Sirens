@@ -68,6 +68,71 @@ check('looting heavy supplies leaves carrying space for five mission parts', () 
   assert(s.player.inventory.parts >= 5); assert(E.inventoryWeight(s.player.inventory) <= 24.00001);
 });
 
+const Personal = window.Sirens.Personal;
+const boxClear = (s, x, y, r) => [[-r, -r], [r, -r], [-r, r], [r, r]].every(d => !E.isSolid(s, (x + d[0]) / TILE, (y + d[1]) / TILE));
+check('barricades never close over the survivor, a companion or a pet, so no one is sealed in and the save reloads', () => {
+  const s = solo(); s.player.inventory = { wood: 6, scrap: 2 }; s.player.angle = 0;
+  // 25 px from the target centre, the survivor's 10 px box still reaches into the east road tile.
+  s.player.x = 31 * TILE + 25; s.player.y = 31 * TILE + 6;
+  assert(E.buildQuote(s, 'barricade').missing.includes('Aim toward a clear adjacent tile')); assert.equal(E.build(s, 'barricade'), false);
+  s.player.x = 1008; s.player.y = 1008;
+  const friend = { id: 'h:0,0:0', x: 1040 + 19, y: 1008 + 19, health: 100, angle: 0, faction: 'survivor', following: true, name: 'Morgan', weapon: 'bat', cooldown: 0 };
+  s.humans = [friend]; assert.equal(E.build(s, 'barricade'), false, 'a diagonal companion box overlaps the tile'); s.humans = [];
+  const pets = Personal.ensure(s); pets.tamed['pet:0,0:0'] = true;
+  pets.pets.push({ id: 'pet:0,0:0', kind: 'dog', name: 'Cedar', x: 1040, y: 1008, angle: 0, mode: 'stay', care: 75, lastBark: 0, nextThink: 0, stepX: null, stepY: null, moving: false });
+  assert.equal(E.build(s, 'barricade'), false, 'a pet in the tile blocks the barricade'); pets.pets[0].y = 1008 + 64;
+  assert(E.build(s, 'barricade')); assert.deepEqual(s.player.inventory, { wood: 3, scrap: 1 });
+  assert(boxClear(s, s.player.x, s.player.y, 10));
+  const start = s.player.y; tick(s, 0.5, { moveY: -1 }); assert(s.player.y < start - 20, 'the builder can still walk away');
+  assert.deepEqual(E.deserialize(E.serialize(s)).structures, s.structures);
+});
+check('doors refuse to close over people, pets or supplies, and emptied doorway piles cannot break a save', () => {
+  const s = solo(), door = 14 * 64 + 11, cx = 368, cy = 464;
+  s.player.x = cx; s.player.y = 432; assert(E.interact(s)); assert.equal(s.tiles[door], 7);
+  s.player.x = cx - 5; s.player.y = cy; assert(E.action(s, 'drop:bandage'));
+  assert(E.interact(s)); assert(!s.containers.some(c => c._ground), 'collecting the whole pile removes it');
+  assert(E.action(s, 'drop:bandage')); s.player.x = cx + 5; s.player.y = cy + 34;
+  assert.equal(E.interact(s), false); assert.equal(s.tiles[door], 7); assert(/Supplies are lying in the doorway/.test(s.logs[s.logs.length - 1].text));
+  s.player.x = cx - 5; s.player.y = cy; assert(E.interact(s)); assert(!s.containers.some(c => c._ground));
+  // With the east wall broken, a survivor 27 px away diagonally still overlaps the doorway.
+  s.tiles[14 * 64 + 12] = 2; s.player.x = cx + 24.5; s.player.y = cy + 12;
+  assert.equal(E.interact(s), false); assert.equal(s.tiles[door], 7); assert(/doorway is occupied/.test(s.logs[s.logs.length - 1].text));
+  s.player.x = cx; s.player.y = cy + 40; zombie(s, cx, cy - 20);
+  assert.equal(E.interact(s), false, 'a zombie in the doorway'); s.zombies = [];
+  const pets = Personal.ensure(s); pets.tamed['pet:0,0:1'] = true;
+  pets.pets.push({ id: 'pet:0,0:1', kind: 'cat', name: 'Pip', x: cx, y: cy, angle: 0, mode: 'stay', care: 75, lastBark: 0, nextThink: 0, stepX: null, stepY: null, moving: false });
+  assert.equal(E.interact(s), false, 'a pet in the doorway'); pets.pets[0].y = cy + 96;
+  assert(E.interact(s)); assert.equal(s.tiles[door], 6); assert(boxClear(s, s.player.x, s.player.y, 9));
+  // Saves from older builds could keep an emptied pile on that closed door; it now loads and is discarded.
+  const doc = JSON.parse(E.serialize(s));
+  doc.state.containers.push({ id: 'drop:82:999', x: cx, y: cy, label: 'Dropped supplies', items: {}, looted: true, _ground: true });
+  const loaded = E.deserialize(JSON.stringify(doc)); assert(!loaded.containers.some(c => c.id === 'drop:82:999')); assert.equal(loaded.tiles[door], 6);
+});
+check('looting stops at the 1000-item stack ceiling that crafting, trades and saves share', () => {
+  const s = solo(); s.player.inventory = { bat: 1, needle: 995 }; const c = s.containers[0];
+  c.items = { needle: 12 }; c.looted = false; s.player.x = c.x; s.player.y = c.y;
+  assert(E.interact(s)); assert.equal(s.player.inventory.needle, 1000); assert.deepEqual(c.items, { needle: 7 }); assert.equal(c.looted, false);
+  assert(s.logs.some(l => /already carry 1000/.test(l.text)));
+  assert.equal(E.interact(s), false); assert.equal(s.player.inventory.needle, 1000);
+  assert.equal(E.deserialize(E.serialize(s)).player.inventory.needle, 1000);
+});
+check('reloading needs the firearm itself, while legacy rescue gear keeps its pistol', () => {
+  const s = solo(); s.player.inventory = { bat: 1, ammo: 12 }; s.player.ammo = 0; s.player.magazines = { pistol: 0 };
+  assert.equal(E.action(s, 'reload'), false); assert.equal(s.player.inventory.ammo, 12); assert.equal(s.player.magazines.pistol, 0);
+  s.player.inventory.pistol = 1; assert(E.action(s, 'reload')); assert.equal(s.player.ammo, 8); assert.equal(s.player.inventory.ammo, 4);
+  const legacy = solo(); legacy.player.legacyGear = true; legacy.player.inventory = { ammo: 12 }; legacy.player.ammo = 0; legacy.player.magazines = { pistol: 0 };
+  assert(E.action(legacy, 'reload')); assert.equal(legacy.player.ammo, 8);
+});
+check('a save with the survivor wedged into a wall loads at the nearest clear tile, while a sealed position is still rejected', () => {
+  const s = solo(), doc = JSON.parse(E.serialize(s));
+  doc.state.player.x = 7.5 * TILE; doc.state.player.y = 10.5 * TILE; // inside the cabin's west wall
+  const loaded = E.deserialize(JSON.stringify(doc));
+  assert(boxClear(loaded, loaded.player.x, loaded.player.y, 10)); assert.equal(Math.hypot(loaded.player.x - 7.5 * TILE, loaded.player.y - 10.5 * TILE), TILE);
+  assert.doesNotThrow(() => E.deserialize(E.serialize(loaded)));
+  for (let y = 28; y <= 34; y++) for (let x = 28; x <= 34; x++) doc.state.tiles[y * 64 + x] = 3;
+  doc.state.player.x = 31.5 * TILE; doc.state.player.y = 31.5 * TILE;
+  assert.throws(() => E.deserialize(JSON.stringify(doc)), /player is inside a solid tile/);
+});
 function path(s, x, y) {
   const start = Math.floor(s.player.y / TILE) * 64 + Math.floor(s.player.x / TILE);
   const goal = Math.floor(y / TILE) * 64 + Math.floor(x / TILE);
