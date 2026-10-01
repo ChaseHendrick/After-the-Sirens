@@ -136,6 +136,14 @@ Original Web Audio sounds cover footsteps, melee swings, gunfire, reloads, flesh
 
 ![Axe, machete and spear attack frames](docs/combat-animation.png)
 
+## First-person view
+
+Press **P**, click the eye button between **Details** and the pause button, or choose **View: First person** under Game feel in the pause menu to see the town through your survivor's eyes. It is a second camera on the same world, drawn as a raycast pixel-art scene: buildings keep their top-down wall, floor and trim colors, closed doors and windows block the view while open doorways and broken windows can be seen through, interiors have ceilings, trees stand as billboards, and the sky follows the hour and the weather. Walls hide whatever is behind them. Your weapon swings, thrusts or recoils in view, a car shows its hood and dashboard, the minimap keeps a view cone, and the journal marker floats over its destination with its distance.
+
+W and S walk along the view, A and D step sideways, and the left and right arrows or the mouse turn. Click the view to capture the mouse; Escape releases it and pauses. **Look sensitivity** sets the turn speed. Space or a left click strikes straight ahead and right click fires: the engine simply aims along your view, so combat, noise, saves and multiplayer are unchanged. In a car, W and S still drive and A and D steer while the view follows the car. On touch screens the left thumb moves relative to the view, dragging the right side turns, and a quick tap strikes. The choice is remembered with your other settings, and the top-down view stays the default.
+
+![First-person view of zombies on a Morrow road at dusk](docs/first-person.png)
+
 ## Seeded worlds
 
 Enter a numeric **World seed** on the title screen. Seed `0` is valid. With the same seed and difficulty, generation reproduces the same terrain, business types, loot, cars, human spawns, and upper floors. Each sector uses a coordinate-derived RNG stream, so exploring sectors in a different order does not change their initial contents. Roads and building footprints follow authored procedural templates.
@@ -163,6 +171,9 @@ Saves store the world seed and the current simulation RNG state, along with pers
 | Steer | A / D while driving |
 | Climb or descend near stairs | Page Up / Page Down, or HUD buttons |
 | Pause or close a menu/conversation | Escape |
+| Switch between top-down and first-person view | P, or the eye button beside Pause |
+| Turn in first person | Left / right arrows, or the mouse after clicking the view |
+| Walk / step sideways in first person | W and S or up / down arrows / A and D |
 
 On touch screens:
 
@@ -175,6 +186,7 @@ On touch screens:
 | Switch weapon / sprint / sneak | Swap / Run / Sneak |
 | Enter a nearby car | Drive (appears beside a car, even when a survivor or pet is closer) |
 | Exit, refuel, stairs, supplies, Pack, Journal, pause | The existing HUD buttons |
+| Look around in first person | Drag on the right side; a quick tap strikes ahead |
 
 A physical keyboard or mouse switches the HUD back to keyboard hints; touching the game switches to touch again.
 
@@ -235,6 +247,7 @@ Then open `http://localhost:8000`. CI runs the build, simulation checks, save va
 | `src/personal.js` | Saved appearance, seeded strays, pet care and ground-floor behavior |
 | `src/effects.js` | Transient attack poses, footsteps, bounded events and Web Audio |
 | `src/renderer.js` | Fully visible Canvas world, animated characters and camera |
+| `src/firstperson.js` | First-person raycast view, billboards and view model, plus pure ray and view-relative input helpers |
 | `src/journal.js` | Skills, projects, people, daybook, searchable field guide and Atlas |
 | `src/ui.js`, `src/ui.css` | Menus, inventory, dialogue and HUD |
 | `src/neural.js`, `src/autoplay.js` | Local learned steering and constrained AI play |

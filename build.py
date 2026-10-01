@@ -9,12 +9,12 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-MODULES = ["catalog.js", "effects.js", "progression.js", "settlement.js", "personal.js", "warfare.js", "vehicles.js", "actors.js", "neural.js", "autoplay.js", "destruction.js", "stories.js", "world.js", "engine.js", "commands.js", "multiplayer.js", "lobbies.js", "renderer.js", "journal.js", "ui.js", "network-ui.js", "social.js", "touch.js", "main.js"]
+MODULES = ["catalog.js", "effects.js", "progression.js", "settlement.js", "personal.js", "warfare.js", "vehicles.js", "actors.js", "neural.js", "autoplay.js", "destruction.js", "stories.js", "world.js", "engine.js", "commands.js", "multiplayer.js", "lobbies.js", "firstperson.js", "renderer.js", "journal.js", "ui.js", "network-ui.js", "social.js", "touch.js", "main.js"]
 EXPORTS = {
     "catalog.js": "Catalog", "effects.js": "Effects", "progression.js": "Progression", "settlement.js": "Settlement", "personal.js": "Personal", "warfare.js": "Warfare",
     "vehicles.js": "Vehicles", "actors.js": "Actors", "autoplay.js": "Autoplay", "neural.js": "Neural", "destruction.js": "Destruction",
     "stories.js": "Stories", "world.js": "World", "engine.js": "Engine", "commands.js": "Commands", "social.js": "Social",
-    "multiplayer.js": "Multiplayer", "lobbies.js": "Lobbies", "renderer.js": "Renderer", "journal.js": "Journal", "ui.js": "UI", "network-ui.js": "NetworkUI", "touch.js": "Touch", "main.js": "App",
+    "multiplayer.js": "Multiplayer", "lobbies.js": "Lobbies", "firstperson.js": "FirstPerson", "renderer.js": "Renderer", "journal.js": "Journal", "ui.js": "UI", "network-ui.js": "NetworkUI", "touch.js": "Touch", "main.js": "App",
 }
 REGISTRATION = re.compile(r"\b(?:S|Sirens|NS|ns|window\.Sirens)\.([A-Z]\w*)\s*=")
 

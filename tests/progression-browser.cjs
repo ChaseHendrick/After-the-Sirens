@@ -186,7 +186,8 @@ const { pathToFileURL } = require('node:url');
       assert.equal(await page.evaluate(() => Sirens.App.getAudioMetrics().volume), .1);
       await page.keyboard.press('Escape'); await page.locator('[data-command="details"]').click(); const expected = await page.evaluate(() => Sirens.App.getPreferences());
       assert(expected.details); await page.reload(); assert.deepEqual(await page.evaluate(() => Sirens.App.getPreferences()), expected);
-      assert.deepEqual(await page.evaluate(() => Sirens.App.getView()), { zoom: .7, ambientMotion: false });
+      const view = await page.evaluate(() => Sirens.App.getView());
+      assert.deepEqual({ zoom: view.zoom, ambientMotion: view.ambientMotion, mode: view.mode }, { zoom: .7, ambientMotion: false, mode: 'top' });
       await page.locator('[data-command="continue"]').click();
     });
     await check('camera zoom preserves pointer coordinates and actual attacks remain playable', async () => {

@@ -439,3 +439,12 @@
   .as-ui button.as-primary{padding:11px 16px}.as-ui button.as-secondary{padding:9px}
 }
 .as-social-badge{display:inline-block;margin-left:2px;padding:0 5px;border-radius:3px;background:#dcc78d;color:#13201a;font-style:normal;font-size:8px;font-weight:800;letter-spacing:.08em;line-height:15px;text-transform:uppercase}.as-social-badge.as-social-nearby{background:#4f7462;color:#eef5e6}
+/* First-person view: the HUD toggle sits beside Details and Pause; hints follow the view and input. */
+.as-ui .as-view-button{display:inline-flex;align-items:center;justify-content:center;margin-right:4px}.as-view-button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.as-ui .as-view-button[aria-pressed="true"]{background:#cad5a4;border-color:#e0e8c0;color:#17221a}
+.as-view-setting select{margin-left:4px;padding:5px 8px;font-size:11px;background:#16241b;color:#e6ebd6;border:1px solid #6c795f;border-radius:4px}
+.as-hint-first-keys,.as-hint-first-touch,.as-ui[data-view="first"] .as-hint-keys,.as-ui[data-view="first"] .as-hint-touch{display:none}
+.as-ui[data-view="first"]:not([data-input="touch"]) .as-hint-first-keys,.as-ui[data-view="first"][data-input="touch"] .as-hint-first-touch{display:inline}
+.as-stick-aim.as-stick-look{height:60px;margin-top:-30px;border-radius:30px}.as-stick-look>span{background:#cfd8b8c0;border-color:#eef2dc}
+.as-status-top>button{flex-shrink:0;white-space:nowrap}
+@media(max-width:650px),(max-height:520px){.as-status-top .as-kicker{font-size:9px;letter-spacing:.08em}.as-ui .as-status-top .as-small-button{width:22px;height:22px}.as-ui .as-details-button{font-size:9px;padding:3px 5px;margin-right:2px}.as-ui .as-view-button{margin-right:2px}.as-view-button svg{width:13px;height:13px}}

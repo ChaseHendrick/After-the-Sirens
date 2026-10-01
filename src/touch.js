@@ -21,6 +21,8 @@
       this.toggles = { sprint: false, sneak: false };
       this.sticks = { move: null, aim: null };
       this.strike = null;
+      // In first person the right side becomes a look pad: horizontal drag turns the view, a tap strikes ahead.
+      this.look = false; this.lookDX = 0;
       const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
       const layer = this.layer = document.createElement('div');
       layer.className = 'as-touch';
@@ -65,6 +67,15 @@
       for (const name of ['sprint', 'sneak']) this.layer.querySelector(`[data-touch="${name}"]`).setAttribute('aria-pressed', String(this.toggles[name]));
     }
 
+    setLook(on) {
+      this.look = !!on; this.lookDX = 0;
+      if (this.sticks.aim) { this.sticks.aim = null; this.draw('aim'); }
+      this.nodes.aim.classList.toggle('as-stick-look', this.look);
+    }
+
+    // Horizontal look-pad travel since the last call, in CSS pixels.
+    takeLook() { const dx = this.lookDX; this.lookDX = 0; return dx; }
+
     // Returns true when the pointer belongs to the touch controls.
     down(event, rect) {
       if (event.pointerType !== 'touch') return false;
@@ -83,6 +94,11 @@
       for (const kind of ['move', 'aim']) {
         const stick = this.sticks[kind];
         if (!stick || stick.id !== event.pointerId) continue;
+        if (kind === 'aim' && this.look) {
+          this.lookDX += event.clientX - stick.x;
+          // The pad's centre trails a long drag so the knob keeps showing the latest direction.
+          if (Math.abs(event.clientX - stick.ox) > RADIUS) stick.ox = event.clientX - Math.sign(event.clientX - stick.ox) * RADIUS;
+        }
         stick.x = event.clientX; stick.y = event.clientY;
         stick.travel = Math.max(stick.travel, Math.hypot(stick.x - stick.startX, stick.y - stick.startY));
         // The movement base follows a thumb that slides past its edge, so direction changes stay short.
@@ -109,7 +125,7 @@
     }
 
     reset() {
-      this.sticks.move = this.sticks.aim = null; this.strike = null;
+      this.sticks.move = this.sticks.aim = null; this.strike = null; this.lookDX = 0;
       this.draw('move'); this.draw('aim');
     }
 
@@ -118,10 +134,10 @@
       node.hidden = !stick;
       if (!stick) return;
       const vector = stickVector(stick.x - stick.ox, stick.y - stick.oy), reach = Math.min(1, Math.hypot(stick.x - stick.ox, stick.y - stick.oy) / RADIUS);
-      const angle = Math.atan2(stick.y - stick.oy, stick.x - stick.ox);
+      const angle = Math.atan2(stick.y - stick.oy, stick.x - stick.ox), look = kind === 'aim' && this.look;
       node.style.left = stick.ox + 'px'; node.style.top = stick.oy + 'px';
-      node.firstChild.style.transform = `translate(${Math.cos(angle) * reach * RADIUS}px, ${Math.sin(angle) * reach * RADIUS}px)`;
-      node.classList.toggle('as-stick-engaged', kind === 'aim' ? vector.magnitude >= ATTACK_ZONE : vector.magnitude > 0);
+      node.firstChild.style.transform = look ? `translate(${Math.max(-RADIUS, Math.min(RADIUS, stick.x - stick.ox))}px, 0px)` : `translate(${Math.cos(angle) * reach * RADIUS}px, ${Math.sin(angle) * reach * RADIUS}px)`;
+      node.classList.toggle('as-stick-engaged', kind === 'aim' ? !look && vector.magnitude >= ATTACK_ZONE : vector.magnitude > 0);
     }
 
     // Movement and aim from both thumbs. Aim is either a direction or a screen point from a tap.
@@ -132,7 +148,7 @@
       if (move) { const v = stickVector(move.x - move.ox, move.y - move.oy); result.moveX = v.x; result.moveY = v.y; }
       const moving = Math.hypot(result.moveX, result.moveY) > 0;
       result.sprint = this.toggles.sprint && moving; result.sneak = this.toggles.sneak;
-      if (aim) {
+      if (aim && !this.look) {
         const v = stickVector(aim.x - aim.ox, aim.y - aim.oy);
         if (v.magnitude > 0) { result.aim = { kind: 'direction', x: v.x / v.magnitude, y: v.y / v.magnitude }; result.attack = v.magnitude >= ATTACK_ZONE; }
       }
@@ -159,7 +175,7 @@
     }
 
     status() {
-      return { enabled: this.enabled, move: !!this.sticks.move, aim: !!this.sticks.aim, sprint: this.toggles.sprint, sneak: this.toggles.sneak };
+      return { enabled: this.enabled, move: !!this.sticks.move, aim: !!this.sticks.aim, sprint: this.toggles.sprint, sneak: this.toggles.sneak, look: this.look };
     }
 
     destroy() { this.layer.removeEventListener('click', this.onClick); this.layer.remove(); }
