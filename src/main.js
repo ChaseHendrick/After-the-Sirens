@@ -24,7 +24,7 @@
 
   const pilot = S.Autoplay ? S.Autoplay.create() : null;
   let autoInput = null;
-  let network = null, networkUI = null, social = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
+  let network = null, networkUI = null, social = null, touch = null, touchContext = { use: false, drive: false, driving: false }, networkReady = false, networkPlayers = [], networkSendTime = 0;
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
   let debugOn = false;
@@ -41,7 +41,7 @@
 
   function unlockAudio() { S.Effects.audio.unlock(); }
 
-  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; if (networkReady && network) network.sendInput(inputSnapshot()); }
+  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; if (touch) touch.reset(); if (networkReady && network) network.sendInput(inputSnapshot()); }
 
   function setScreen(name) {
     screen = name;
@@ -280,6 +280,21 @@
     clearInput: clearInput,
     isPlaying: function () { return active && screen === 'playing' && !ui.isBlocking() && !state.ended; }
   });
+  function gameAcceptsInput() { return active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended; }
+  function interactNearby() {
+    if (networkReady) network.sendAction('interact'); else S.Engine.interact(state);
+    if (state.conversation) clearInput();
+    ui.update(state, frameInfo);
+  }
+  touch = S.Touch ? new S.Touch(document.getElementById('ui'), {
+    command: function (name) {
+      if (!gameAcceptsInput()) return;
+      stopAutoplay(); unlockAudio();
+      if (name === 'interact') interactNearby();
+      else if (name === 'switch') applyAction('switchWeapon');
+      else if (name === 'vehicle') applyAction('vehicle');
+    }
+  }) : null;
   if (ui.applyPreferences) ui.applyPreferences(preferences);
   setScreen('title');
   ui.update(state, frameInfo);
@@ -292,7 +307,7 @@
     const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
     if (buttonActivation) return;
     if (editing && event.code !== 'Escape') return;
-    if (controlledKeys.has(event.code)) event.preventDefault();
+    if (controlledKeys.has(event.code)) { event.preventDefault(); if (touch && event.code !== 'Escape') touch.enable(false); }
     if (event.repeat) return;
     if (event.code === 'Escape') {
       if (state.conversation) applyAction('closeConversation');
@@ -312,11 +327,8 @@
     stopAutoplay();
     keys.add(event.code);
     unlockAudio();
-    if (event.code === 'KeyE') {
-      if (networkReady) network.sendAction('interact'); else S.Engine.interact(state);
-      if (state.conversation) clearInput();
-      ui.update(state, frameInfo);
-    } else if (event.code === 'Digit1') applyAction('eat');
+    if (event.code === 'KeyE') interactNearby();
+    else if (event.code === 'Digit1') applyAction('eat');
     else if (event.code === 'Digit2') applyAction('drink');
     else if (event.code === 'Digit3') applyAction('bandage');
     else if (event.code === 'Digit4' || event.code === 'KeyR') applyAction('reload');
@@ -333,8 +345,19 @@
   addEventListener('pagehide', function () { S.Effects.audio.suspend(); if (active && !networkReady) save(true); });
   addEventListener('beforeunload', function () { if (active && !networkReady) save(true); });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
-  canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
+  canvas.addEventListener('pointermove', function (event) {
+    if (event.pointerType === 'touch') { if (touch) touch.move(event); return; }
+    pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
+  });
   canvas.addEventListener('pointerdown', function (event) {
+    if (event.pointerType === 'touch' && touch) {
+      event.preventDefault();
+      if (!gameAcceptsInput()) return;
+      stopAutoplay(); unlockAudio();
+      if (touch.down(event, canvas.getBoundingClientRect())) { try { canvas.setPointerCapture(event.pointerId); } catch (_) {} }
+      return;
+    }
+    if (touch && event.pointerType === 'mouse') touch.enable(false);
     if (!active || ui.isBlocking() || social && social.isBlocking()) return;
     stopAutoplay();
     event.preventDefault();
@@ -345,20 +368,23 @@
     try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
   });
   addEventListener('pointerup', function (event) {
+    if (event.pointerType === 'touch') { if (touch) touch.up(event); return; }
     if (event.button === 0) pointer.down = false;
     if (event.button === 2) pointer.shoot = false;
   });
-  canvas.addEventListener('pointercancel', clearInput);
+  canvas.addEventListener('pointercancel', function (event) { if (event.pointerType === 'touch' && touch) touch.up(event); else clearInput(); });
 
   function inputSnapshot() {
-    const moveX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-    const moveY = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
-    const aim = pointer.used ? renderer.screenToWorld(pointer.x, pointer.y, state) : {
-      x: state.player.x + Math.cos(state.player.angle || 0) * 100,
-      y: state.player.y + Math.sin(state.player.angle || 0) * 100
-    };
-    return { moveX: moveX, moveY: moveY, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), sneak: keys.has('KeyC'),
-      aimX: aim.x, aimY: aim.y, attack: pointer.down || keys.has('Space'), shoot: pointer.shoot };
+    const thumbs = touch ? touch.snapshot(performance.now()) : null;
+    const moveX = Math.max(-1, Math.min(1, (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + (thumbs ? thumbs.moveX : 0)));
+    const moveY = Math.max(-1, Math.min(1, (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + (thumbs ? thumbs.moveY : 0)));
+    let aim;
+    if (thumbs && thumbs.aim && thumbs.aim.kind === 'screen') aim = renderer.screenToWorld(thumbs.aim.x, thumbs.aim.y, state);
+    else if (thumbs && thumbs.aim) aim = { x: state.player.x + thumbs.aim.x * 100, y: state.player.y + thumbs.aim.y * 100 };
+    else if (pointer.used && !(touch && touch.enabled)) aim = renderer.screenToWorld(pointer.x, pointer.y, state);
+    else aim = { x: state.player.x + Math.cos(state.player.angle || 0) * 100, y: state.player.y + Math.sin(state.player.angle || 0) * 100 };
+    return { moveX: moveX, moveY: moveY, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight') || !!(thumbs && thumbs.sprint), sneak: keys.has('KeyC') || !!(thumbs && thumbs.sneak),
+      aimX: aim.x, aimY: aim.y, attack: pointer.down || keys.has('Space') || !!(thumbs && thumbs.attack), shoot: pointer.shoot };
   }
 
   let lastMetrics = performance.now();
@@ -407,10 +433,15 @@
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
     renderBrain(false);
+    if (touch) touch.update(gameAcceptsInput(), touchContext);
     S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden, !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
-    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0; }
+    if (uiTime > 0.1 || state.ended) {
+      ui.update(state, frameInfo);
+      if (touch && touch.enabled) touchContext = { use: !ui.nodes.interact.hidden, drive: !state.player.vehicleId && !!(S.Vehicles && S.Vehicles.nearby(state)), driving: !!state.player.vehicleId };
+      networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0;
+    }
     debug.hidden = !debugOn || screen === 'title';
     if (!debug.hidden) debug.textContent = frameInfo.fps + ' FPS  |  ' + frameInfo.frameMs.toFixed(1) + ' ms avg  |  ' + frameInfo.p95.toFixed(1) + ' ms p95\n' +
       state.zombies.length + ' active zombies  |  ' + state.stats.aiUpdates + ' AI decisions  |  seed ' + state.seed +
@@ -423,5 +454,6 @@
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
     getSocialStatus: function () { return social.getStatus(); }, getVoiceStats: function () { return social.getVoiceStats(); },
-    getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics };
+    getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics,
+    getTouchStatus: function () { return touch ? touch.status() : { enabled: false }; } };
 })();

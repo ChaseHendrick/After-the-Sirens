@@ -129,7 +129,7 @@
               <button class="as-pack-button" data-command="inventory" title="Inventory and crafting (I)"><kbd>I</kbd><span>Pack</span><b data-ui="pack-weight">0 kg</b></button>
               <button class="as-journal-button" data-command="journal" title="Skills, projects, people and field guide (J)"><kbd>J</kbd><span>Journal</span><b data-ui="insight-count">0</b></button>
             </div>
-            <div class="as-controls-hint">WASD move <span>·</span> SPACE attack <span>·</span> SHIFT sprint</div>
+            <div class="as-controls-hint"><span class="as-hint-keys">WASD move <span>·</span> SPACE attack <span>·</span> SHIFT sprint</span><span class="as-hint-touch">Left thumb moves <span>·</span> right thumb aims and attacks <span>·</span> tap to strike</span></div>
           </div>
         </div>
 
@@ -226,7 +226,7 @@
     }
 
     controlsMarkup() {
-      return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause or close the current menu</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. The game uses a keyboard and mouse.</p></details>`;
+      return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause or close the current menu</span><span>Touch: drag the left side to move or drive</span><span>Touch: drag the right side to aim and attack, or tap to strike there</span><span>Touch: Use, Swap, Run and Sneak buttons; the bar holds supplies, Pack and Journal</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. Play with a keyboard and mouse, or with touch on a phone or tablet.</p></details>`;
     }
 
     refreshCategories() {
@@ -472,7 +472,7 @@
       const firearm = weapon.weapon && weapon.weapon.kind === 'firearm' || player.weapon === 'pistol';
       const ammoId = weapon.weapon && weapon.weapon.ammoId || 'ammo';
       this.nodes.weapon.textContent = String(weapon.name || player.weapon || 'Bat').toUpperCase();
-      this.nodes.ammo.textContent = firearm ? `${Math.floor(number(player.ammo))} loaded · ${Math.floor(number(inventory[ammoId]))} spare` : 'F to switch weapon · I to equip';
+      this.nodes.ammo.textContent = firearm ? `${Math.floor(number(player.ammo))} loaded · ${Math.floor(number(inventory[ammoId]))} spare` : this.root.dataset.input === 'touch' ? 'Swap switches weapon · Pack to equip' : 'F to switch weapon · I to equip';
       this.root.querySelector('[data-count="ammo"]').textContent = String(Math.floor(number(inventory[ammoId])));
       const goal = state.goal || {};
       const required = Math.max(1, number(goal.required) || 5);

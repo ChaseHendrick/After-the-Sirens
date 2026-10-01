@@ -429,6 +429,40 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 .as-social-voice li[data-talking="true"]{background:#a0bf7236;border-color:#c2d796;color:#e2edc8}
 @media(max-width:650px){.as-social-toolbar{gap:5px;margin-top:9px}.as-ui .as-social-toolbar button{font-size:9px;padding:6px 8px;min-height:29px}.as-social-toolbar>span{font-size:9px;padding:4px 6px}.as-social-panel{left:10px;bottom:10px;width:calc(100vw - 20px);max-height:calc(100dvh - 20px);padding:14px;gap:10px}.as-social-panel h2{font-size:21px}.as-social-panel .as-kicker{font-size:8px}.as-social-history{height:min(25vh,190px);min-height:90px}.as-social-compose{grid-template-columns:75px minmax(0,1fr) auto;gap:5px}.as-ui .as-social-compose>button{padding:7px 8px}.as-ui .as-social-compose input,.as-ui .as-social-compose select{font-size:11px;padding:7px}.as-social-line{font-size:11px}.as-social-voice p{font-size:10px}.as-social-voice small{font-size:9px}.as-ui .as-social-voice-actions button{font-size:9px;padding:7px 9px}.as-social-note{font-size:9px}}
 @media(max-height:550px){.as-social-panel{padding:12px;gap:8px}.as-social-history{height:100px}.as-social-voice small{font-size:9px}.as-social-panel h2{font-size:19px}.as-social-voice{padding-top:9px}}
+.as-controls-hint>span{margin:0;color:inherit}.as-controls-hint>span>span{margin:0 5px;color:#6f8669}.as-hint-touch,.as-ui[data-input="touch"] .as-hint-keys{display:none}.as-ui[data-input="touch"] .as-hint-touch{display:inline}
+.as-touch{position:absolute;inset:0;pointer-events:none;z-index:4;-webkit-user-select:none;user-select:none}
+.as-stick{position:absolute;width:108px;height:108px;margin:-54px 0 0 -54px;border-radius:50%;border:2px solid #dfe6c866;background:radial-gradient(circle,#0f1b1533 0,#0f1b1580 72%);box-shadow:0 0 0 1px #0007 inset,0 6px 20px #0005}
+.as-stick>span{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:#dbe2c8c0;border:2px solid #f3f2dc;box-shadow:0 3px 10px #0008}
+.as-stick-aim>span{background:#d9bb78c0;border-color:#f6e2ad}.as-stick-aim.as-stick-engaged{border-color:#e7c57e;background:radial-gradient(circle,#e7c57e26 0,#0f1b1580 72%)}
+.as-touch-actions{position:absolute;right:max(16px,env(safe-area-inset-right));bottom:136px;display:grid;grid-template-columns:repeat(2,62px);gap:9px}
+.as-ui .as-touch-actions button{width:62px;height:62px;padding:0;border-radius:50%;border:1px solid #c9d2b166;background:#17271ed9;color:#e6ead6;font:700 11px/1 inherit;letter-spacing:.04em;text-transform:uppercase;box-shadow:0 4px 14px #0006;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.as-ui .as-touch-actions button[aria-pressed="true"]{background:#cad5a4;border-color:#eef3d4;color:#16231a}
+.as-ui .as-touch-actions .as-touch-drive{position:absolute;right:0;bottom:calc(100% + 9px);width:auto;min-width:96px;height:40px;padding:0 16px;border-radius:20px;background:#2c4a63e6;border-color:#a9c6db99}
+.as-ui .as-touch-actions .as-touch-ready{background:#d1ad5b;border-color:#f3dc9f;color:#14231a;box-shadow:0 0 0 3px #d1ad5b44,0 4px 14px #0006}
+.as-touch-driving .as-touch-actions{display:none}
+.as-ui[data-input="touch"] button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.as-ui[data-input="touch"] .as-interact kbd{display:none}
+@media(max-width:650px){.as-touch-actions{bottom:184px;right:12px;grid-template-columns:repeat(2,56px);gap:8px}.as-ui .as-touch-actions button{width:56px;height:56px;font-size:10px}.as-ui[data-input="touch"] .as-objective{width:calc(100% - 160px)}.as-ui[data-input="touch"] .as-interact{left:14px;right:144px;transform:none;max-width:none;bottom:186px}}
+@media(max-height:520px) and (min-width:651px){
+  .as-status{top:8px;left:8px;width:186px;padding:8px 10px 9px}.as-status-top{margin-bottom:5px}.as-meters{gap:5px}.as-meter-label{font-size:10px}.as-needs-summary{font-size:9px;margin-top:5px}
+  .as-objective{top:8px;left:204px;max-width:calc(100% - 370px);width:auto;padding:7px 10px}.as-objective p{font-size:11px;margin:2px 0 4px}.as-parts{font-size:8px;flex-direction:row;gap:10px}.as-autoplay{margin-top:5px}
+  #map-shell{top:8px;right:8px;width:112px;padding:2px}#minimap{width:106px;height:106px}.as-map-label{font-size:7px;padding:3px 2px 1px;letter-spacing:.1em}
+  .as-time{top:140px;right:8px;min-width:112px;font-size:8px;padding:4px}.as-world-info{top:166px;right:8px;min-width:112px;padding:5px;font-size:8px}.as-world-info>b{font-size:10px}.as-floor-info{top:228px;right:8px;min-width:112px;padding:5px}
+  .as-bottom{min-height:0;padding:6px 10px 8px;gap:10px;align-items:flex-end}.as-weapon{width:112px}.as-weapon strong{font-size:10px}.as-weapon>span:last-child{display:none}
+  .as-ui .as-hotbar button,.as-ui .as-hotbar .as-pack-button,.as-ui .as-hotbar .as-journal-button{height:34px;min-width:0;padding:5px 7px;font-size:10px}
+  .as-controls-hint{display:none}.as-live-log{bottom:56px;left:8px;max-width:300px}.as-log{font-size:10px;padding:3px 7px}.as-interact{bottom:58px;padding:6px 11px;font-size:11px}
+  .as-vehicle-info{bottom:52px;right:8px;width:150px;padding:6px 9px;gap:2px}.as-hud:has(.as-vehicle-info:not([hidden])) .as-floor-info{display:none}.as-debug{bottom:56px}
+  .as-touch-actions{bottom:56px;grid-template-columns:repeat(4,50px);gap:7px}.as-ui .as-touch-actions button{width:50px;height:50px;font-size:9px}
+  .as-ui[data-input="touch"] .as-interact{left:auto;right:240px;transform:none}
+}
+@media(max-height:520px) and (min-width:651px){
+  .as-title-overlay{padding:16px max(22px,env(safe-area-inset-left))}
+  .as-title-card{max-width:none;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:28px;align-content:start;padding:0}
+  .as-title-mark{grid-area:1/1}.as-eyebrow{grid-area:2/1;margin-top:10px!important}.as-title-card h1{grid-area:3/1}.as-title-copy{grid-area:4/1}.as-title-rules{grid-area:5/1}.as-start-note{grid-area:6/1;align-self:start}.as-prototype{grid-area:7/1;margin-top:8px}
+  .as-play-modes{grid-area:1/2/3/3;margin:0 0 10px}.as-start-options{grid-area:3/2/6/3}.as-network-panel{grid-area:3/2/8/3}.as-menu-actions{grid-area:6/2/8/3;margin-top:10px}
+  .as-ui h1{font-size:46px;margin:6px 0 10px}.as-title-copy{font-size:12px;margin:0}.as-title-rules{margin:10px 0}.as-start-note{font-size:10px;margin-top:8px!important}
+  .as-ui button.as-primary{padding:11px 16px}.as-ui button.as-secondary{padding:9px}
+}
 </style>
 </head>
 <body>
@@ -6488,7 +6522,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
               <button class="as-pack-button" data-command="inventory" title="Inventory and crafting (I)"><kbd>I</kbd><span>Pack</span><b data-ui="pack-weight">0 kg</b></button>
               <button class="as-journal-button" data-command="journal" title="Skills, projects, people and field guide (J)"><kbd>J</kbd><span>Journal</span><b data-ui="insight-count">0</b></button>
             </div>
-            <div class="as-controls-hint">WASD move <span>·</span> SPACE attack <span>·</span> SHIFT sprint</div>
+            <div class="as-controls-hint"><span class="as-hint-keys">WASD move <span>·</span> SPACE attack <span>·</span> SHIFT sprint</span><span class="as-hint-touch">Left thumb moves <span>·</span> right thumb aims and attacks <span>·</span> tap to strike</span></div>
           </div>
         </div>
 
@@ -6585,7 +6619,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
 
     controlsMarkup() {
-      return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause or close the current menu</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. The game uses a keyboard and mouse.</p></details>`;
+      return `<details class="as-controls" open><summary>Controls and survival notes</summary><div class="as-control-grid"><span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> Move or drive</span><span><kbd>SHIFT</kbd> Sprint, attracts attention</span><span><kbd>C</kbd> Sneak, move quietly</span><span><kbd>E</kbd> Loot, doors, relay, talk</span><span><kbd>E</kbd> Open or climb a window</span><span><kbd>SPACE</kbd> / left click: attack</span><span>Right click: fire equipped gun</span><span><kbd>F</kbd> Switch weapon</span><span><kbd>R</kbd> / <kbd>4</kbd> Reload</span><span><kbd>1</kbd> Eat <kbd>2</kbd> Drink <kbd>3</kbd> Bandage</span><span><kbd>I</kbd> Pack, catalogue, crafting</span><span><kbd>J</kbd> Skills, projects, people, field guide</span><span><kbd>B</kbd> Place barricade</span><span><kbd>V</kbd> Enter / exit vehicle</span><span><kbd>G</kbd> Refuel vehicle</span><span><kbd>PAGE ↑↓</kbd> Climb stairs</span><span><kbd>ESC</kbd> Pause or close the current menu</span><span>Touch: drag the left side to move or drive</span><span>Touch: drag the right side to aim and attack, or tap to strike there</span><span>Touch: Use, Swap, Run and Sneak buttons; the bar holds supplies, Pack and Journal</span></div><p>Point at terrain and strike with your equipped melee weapon. Axes chop trees and bash doors. A heavy pickaxe or sledgehammer can break walls. Press E at a window to open it and climb through; smashed glass can injure you. Watch attack windups and use corners to break sight. In open world mode, roads lead to new sectors and your changes persist. In rescue mode, gather five radio parts and repair the relay. Play with a keyboard and mouse, or with touch on a phone or tablet.</p></details>`;
     }
 
     refreshCategories() {
@@ -6831,7 +6865,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const firearm = weapon.weapon && weapon.weapon.kind === 'firearm' || player.weapon === 'pistol';
       const ammoId = weapon.weapon && weapon.weapon.ammoId || 'ammo';
       this.nodes.weapon.textContent = String(weapon.name || player.weapon || 'Bat').toUpperCase();
-      this.nodes.ammo.textContent = firearm ? `${Math.floor(number(player.ammo))} loaded · ${Math.floor(number(inventory[ammoId]))} spare` : 'F to switch weapon · I to equip';
+      this.nodes.ammo.textContent = firearm ? `${Math.floor(number(player.ammo))} loaded · ${Math.floor(number(inventory[ammoId]))} spare` : this.root.dataset.input === 'touch' ? 'Swap switches weapon · Pack to equip' : 'F to switch weapon · I to equip';
       this.root.querySelector('[data-count="ammo"]').textContent = String(Math.floor(number(inventory[ammoId])));
       const goal = state.goal || {};
       const required = Math.max(1, number(goal.required) || 5);
@@ -7609,6 +7643,178 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
 (function () {
   'use strict';
+  // Twin-stick touch controls. Touch pointers are routed here by main.js, so mouse and
+  // keyboard behavior is unchanged. This module only produces ordinary input snapshots
+  // and the same commands as the keyboard; the simulation never sees touch events.
+  const Sirens = window.Sirens = window.Sirens || {};
+  const RADIUS = 54, DEAD_ZONE = .18, ATTACK_ZONE = .38, TAP_MS = 260, TAP_TRAVEL = 14, STRIKE_MS = 150, MOVE_SHARE = .45;
+  const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
+
+  function stickVector(dx, dy) {
+    const length = Math.hypot(dx, dy) / RADIUS;
+    if (length <= DEAD_ZONE) return { x: 0, y: 0, magnitude: 0 };
+    const magnitude = Math.min(1, (length - DEAD_ZONE) / (1 - DEAD_ZONE)), scale = magnitude / (length * RADIUS);
+    return { x: dx * scale, y: dy * scale, magnitude };
+  }
+
+  class Touch {
+    constructor(root, callbacks) {
+      this.root = root;
+      this.callbacks = callbacks || {};
+      this.enabled = false;
+      this.toggles = { sprint: false, sneak: false };
+      this.sticks = { move: null, aim: null };
+      this.strike = null;
+      const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+      const layer = this.layer = document.createElement('div');
+      layer.className = 'as-touch';
+      layer.hidden = true;
+      layer.innerHTML = '<div class="as-stick" data-stick="move" hidden><span></span></div><div class="as-stick as-stick-aim" data-stick="aim" hidden><span></span></div>' +
+        '<div class="as-touch-actions" role="group" aria-label="Touch actions">' +
+        '<button type="button" class="as-touch-drive" data-touch="vehicle" title="Drive the nearby car (V)" hidden>Drive</button>' +
+        '<button type="button" data-touch="interact" title="Use what is nearby (E)">Use</button>' +
+        '<button type="button" data-touch="switch" title="Switch weapon (F)">Swap</button>' +
+        '<button type="button" data-touch="sprint" aria-pressed="false" title="Sprint while moving (Shift)">Run</button>' +
+        '<button type="button" data-touch="sneak" aria-pressed="false" title="Move quietly (C)">Sneak</button></div>';
+      root.appendChild(layer);
+      this.nodes = { move: layer.querySelector('[data-stick="move"]'), aim: layer.querySelector('[data-stick="aim"]'), use: layer.querySelector('[data-touch="interact"]'), drive: layer.querySelector('[data-touch="vehicle"]') };
+      this.onClick = this.click.bind(this);
+      layer.addEventListener('click', this.onClick);
+      root.dataset.input = 'pointer';
+      if (coarse) this.enable(true);
+    }
+
+    enable(on) {
+      on = !!on;
+      if (on === this.enabled) return;
+      this.enabled = on;
+      this.root.dataset.input = on ? 'touch' : 'pointer';
+      if (!on) this.reset();
+      if (typeof this.callbacks.changed === 'function') this.callbacks.changed(on);
+    }
+
+    click(event) {
+      const button = event.target.closest('[data-touch]');
+      if (!button || button.disabled) return;
+      const name = button.dataset.touch;
+      if (name === 'sprint' || name === 'sneak') {
+        this.toggles[name] = !this.toggles[name];
+        if (this.toggles[name]) this.toggles[name === 'sprint' ? 'sneak' : 'sprint'] = false;
+        this.refreshToggles();
+      } else if (typeof this.callbacks.command === 'function') this.callbacks.command(name);
+      button.blur();
+    }
+
+    refreshToggles() {
+      for (const name of ['sprint', 'sneak']) this.layer.querySelector(`[data-touch="${name}"]`).setAttribute('aria-pressed', String(this.toggles[name]));
+    }
+
+    // Returns true when the pointer belongs to the touch controls.
+    down(event, rect) {
+      if (event.pointerType !== 'touch') return false;
+      this.enable(true);
+      const width = rect && rect.width || window.innerWidth, left = rect && rect.left || 0;
+      const kind = event.clientX - left < width * MOVE_SHARE ? 'move' : 'aim';
+      if (this.sticks[kind]) return true;
+      const margin = RADIUS + 8;
+      const ox = clamp(event.clientX, margin, window.innerWidth - margin), oy = clamp(event.clientY, margin, window.innerHeight - margin);
+      this.sticks[kind] = { id: event.pointerId, ox, oy, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, started: performance.now(), travel: 0 };
+      this.draw(kind);
+      return true;
+    }
+
+    move(event) {
+      if (event.pointerType !== 'touch') return false;
+      for (const kind of ['move', 'aim']) {
+        const stick = this.sticks[kind];
+        if (!stick || stick.id !== event.pointerId) continue;
+        stick.x = event.clientX; stick.y = event.clientY;
+        stick.travel = Math.max(stick.travel, Math.hypot(stick.x - stick.startX, stick.y - stick.startY));
+        // The movement base follows a thumb that slides past its edge, so direction changes stay short.
+        const dx = stick.x - stick.ox, dy = stick.y - stick.oy, distance = Math.hypot(dx, dy);
+        if (kind === 'move' && distance > RADIUS * 1.4) { stick.ox += dx - dx / distance * RADIUS * 1.4; stick.oy += dy - dy / distance * RADIUS * 1.4; }
+        this.draw(kind);
+        return true;
+      }
+      return false;
+    }
+
+    up(event) {
+      if (event.pointerType !== 'touch') return false;
+      for (const kind of ['move', 'aim']) {
+        const stick = this.sticks[kind];
+        if (!stick || stick.id !== event.pointerId) continue;
+        // A quick tap on the right side strikes toward that point in the world.
+        if (kind === 'aim' && event.type === 'pointerup' && stick.travel < TAP_TRAVEL && performance.now() - stick.started < TAP_MS) this.strike = { x: stick.startX, y: stick.startY, until: performance.now() + STRIKE_MS };
+        this.sticks[kind] = null;
+        this.draw(kind);
+        return true;
+      }
+      return false;
+    }
+
+    reset() {
+      this.sticks.move = this.sticks.aim = null; this.strike = null;
+      this.draw('move'); this.draw('aim');
+    }
+
+    draw(kind) {
+      const node = this.nodes[kind], stick = this.sticks[kind];
+      node.hidden = !stick;
+      if (!stick) return;
+      const vector = stickVector(stick.x - stick.ox, stick.y - stick.oy), reach = Math.min(1, Math.hypot(stick.x - stick.ox, stick.y - stick.oy) / RADIUS);
+      const angle = Math.atan2(stick.y - stick.oy, stick.x - stick.ox);
+      node.style.left = stick.ox + 'px'; node.style.top = stick.oy + 'px';
+      node.firstChild.style.transform = `translate(${Math.cos(angle) * reach * RADIUS}px, ${Math.sin(angle) * reach * RADIUS}px)`;
+      node.classList.toggle('as-stick-engaged', kind === 'aim' ? vector.magnitude >= ATTACK_ZONE : vector.magnitude > 0);
+    }
+
+    // Movement and aim from both thumbs. Aim is either a direction or a screen point from a tap.
+    snapshot(now) {
+      const result = { moveX: 0, moveY: 0, sprint: false, sneak: false, attack: false, aim: null };
+      if (!this.enabled) return result;
+      const move = this.sticks.move, aim = this.sticks.aim;
+      if (move) { const v = stickVector(move.x - move.ox, move.y - move.oy); result.moveX = v.x; result.moveY = v.y; }
+      const moving = Math.hypot(result.moveX, result.moveY) > 0;
+      result.sprint = this.toggles.sprint && moving; result.sneak = this.toggles.sneak;
+      if (aim) {
+        const v = stickVector(aim.x - aim.ox, aim.y - aim.oy);
+        if (v.magnitude > 0) { result.aim = { kind: 'direction', x: v.x / v.magnitude, y: v.y / v.magnitude }; result.attack = v.magnitude >= ATTACK_ZONE; }
+      }
+      if (!result.aim && this.strike) {
+        if (now <= this.strike.until) { result.aim = { kind: 'screen', x: this.strike.x, y: this.strike.y }; result.attack = true; }
+        else this.strike = null;
+      }
+      if (!result.aim && moving) { const length = Math.hypot(result.moveX, result.moveY); result.aim = { kind: 'direction', x: result.moveX / length, y: result.moveY / length }; }
+      return result;
+    }
+
+    // Shows the touch layer during play, highlights Use when something is in reach and offers
+    // Drive beside a car, since a nearby survivor or pet takes priority for Use (as it does for E).
+    // In a car the vehicle panel's Exit and Refuel replace the on-foot buttons.
+    update(playing, context) {
+      const hidden = !this.enabled || !playing;
+      if (this.layer.hidden !== hidden) this.layer.hidden = hidden;
+      if (!playing && (this.sticks.move || this.sticks.aim || this.strike)) this.reset();
+      const ready = !!(context && context.use), drive = !!(context && context.drive);
+      if (this.nodes.use.classList.contains('as-touch-ready') !== ready) this.nodes.use.classList.toggle('as-touch-ready', ready);
+      if (this.nodes.drive.hidden === drive) this.nodes.drive.hidden = !drive;
+      const driving = !!(context && context.driving);
+      if (this.layer.classList.contains('as-touch-driving') !== driving) this.layer.classList.toggle('as-touch-driving', driving);
+    }
+
+    status() {
+      return { enabled: this.enabled, move: !!this.sticks.move, aim: !!this.sticks.aim, sprint: this.toggles.sprint, sneak: this.toggles.sneak };
+    }
+
+    destroy() { this.layer.removeEventListener('click', this.onClick); this.layer.remove(); }
+  }
+
+  Sirens.Touch = Touch;
+}());
+
+(function () {
+  'use strict';
   const S = window.Sirens;
   const canvas = document.getElementById('world');
   const minimap = document.getElementById('minimap');
@@ -7633,7 +7839,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   const pilot = S.Autoplay ? S.Autoplay.create() : null;
   let autoInput = null;
-  let network = null, networkUI = null, social = null, networkReady = false, networkPlayers = [], networkSendTime = 0;
+  let network = null, networkUI = null, social = null, touch = null, touchContext = { use: false, drive: false, driving: false }, networkReady = false, networkPlayers = [], networkSendTime = 0;
   let state = S.Engine.create(20260929, 'standard', 'openworld');
   let active = false;
   let debugOn = false;
@@ -7650,7 +7856,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
 
   function unlockAudio() { S.Effects.audio.unlock(); }
 
-  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; if (networkReady && network) network.sendInput(inputSnapshot()); }
+  function clearInput() { keys.clear(); pointer.down = false; pointer.shoot = false; if (touch) touch.reset(); if (networkReady && network) network.sendInput(inputSnapshot()); }
 
   function setScreen(name) {
     screen = name;
@@ -7889,6 +8095,21 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     clearInput: clearInput,
     isPlaying: function () { return active && screen === 'playing' && !ui.isBlocking() && !state.ended; }
   });
+  function gameAcceptsInput() { return active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended; }
+  function interactNearby() {
+    if (networkReady) network.sendAction('interact'); else S.Engine.interact(state);
+    if (state.conversation) clearInput();
+    ui.update(state, frameInfo);
+  }
+  touch = S.Touch ? new S.Touch(document.getElementById('ui'), {
+    command: function (name) {
+      if (!gameAcceptsInput()) return;
+      stopAutoplay(); unlockAudio();
+      if (name === 'interact') interactNearby();
+      else if (name === 'switch') applyAction('switchWeapon');
+      else if (name === 'vehicle') applyAction('vehicle');
+    }
+  }) : null;
   if (ui.applyPreferences) ui.applyPreferences(preferences);
   setScreen('title');
   ui.update(state, frameInfo);
@@ -7901,7 +8122,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const buttonActivation = event.target && /^(BUTTON|SUMMARY)$/.test(event.target.tagName) && (event.code === 'Space' || event.code === 'Enter');
     if (buttonActivation) return;
     if (editing && event.code !== 'Escape') return;
-    if (controlledKeys.has(event.code)) event.preventDefault();
+    if (controlledKeys.has(event.code)) { event.preventDefault(); if (touch && event.code !== 'Escape') touch.enable(false); }
     if (event.repeat) return;
     if (event.code === 'Escape') {
       if (state.conversation) applyAction('closeConversation');
@@ -7921,11 +8142,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     stopAutoplay();
     keys.add(event.code);
     unlockAudio();
-    if (event.code === 'KeyE') {
-      if (networkReady) network.sendAction('interact'); else S.Engine.interact(state);
-      if (state.conversation) clearInput();
-      ui.update(state, frameInfo);
-    } else if (event.code === 'Digit1') applyAction('eat');
+    if (event.code === 'KeyE') interactNearby();
+    else if (event.code === 'Digit1') applyAction('eat');
     else if (event.code === 'Digit2') applyAction('drink');
     else if (event.code === 'Digit3') applyAction('bandage');
     else if (event.code === 'Digit4' || event.code === 'KeyR') applyAction('reload');
@@ -7942,8 +8160,19 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   addEventListener('pagehide', function () { S.Effects.audio.suspend(); if (active && !networkReady) save(true); });
   addEventListener('beforeunload', function () { if (active && !networkReady) save(true); });
   canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
-  canvas.addEventListener('pointermove', function (event) { pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true; });
+  canvas.addEventListener('pointermove', function (event) {
+    if (event.pointerType === 'touch') { if (touch) touch.move(event); return; }
+    pointer.x = event.clientX; pointer.y = event.clientY; pointer.used = true;
+  });
   canvas.addEventListener('pointerdown', function (event) {
+    if (event.pointerType === 'touch' && touch) {
+      event.preventDefault();
+      if (!gameAcceptsInput()) return;
+      stopAutoplay(); unlockAudio();
+      if (touch.down(event, canvas.getBoundingClientRect())) { try { canvas.setPointerCapture(event.pointerId); } catch (_) {} }
+      return;
+    }
+    if (touch && event.pointerType === 'mouse') touch.enable(false);
     if (!active || ui.isBlocking() || social && social.isBlocking()) return;
     stopAutoplay();
     event.preventDefault();
@@ -7954,20 +8183,23 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
   });
   addEventListener('pointerup', function (event) {
+    if (event.pointerType === 'touch') { if (touch) touch.up(event); return; }
     if (event.button === 0) pointer.down = false;
     if (event.button === 2) pointer.shoot = false;
   });
-  canvas.addEventListener('pointercancel', clearInput);
+  canvas.addEventListener('pointercancel', function (event) { if (event.pointerType === 'touch' && touch) touch.up(event); else clearInput(); });
 
   function inputSnapshot() {
-    const moveX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-    const moveY = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
-    const aim = pointer.used ? renderer.screenToWorld(pointer.x, pointer.y, state) : {
-      x: state.player.x + Math.cos(state.player.angle || 0) * 100,
-      y: state.player.y + Math.sin(state.player.angle || 0) * 100
-    };
-    return { moveX: moveX, moveY: moveY, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), sneak: keys.has('KeyC'),
-      aimX: aim.x, aimY: aim.y, attack: pointer.down || keys.has('Space'), shoot: pointer.shoot };
+    const thumbs = touch ? touch.snapshot(performance.now()) : null;
+    const moveX = Math.max(-1, Math.min(1, (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + (thumbs ? thumbs.moveX : 0)));
+    const moveY = Math.max(-1, Math.min(1, (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + (thumbs ? thumbs.moveY : 0)));
+    let aim;
+    if (thumbs && thumbs.aim && thumbs.aim.kind === 'screen') aim = renderer.screenToWorld(thumbs.aim.x, thumbs.aim.y, state);
+    else if (thumbs && thumbs.aim) aim = { x: state.player.x + thumbs.aim.x * 100, y: state.player.y + thumbs.aim.y * 100 };
+    else if (pointer.used && !(touch && touch.enabled)) aim = renderer.screenToWorld(pointer.x, pointer.y, state);
+    else aim = { x: state.player.x + Math.cos(state.player.angle || 0) * 100, y: state.player.y + Math.sin(state.player.angle || 0) * 100 };
+    return { moveX: moveX, moveY: moveY, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight') || !!(thumbs && thumbs.sprint), sneak: keys.has('KeyC') || !!(thumbs && thumbs.sneak),
+      aimX: aim.x, aimY: aim.y, attack: pointer.down || keys.has('Space') || !!(thumbs && thumbs.attack), shoot: pointer.shoot };
   }
 
   let lastMetrics = performance.now();
@@ -8016,10 +8248,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (state.ended) { clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true); }
     } else accumulator = 0;
     renderBrain(false);
+    if (touch) touch.update(gameAcceptsInput(), touchContext);
     S.Effects.audio.update(state, active && screen === 'playing' && !ui.isBlocking() && !(social && social.isBlocking()) && !state.ended && !document.hidden, !document.hidden);
     renderer.draw(state, frameInfo);
     uiTime += elapsed;
-    if (uiTime > 0.1 || state.ended) { ui.update(state, frameInfo); networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0; }
+    if (uiTime > 0.1 || state.ended) {
+      ui.update(state, frameInfo);
+      if (touch && touch.enabled) touchContext = { use: !ui.nodes.interact.hidden, drive: !state.player.vehicleId && !!(S.Vehicles && S.Vehicles.nearby(state)), driving: !!state.player.vehicleId };
+      networkUI.update(networkReady, networkPlayers, state); social.update(networkReady, networkPlayers, state, network ? network.getStatus() : { connected: false }); uiTime = 0;
+    }
     debug.hidden = !debugOn || screen === 'title';
     if (!debug.hidden) debug.textContent = frameInfo.fps + ' FPS  |  ' + frameInfo.frameMs.toFixed(1) + ' ms avg  |  ' + frameInfo.p95.toFixed(1) + ' ms p95\n' +
       state.zombies.length + ' active zombies  |  ' + state.stats.aiUpdates + ' AI decisions  |  seed ' + state.seed +
@@ -8032,7 +8269,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   // Diagnostics surface for reproducible local playtesting.
   S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
     getSocialStatus: function () { return social.getStatus(); }, getVoiceStats: function () { return social.getVoiceStats(); },
-    getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics };
+    getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion }; }, getAudioMetrics: S.Effects.audio.metrics,
+    getTouchStatus: function () { return touch ? touch.status() : { enabled: false }; } };
 })();
 </script>
 </body>

@@ -16,7 +16,7 @@ Open the demo above, or download `After-the-Sirens.html` from a release and open
 
 Choose **Open world** to explore and survive freely. The optional radio mission continues into free survival after completion. Choose **Rescue mission** for the compact original town scenario: find five radio parts, repair the relay, and survive until rescue arrives.
 
-Chrome is tested. Other modern desktop browsers may work, but have not all been validated. Keyboard and mouse are required; mobile-sized layout checks do not establish touch play support.
+Chrome is tested. Other modern browsers may work, but have not all been validated. Play with a keyboard and mouse, or with **touch on a phone or tablet**: drag the left side of the screen to move or drive, drag the right side to aim and attack, or tap to strike at that point. Touch buttons cover Use, Swap, Run, Sneak and, beside a car, Drive. Touch play is verified with Chrome's touch emulation at phone and tablet sizes; physical devices and mobile Safari have not been validated. Landscape gives the most room on a phone.
 
 Singleplayer autosaves every five seconds of play and on page exit. Continue restores the saved run. **Export save** keeps a portable JSON copy. Export regularly, especially when using local files, because browsers can restrict or clear local storage.
 
@@ -164,6 +164,20 @@ Saves store the world seed and the current simulation RNG state, along with pers
 | Climb or descend near stairs | Page Up / Page Down, or HUD buttons |
 | Pause or close a menu/conversation | Escape |
 
+On touch screens:
+
+| Action | Touch |
+| --- | --- |
+| Move, or accelerate and steer while driving | Drag anywhere on the left side |
+| Aim and attack with the equipped weapon | Drag on the right side; a short push aims, a longer push attacks |
+| Strike toward a point | Quick tap on the right side |
+| Loot, door/window, radio, talk | Use (lights up when something is in reach) |
+| Switch weapon / sprint / sneak | Swap / Run / Sneak |
+| Enter a nearby car | Drive (appears beside a car, even when a survivor or pet is closer) |
+| Exit, refuel, stairs, supplies, Pack, Journal, pause | The existing HUD buttons |
+
+A physical keyboard or mouse switches the HUD back to keyboard hints; touching the game switches to touch again.
+
 ## What is playable
 
 - A seeded world streams a 3 by 3 window of 64 by 64 tile sectors. Roads connect six regional styles. Doors, loot, explored areas, structures, zombies, cars, and people persist as you travel.
@@ -228,6 +242,7 @@ Then open `http://localhost:8000`. CI runs the build, simulation checks, save va
 | `src/commands.js`, `src/social.js` | Singleplayer console, bounded chat and proximity WebRTC audio |
 | `server/index.cjs`, `server/directory.cjs` | Local authoritative world host and optional public directory |
 | `server/social.cjs` | Owner authorization, moderation, world commands and nearby voice signaling |
+| `src/touch.js` | Twin-stick touch input and touch action buttons, merged into ordinary input snapshots |
 | `src/main.js` | Input, fixed-step loop, presentation integration and browser storage |
 
 Each module registers once under `window.Sirens`. [Architecture](ARCHITECTURE.md), [validation](VALIDATION.md), [release notes](CHANGELOG.md), and [contribution instructions](CONTRIBUTING.md) describe the implementation and its limits.
