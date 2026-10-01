@@ -11,6 +11,8 @@
   function biome(seed, cx, cy) { return cx === 0 && cy === 0 ? 'town' : ['suburban', 'farm', 'industrial', 'forest', 'river'][hash(seed, cx, cy) % 5]; }
   function key(cx, cy) { return cx + ',' + cy; }
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
+  // Ground piles keep their own label ("Felled timber", "... belongings"); older saves have none.
+  function groundLabel(label) { return typeof label === 'string' && label.length >= 1 && label.length <= 100 ? label : 'Dropped supplies'; }
   function rng(seed) { let n = seed || 0x6d2b79f5; return function () { n ^= n << 13; n ^= n >>> 17; n ^= n << 5; n >>>= 0; return n / 4294967296; }; }
   function loot(random, archetype, region) {
     const catalog = Sirens.Catalog, entries = catalog && catalog.loot && (catalog.loot[archetype] || catalog.loot[region] || catalog.loot.house);
@@ -134,7 +136,7 @@
     for (const c of s.containers) {
       const gx = c.x + originPX, gy = c.y + originPY, cx = Math.floor(gx / CHUNK_PIXELS), cy = Math.floor(gy / CHUNK_PIXELS), r = world.records[key(cx, cy)];
       if (!r) continue;
-      if (c._ground) { r.ground.push({ id: c.id, x: gx, y: gy, label: 'Dropped supplies', items: copy(c.items), looted: c.looted, _ground: true }); continue; }
+      if (c._ground) { if (!c.looted) r.ground.push({ id: c.id, x: gx, y: gy, label: groundLabel(c.label), items: copy(c.items), looted: c.looted, _ground: true }); continue; }
       const a = active.find(a => a.cx === cx && a.cy === cy), original = a && a.base.containers.find(b => b.id === c.id);
       if (!original || original.looted !== c.looted || JSON.stringify(original.items) !== JSON.stringify(c.items)) r.containers[c.id] = { items: copy(c.items), looted: c.looted };
     }
@@ -245,13 +247,26 @@
     const vehicle = (s.vehicles || []).find(v => v.id === s.player.vehicleId);
     if (vehicle) { vehicle.x = s.player.x; vehicle.y = s.player.y; vehicle.speed = 0; }
   }
+  // Autosaves export every journaled sector. A sector's record changes only when snapshot() replaces its
+  // fields (active sectors) or appends to its arrays, so the field identities plus array lengths identify
+  // an unchanged record and its frozen export can be reused without regenerating the sector.
+  const RECORD_FIELDS = ['tiles', 'containers', 'doorHealth', 'terrainHealth', 'structures', 'ground', 'vehicles', 'humans', 'explored', 'zombies'];
+  const exportCache = new WeakMap();
+  function fingerprint(r) { const print = []; for (const f of RECORD_FIELDS) print.push(r[f], Array.isArray(r[f]) ? r[f].length : -1); return print; }
+  function deepFreeze(value) { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const v of Object.values(value)) deepFreeze(v); } return value; }
+  function exportRecord(w, k, r) {
+    const print = fingerprint(r), cached = exportCache.get(r);
+    if (cached && cached.print.length === print.length && cached.print.every((v, i) => v === print[i])) return cached.value;
+    const [cx, cy] = k.split(',').map(Number);
+    let meaningful = Object.keys(r.tiles).length || Object.keys(r.containers).length || Object.keys(r.doorHealth).length || Object.keys(r.terrainHealth || {}).length || r.structures.length || r.ground.length || r.explored.length;
+    if (!meaningful) { const base = generate(w.seed, w.difficulty, cx, cy); meaningful = JSON.stringify(r.zombies) !== JSON.stringify(base.zombies) || JSON.stringify(r.vehicles) !== JSON.stringify(base.vehicles) || JSON.stringify(r.humans) !== JSON.stringify(base.humans); }
+    const value = meaningful ? deepFreeze(copy(r)) : null;
+    exportCache.set(r, { print, value });
+    return value;
+  }
   function exportWorld(s) {
     snapshot(s); const w = s.world, records = {};
-    for (const k of Object.keys(w.records)) {
-      const [cx, cy] = k.split(',').map(Number), r = w.records[k], base = generate(w.seed, w.difficulty, cx, cy);
-      const meaningful = Object.keys(r.tiles).length || Object.keys(r.containers).length || Object.keys(r.doorHealth).length || Object.keys(r.terrainHealth || {}).length || r.structures.length || r.ground.length || r.explored.length || JSON.stringify(r.zombies) !== JSON.stringify(base.zombies) || JSON.stringify(r.vehicles) !== JSON.stringify(base.vehicles) || JSON.stringify(r.humans) !== JSON.stringify(base.humans);
-      if (meaningful) records[k] = copy(r);
-    }
+    for (const k of Object.keys(w.records)) { const value = exportRecord(w, k, w.records[k]); if (value) records[k] = value; }
     return { seed: w.seed, difficulty: w.difficulty, centerCX: w.centerCX, centerCY: w.centerCY, records, visited: Object.keys(w.visited) };
   }
   function validate(value, items) {
@@ -299,7 +314,9 @@
         object(c, 'ground container'); if (typeof c.id !== 'string' || !/^drop:\d{1,10}:\d{1,7}$/.test(c.id) || groundIds.has(c.id)) bad('ground container identity'); groundIds.add(c.id);
         const x = number(c.x, cx * CHUNK_PIXELS, (cx + 1) * CHUNK_PIXELS - 0.0001, 'ground.x'), y = number(c.y, cy * CHUNK_PIXELS, (cy + 1) * CHUNK_PIXELS - 0.0001, 'ground.y');
         const content = inventory(c.items); if (typeof c.looted !== 'boolean' || c.looted && Object.keys(content).length) bad('ground content');
-        r.ground.push({ id: c.id, x, y, label: 'Dropped supplies', items: content, looted: c.looted, _ground: true });
+        if (c.label !== undefined && (typeof c.label !== 'string' || c.label.length < 1 || c.label.length > 100)) bad('ground label');
+        // Emptied piles from older saves hold nothing; leaving them out keeps the sector's pile budget free.
+        if (!c.looted) r.ground.push({ id: c.id, x, y, label: groundLabel(c.label), items: content, looted: c.looted, _ground: true });
       }
       if (!Array.isArray(source.vehicles || []) || (source.vehicles || []).length > 50) bad('vehicles');
       for (const v of source.vehicles || []) {

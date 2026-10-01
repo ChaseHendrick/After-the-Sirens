@@ -1,6 +1,20 @@
 # Validation
 
-Validated September 30, 2026 for version 0.5. This is an original early playable browser game, not commercial-game parity.
+Validated October 1, 2026 for version 0.6. This is an original early playable browser game, not commercial-game parity.
+
+## Version 0.6: touch play and a reproduced-defect review
+
+The full command now passes **231 Node groups** (229 game/server groups plus the catalogue export and Python build guard) and **166 grouped browser checks** in headless Chromium, including the existing natural keyboard-and-mouse playthrough.
+
+Four review passes covered world persistence, gameplay systems, UI/input/rendering and the multiplayer host. Each finding was reproduced with a script before it was fixed, and each fix has a regression check that fails on the previous code. Twenty new Node groups cover the save-loss cases (barricade or door over an actor, a driver against a wall corner, doorway piles, stacks above 1,000, crowds beyond 360 active zombies, a radio outside the active window), wall-wedged survivors relocating on load, emptied-pile removal, ground-pile labels, the sector export cache, settlement record pruning, reload ownership, autoplay loops, and the host's survivor eviction, unauthenticated-socket budget, snapshot coalescing, join budgets, name rules and `/where` and `/forget` permissions. The sector export cache is checked against the uncached rule through edits, streaming and reload. On one local machine, three consecutive autosaves with 1,800 journaled sectors measured 517 to 623 ms before the change and 45 to 52 ms after.
+
+Thirteen input browser groups use real keyboard and mouse input, with two labeled fixtures (placing the survivor beside a generated survivor; lethal health). They cover chorded mouse buttons, Space held into pause and death screens, focus inside Pack and Journal, pause focus, Escape with a paused conversation, held keys after a menu, refusal messages, New run confirmation, Continue after a finished run, and the minimap's size and idle repaints. Run against the previous build, every targeted check fails.
+
+Fifteen touch browser groups drive real Chrome touch points (DevTools Protocol touch events, delivered as touch pointer events) with no gameplay-state writes. They open the cabin door with Use, loot, move and aim with both thumbs at once, strike by tapping, toggle Run and Sneak, Swap weapons, pause behind Pack and on blur, walk to a generated car, enter it with Drive, steer with the left stick and leave through the vehicle panel. Layout checks keep the touch buttons inside the viewport and clear of HUD panels at 844×390, 390×844, 1024×768 and 1366×1024; a desktop session shows no touch controls. This is emulated touch hardware, not a physical phone, tablet or mobile Safari test.
+
+The natural playthrough now waits for the visible shed prompt before pressing E. Under heavy concurrent load, a wandering survivor nearby could otherwise take E first, as it would for a player.
+
+## Earlier validation (version 0.5)
 
 ## Production simulation and saves
 
@@ -66,4 +80,4 @@ Observed fixture averages were roughly 10 to 30 ms per host tick locally, varyin
 
 `build.py` requires complete source coverage, one owner per module, valid JavaScript and no embedded script terminator. Python tests reject orphaned, missing, duplicate and misplaced modules and compare fresh assembly with committed index.html. GitHub Actions repeats the complete Node/browser suite on Linux Chromium before Pages deployment. Local and CI results are separate evidence, visible in the workflow.
 
-Multiplayer currently uses one shared loaded region and the ground floor. The anchor streams that region; guests outside it rendezvous safely. Enemy decisions focus on the anchor, with separate guest contact damage checks. Upper floors, independently distant regions, PvP, automatic NAT traversal and broad public-internet performance remain future work. Safari, Firefox, touch controls and long-term balance are not validated. The explicit world, journal and crowd limits are documented in README. AAA quality and full Project Zomboid parity are not established.
+Multiplayer currently uses one shared loaded region and the ground floor. The anchor streams that region; guests outside it rendezvous safely. Enemy decisions focus on the anchor, with separate guest contact damage checks. Upper floors, independently distant regions, PvP, automatic NAT traversal and broad public-internet performance remain future work. Safari, Firefox, physical touch devices and long-term balance are not validated; touch controls are verified only through Chrome's touch emulation. The explicit world, journal and crowd limits are documented in README. AAA quality and full Project Zomboid parity are not established.

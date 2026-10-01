@@ -64,6 +64,23 @@
       !isSolid(s, (x - r) / TILE, (y + r) / TILE) &&
       !isSolid(s, (x + r) / TILE, (y + r) / TILE);
   }
+  // A square collision box of half-size r touches tile tx,ty, using the same floor() edges as clearCircle.
+  function touchesTile(x, y, r, tx, ty) { return x + r >= tx * TILE && x - r < (tx + 1) * TILE && y + r >= ty * TILE && y - r < (ty + 1) * TILE; }
+  // The survivor, living dead, living people and ground-floor pets that a newly solid tile would trap.
+  function actorOnTile(s, tx, ty) {
+    const pets = Sirens.Personal && !(s.stories && s.stories.floor > 0) ? Sirens.Personal.ensure(s).pets.map(pet => Sirens.Personal.local(s, pet)) : [];
+    return touchesTile(s.player.x, s.player.y, 10, tx, ty) || s.zombies.some(z => z.health > 0 && touchesTile(z.x, z.y, 10, tx, ty)) ||
+      (s.humans || []).some(h => h.health > 0 && touchesTile(h.x, h.y, 9, tx, ty)) || pets.some(pet => touchesTile(pet.x, pet.y, 5, tx, ty));
+  }
+  // Bounded search for the nearest tile centre where a survivor of radius r fits.
+  function clearSpot(s, x, y, r, reach) {
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE), spots = [];
+    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
+      const cx = (tx + dx + 0.5) * TILE, cy = (ty + dy + 0.5) * TILE;
+      if (clearCircle(s, cx, cy, r)) spots.push({ x: cx, y: cy, d: dist2(x, y, cx, cy) });
+    }
+    return spots.sort((a, b) => a.d - b.d || a.y - b.y || a.x - b.x)[0] || null;
+  }
   function hasLOS(s, x1, y1, x2, y2) {
     if (![x1, y1, x2, y2].every(Number.isFinite)) return false;
     const distance = Math.hypot(x2 - x1, y2 - y1);
@@ -520,7 +537,9 @@
     if (s.goal.active && !s.goal.complete) {
       s.goal.countdown = Math.max(0, s.goal.countdown - dt); s._waveClock = Math.min(35, s._waveClock + dt); s._radioNoiseClock += dt;
       const upstairs = s.stories && s.stories.floor > 0;
-      if (s._radioNoiseClock >= 4) { s._radioNoiseClock = 0; if (!upstairs) noise(s, s.goal.radioX, s.goal.radioY, 720, 3); }
+      // A distant radio outside the active window cannot be heard here and would leave an unsavable noise.
+      const radioLoaded = s.goal.radioX >= 0 && s.goal.radioY >= 0 && s.goal.radioX < s.width * TILE && s.goal.radioY < s.height * TILE;
+      if (s._radioNoiseClock >= 4) { s._radioNoiseClock = 0; if (!upstairs && radioLoaded) noise(s, s.goal.radioX, s.goal.radioY, 720, 3); }
       if (s._waveClock >= 35 && s.zombies.length < (s.world ? 168 : 76)) { s._waveClock = 0; if (!upstairs) spawnWave(s); }
       if (s.goal.countdown <= 0) {
         s.goal.complete = true; s.goal.active = false; s.ended = !s.world; s.won = !s.world;
@@ -582,8 +601,12 @@
     const p = s.player;
     if (n.type === 'window') return !!(Sirens.Destruction && Sirens.Destruction.climb(s, n.tx, n.ty));
     if (n.type === 'door') {
-      if (s.tiles[n.value] === 7 && (dist2(p.x, p.y, n.x, n.y) < 27 ** 2 || s.zombies.some(z => dist2(z.x, z.y, n.x, n.y) < 26 ** 2))) {
+      const dx = n.value % s.width, dy = Math.floor(n.value / s.width);
+      if (s.tiles[n.value] === 7 && actorOnTile(s, dx, dy)) {
         log(s, 'The doorway is occupied. Step clear before closing it.', 'warn'); return false;
+      }
+      if (s.tiles[n.value] === 7 && s.containers.some(c => Math.floor(c.x / TILE) === dx && Math.floor(c.y / TILE) === dy)) {
+        log(s, 'Supplies are lying in the doorway. Collect them before closing it.', 'warn'); return false;
       }
       s.tiles[n.value] = s.tiles[n.value] === 6 ? 7 : 6; noise(s, n.x, n.y, 55, 0.5);
       if (Sirens.Effects) Sirens.Effects.emit(s, 'door');
@@ -603,7 +626,7 @@
       } else log(s, 'Installed ' + count + ' radio part' + (count === 1 ? '' : 's') + '. ' + s.goal.parts + '/5 ready.', 'good');
       return true;
     }
-    const c = n.value, took = [], skipped = [];
+    const c = n.value, took = [], skipped = [], stacked = [];
     // Parts and essential supplies take priority over heavy construction material.
     const priority = id => id === 'parts' ? -100 : ['bandage', 'water', 'food', 'ammo'].includes(id) ? ['bandage', 'water', 'food', 'ammo'].indexOf(id) : id === 'wood' ? 20 : id === 'scrap' ? 15 : 10;
     const ids = Object.keys(c.items).sort((a, b) => priority(a) - priority(b));
@@ -613,12 +636,17 @@
       // Reserve a little space for the remaining mission parts, so heavy loot cannot block the objective.
       const reserved = id === 'parts' ? 0 : Math.max(0, 5 - s.goal.parts - (p.inventory.parts || 0)) * items.parts.weight;
       const room = carryCapacity(s) - weight(p.inventory) - reserved;
-      const count = Math.min(available, Math.max(0, items[id].weight === 0 ? available : Math.floor((room + 0.00001) / items[id].weight)));
+      const fit = Math.max(0, items[id].weight === 0 ? available : Math.floor((room + 0.00001) / items[id].weight));
+      // Saves hold at most 1000 of one item, the same stack ceiling as crafting, trades and base storage.
+      const stack = Math.max(0, 1000 - (p.inventory[id] || 0)), count = Math.min(available, fit, stack);
       if (count) { p.inventory[id] = (p.inventory[id] || 0) + count; c.items[id] -= count; took.push(count + ' ' + items[id].name.toLowerCase()); }
-      if (!c.items[id]) delete c.items[id]; else skipped.push(items[id].name.toLowerCase());
+      if (!c.items[id]) delete c.items[id]; else (stack < fit ? stacked : skipped).push(items[id].name.toLowerCase());
     }
     c.looted = Object.keys(c.items).length === 0;
     if (took.length) { log(s, 'Collected ' + took.join(', ') + '.', 'good'); if (Sirens.Effects) Sirens.Effects.emit(s, 'loot'); if (Sirens.Progression) Sirens.Progression.loot(s, c); }
+    // An emptied ground pile has nothing left to find, so it no longer occupies the area's pile budget.
+    if (c._ground && c.looted && s.containers.includes(c)) s.containers.splice(s.containers.indexOf(c), 1);
+    if (stacked.length) log(s, 'You already carry 1000 ' + stacked.join(', ') + '. Left the rest here.', 'warn');
     if (skipped.length) log(s, 'Pack is nearly full (' + weight(p.inventory).toFixed(1) + '/' + carryCapacity(s) + '). Left ' + skipped.join(', ') + ' here. Room for mission parts stays reserved. Use, drop, craft, or build to make space.', 'warn');
     return took.length > 0;
   }
@@ -781,6 +809,8 @@
     }
     if (name === 'reload') {
       const id = weaponInfo(p.weapon).kind === 'firearm' ? p.weapon : 'pistol', w = weaponInfo(id), ammoId = w.ammoId || 'ammo';
+      // Rounds only go into a firearm the survivor actually carries, matching attack().
+      if (Sirens.Catalog && !(inv[id] > 0) && !(p.legacyGear && id === 'pistol')) { log(s, 'Carry the ' + (items[id] ? items[id].name.toLowerCase() : id) + ' before loading it.', 'warn'); return false; }
       p.magazines = p.magazines || { pistol: p.ammo };
       const loaded = p.ammo;
       if (loaded >= w.clipSize) { log(s, 'Magazine is full.', 'info'); return false; }
@@ -860,9 +890,9 @@
     const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE, tile = s.tiles[ty * s.width + tx];
     if (s.buildings.some(b => b.stairs && b.stairs.x === tx && b.stairs.y === ty)) missing.push('Aim away from the stairs');
     if (Sirens.Settlement && Sirens.Settlement.occupies(s, tx, ty)) missing.push('Keep planted crops clear');
-    if (isSolid(s, tx, ty) || tile === 7 || structureAt(s, tx, ty) || dist2(p.x, p.y, x, y) < 25 ** 2 ||
+    // Collision boxes, not centre distance: a barricade touching any corner would trap that survivor, person or pet.
+    if (isSolid(s, tx, ty) || tile === 7 || structureAt(s, tx, ty) || actorOnTile(s, tx, ty) ||
       s.containers.some(c => !(c._ground && c.looted && !Object.values(c.items).some(n => n > 0)) && dist2(c.x, c.y, x, y) < 24 ** 2) || dist2(s.goal.radioX, s.goal.radioY, x, y) < 45 ** 2 ||
-      s.zombies.some(z => z.health > 0 && dist2(z.x, z.y, x, y) < 26 ** 2) || (s.humans || []).some(h => h.health > 0 && dist2(h.x, h.y, x, y) < 26 ** 2) ||
       (s.vehicles || []).some(v => dist2(v.x, v.y, x, y) < 45 ** 2)) missing.push('Aim toward a clear adjacent tile');
     return { can: !missing.length, missing, cost, x, y };
   }
@@ -959,10 +989,12 @@
     for (const c of arr(source.containers, openworld ? 1000 : 160, 'containers')) {
       const p = point(c, 'container'), id = str(c.id, 60, 'container.id');
       if (containerIds.has(id)) fail('duplicate container'); containerIds.add(id);
-      const t = s.tiles[Math.floor(p.y / TILE) * W + Math.floor(p.x / TILE)];
-      if (![0, 1, 2, 7].includes(t)) fail('container is on an inaccessible tile');
       const content = inventory(c.items, 'container.items'), looted = bool(c.looted, 'container.looted');
       if (looted && Object.keys(content).length) fail('looted container still has items');
+      // Older builds kept emptied ground piles, even in doorways that were closed later. They hold nothing, so drop them.
+      if (c._ground === true && looted) continue;
+      const t = s.tiles[Math.floor(p.y / TILE) * W + Math.floor(p.x / TILE)];
+      if (![0, 1, 2, 7].includes(t)) fail('container is on an inaccessible tile');
       const cc = { id, x: p.x, y: p.y, label: str(c.label, 100, 'container.label'), items: content, looted };
       if (c._ground === true) cc._ground = true; s.containers.push(cc);
     }
@@ -1028,7 +1060,12 @@
       invulnerable: optionalNumber(p, 'invulnerable', 0, 2, 0), resting: p.resting === undefined ? false : bool(p.resting, 'resting'),
       _sneaking: p._sneaking === undefined ? false : bool(p._sneaking, 'sneaking') };
     if (weight(s.player.inventory) > carryCapacity(s) + 0.0001) fail('inventory exceeds carrying capacity');
-    if (!(document.stories && document.stories.floor > 0) && !clearCircle(s, s.player.x, s.player.y, 9)) fail('player is inside a solid tile');
+    // A driver sits inside the car's own footprint. On foot, a survivor wedged against a wall is moved to the nearest
+    // clear tile within three tiles instead of losing the run; a position with no nearby space is still rejected.
+    if (!(document.stories && document.stories.floor > 0) && !s.player.vehicleId && !clearCircle(s, s.player.x, s.player.y, 9)) {
+      const spot = clearSpot(s, s.player.x, s.player.y, 10, 3); if (!spot) fail('player is inside a solid tile');
+      s.player.x = spot.x; s.player.y = spot.y;
+    }
     for (const n of arr(source.noises, 24, 'noises')) { const p = point(n, 'noise'); const noise = { x: p.x, y: p.y, radius: num(n.radius, 0, 1500, 'noise radius'), life: num(n.life, 0, 6, 'noise life') }; if (n.vehicle) noise.vehicle = true; s.noises.push(noise); }
     for (const entry of arr(source.logs, 60, 'logs')) {
       obj(entry, 'log'); if (!['info', 'good', 'warn', 'danger'].includes(entry.tone)) fail('log tone');
@@ -1087,10 +1124,15 @@
         const ox = s.world.originX * TILE, oy = s.world.originY * TILE;
         const pool = name === 'humans' ? s.humans.concat((s.world.dormantHumans || []).map(h => Object.assign({}, h, {
           x: h.x - ox, y: h.y - oy, _targetX: h._targetX - ox, _targetY: h._targetY - oy,
-          _step: h._step ? { x: h._step.x - ox, y: h._step.y - oy } : null }))) : s[name];
+          _step: h._step ? { x: h._step.x - ox, y: h._step.y - oy } : null }))) :
+          // A crowd larger than the active budget keeps its dormant remainder; restore exactly the saved active set.
+          s.zombies.concat((s.world.dormantZombies || []).map(z => Object.assign({}, z, { x: z.x - ox, y: z.y - oy, _targetX: z._targetX - ox, _targetY: z._targetY - oy,
+            _path: (z._path || []).map(p => ({ x: p.x - ox, y: p.y - oy })) })));
         const byId = new Map(pool.map(e => [e.id, e]));
-        if (name === 'zombies' && ids.length !== s[name].length || name === 'humans' && ids.length < Math.min(max, pool.filter(h => h.health > 0).length)) fail(name + ' order length');
+        if (name === 'humans' && ids.length < Math.min(max, pool.filter(h => h.health > 0).length)) fail(name + ' order length');
         s[name] = ids.map(id => { if (typeof id !== 'string' || !byId.has(id) || seen.has(id)) fail(name + ' order identity'); seen.add(id); return byId.get(id); });
+        if (name === 'zombies') s.world.dormantZombies = pool.filter(z => !seen.has(z.id)).map(z => Object.assign({}, z, { x: z.x + ox, y: z.y + oy,
+          _targetX: z._targetX + ox, _targetY: z._targetY + oy, _path: (z._path || []).map(p => ({ x: p.x + ox, y: p.y + oy })) }));
         if (name === 'humans') {
           if (ids.length < max && pool.some(h => h.health > 0 && !seen.has(h.id))) fail('human order omits a living resident');
           s.world.dormantHumans = pool.filter(h => !seen.has(h.id)).map(h => Object.assign({}, h, { x: h.x + ox, y: h.y + oy,

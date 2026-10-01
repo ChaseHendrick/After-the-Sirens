@@ -1909,8 +1909,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       else {
         q.role = match[2]; q.human = (s.humans || []).find(h => h.id === match[1] && h.health > 0 && h.faction === 'survivor' && h.following);
         if (!q.human) missing.push('Recruit a living companion first');
-        if (!Object.hasOwn(base.jobs, match[1]) && Object.keys(base.jobs).length >= limits.records) missing.push('The companion work record is full');
-        if (!Object.hasOwn(base.moods, match[1]) && Object.keys(base.moods).length >= limits.records) missing.push('The companion morale record is full');
+        if (!room(s, base.jobs, match[1], false)) missing.push('The companion work record is full');
+        if (!room(s, base.moods, match[1], false)) missing.push('The companion morale record is full');
         if (q.role !== 'follow' && !base.home) missing.push('Claim a base first');
         if (q.role === 'gather' && !stockTool(base)) missing.push('Store a mining pick at your base');
       }
@@ -1929,7 +1929,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     else if (command === 'harvest') { add(inv, q.result); base.plots = base.plots.filter(p => p.id !== q.plot.id); increment(base, 'harvested', 1); gain(s, 5); write(s, 'Harvested 2 carrot bundles and 1 seed. Plant again to keep the garden going.'); }
     else if (command.startsWith('store:')) { add(base.stock, { [q.item]: 1 }); increment(base, 'delivered', 1); }
     else if (command.startsWith('take:')) { pay(base.stock, { [q.item]: 1 }); add(inv, q.result); }
-    else if (command.startsWith('job:')) { base.jobs[q.human.id] = { role: q.role, timer: 0 }; if (!Object.hasOwn(base.moods, q.human.id)) base.moods[q.human.id] = 60; write(s, q.human.name + ' assigned to ' + q.role + '. Food in the stockpile supports morale.'); }
+    else if (command.startsWith('job:')) { room(s, base.jobs, q.human.id, true); room(s, base.moods, q.human.id, true); base.jobs[q.human.id] = { role: q.role, timer: 0 }; if (!Object.hasOwn(base.moods, q.human.id)) base.moods[q.human.id] = 60; write(s, q.human.name + ' assigned to ' + q.role + '. Food in the stockpile supports morale.'); }
     if (S.Effects) S.Effects.emit(s, 'ui'); return true;
   }
   function nearby(s) {
@@ -1939,6 +1939,19 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   }
   function interact(s) { const near = nearestPlot(s); if (!near || s.ended || s.player.vehicleId) return false; return action(s, near.plot.progress >= limits.growthTime ? 'harvest' : 'water'); }
   function activeCompanion(s, h) { return h && h.health > 0 && h.faction === 'survivor' && h.following && onGround(s); }
+  // Work and morale records belong to living recruits. People here who died or stopped following lose theirs.
+  function prune(s) {
+    if (!onGround(s)) return; const base = ensure(s);
+    for (const h of s.humans || []) if (!activeCompanion(s, h)) { delete base.jobs[h.id]; delete base.moods[h.id]; }
+  }
+  // A full table frees the record of someone who is not an active companion here (for example a recruit lost far away).
+  function room(s, records, id, apply) {
+    if (Object.hasOwn(records, id) || Object.keys(records).length < limits.records) return true;
+    if (!onGround(s)) return false;
+    const active = new Set((s.humans || []).filter(h => activeCompanion(s, h)).map(h => h.id)), spare = Object.keys(records).find(k => !active.has(k));
+    if (spare && apply) delete records[spare];
+    return !!spare;
+  }
   function combatMultiplier(s, h) { return activeCompanion(s, h) ? .7 + .5 * (Object.hasOwn(ensure(s).moods, h.id) ? ensure(s).moods[h.id] : 60) / 100 : 1; }
   function stockTool(base) {
     return Object.keys(base.stock).filter(id => base.stock[id] > 0 && (id === 'iron_pick' || id === 'stone_pick' || metadata(id) && metadata(id).miningDamage > 0))
@@ -1987,10 +2000,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       if (s.weather !== 'rain') p.moisture = Math.max(0, p.moisture - dt * .6);
     }
     base.clock += dt;
-    if (base.clock < 60) return; base.clock %= 60;
+    if (base.clock < 60) return; base.clock %= 60; prune(s);
     const companions = (s.humans || []).filter(h => activeCompanion(s, h)).sort((a, b) => a.id.localeCompare(b.id));
     for (const h of companions) {
-      if (!Object.hasOwn(base.moods, h.id) && Object.keys(base.moods).length >= limits.records) continue;
+      if (!room(s, base.moods, h.id, true)) continue;
       const old = Object.hasOwn(base.moods, h.id) ? base.moods[h.id] : 60;
       const food = Object.keys(base.stock).filter(id => base.stock[id] > 0 && metadata(id) && metadata(id).effect && metadata(id).effect.hunger > 0).sort((a, b) => a === 'food' ? -1 : b === 'food' ? 1 : a.localeCompare(b))[0];
       if (food) { pay(base.stock, { [food]: 1 }); base.moods[h.id] = Math.min(100, old + 12); }
@@ -2391,6 +2404,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   function clearFoot(s, x, y) {
     return [[-10, -10], [-10, 10], [10, -10], [10, 10]].every(p => !S.Engine.isSolid(s, (x + p[0]) / T, (y + p[1]) / T));
   }
+  // The driver sits at the car's centre. The eight footprint points alone let a wall corner reach that seat.
+  function seat(s, x, y) { return [[-9, -9], [-9, 9], [9, -9], [9, 9]].every(p => !S.Engine.isSolid(s, (x + p[0]) / T, (y + p[1]) / T)); }
   function toggle(s) {
     const v = closest(s), p = s.player;
     if (!v) { log(s, 'Approach a parked car to drive.', 'info'); return false; }
@@ -2431,10 +2446,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const turn = steer * Math.min(1, Math.abs(v.speed) / 65) * 1.65 * dt * (v.speed < 0 ? -1 : 1);
     const nextAngle = (v.angle + turn + TAU) % TAU;
     if (clear(s, v.x, v.y, nextAngle)) v.angle = nextAngle;
-    const steps = Math.max(1, Math.ceil(Math.abs(v.speed * dt) / 4));
+    const steps = Math.max(1, Math.ceil(Math.abs(v.speed * dt) / 4)), seated = seat(s, v.x, v.y);
     for (let i = 0; i < steps; i++) {
       const x = v.x + Math.cos(v.angle) * v.speed * dt / steps, y = v.y + Math.sin(v.angle) * v.speed * dt / steps;
-      if (clear(s, x, y, v.angle)) { v.x = x; v.y = y; }
+      // A car already wedged by an older build may still drive clear; otherwise the seat must stay clear too.
+      if (clear(s, x, y, v.angle) && (!seated || seat(s, x, y))) { v.x = x; v.y = y; }
       else {
         if (Math.abs(v.speed) > 35) { v.condition = Math.max(0, v.condition - Math.abs(v.speed) * 0.035); log(s, 'Collision damaged the car.', 'warn'); if (S.Effects) S.Effects.emit(s, 'stone'); }
         v.speed = 0; break;
@@ -2749,7 +2765,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     function score(id) { const w = S.Catalog.items[id].weapon; return w.damage / w.cooldown + w.range * .2 - w.staminaCost * .6; }
   }
   function supplies(s, field) { return owned(s, i => i.effect && i.effect[field] > 0 && !(i.effect.infection < 0)); }
-  function hasDressing(s) { return owned(s, i => i.effect && (i.effect.bleeding > 0 || i.effect.health > 0)).length > 0; }
+  // Matches the engine's bandage command, which only uses dressings that stop bleeding.
+  function hasDressing(s) { return owned(s, i => i.effect && i.effect.bleeding > 0).length > 0; }
+  function remedy(s) { return owned(s, i => i.effect && i.effect.health > 0 && !(i.effect.infection < 0)).sort((a, b) => S.Catalog.items[b].effect.health - S.Catalog.items[a].effect.health || a.localeCompare(b))[0]; }
   function danger(s) {
     return s.zombies.concat((s.humans || []).filter(h => h.faction === 'raider')).filter(h => h.health > 0 && distance(h, s.player) < 390)
       .map(h => ({ actor: h, d: distance(h, s.player), visible: S.Engine.hasLOS(s, s.player.x, s.player.y, h.x, h.y) }))
@@ -2881,6 +2899,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     if (p.vehicleId) return emit(pilot, output, 'vehicle', 'Stopping and leaving the vehicle to scavenge.');
     // Medical and basic needs are paid through the normal action dispatcher.
     if ((p.bleeding > .1 || p.health < 62) && hasDressing(s)) return emit(pilot, output, 'bandage', 'Treating injuries with carried supplies.');
+    if (p.health < 62 && remedy(s)) return emit(pilot, output, 'use:' + remedy(s), 'Treating injuries with carried supplies.');
     if (p.infection >= 3) {
       const treatment = owned(s, i => i.effect && i.effect.infection > 0)[0];
       if (treatment) return emit(pilot, output, 'use:' + treatment, 'Using carried treatment for infection.');
@@ -2944,7 +2963,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       const near = S.Engine.nearby(s);
       if (d < 67 && S.Engine.hasLOS(s, p.x, p.y, c.x, c.y) && near === 'Collect ' + c.label) {
         const result = emit(pilot, output, 'interact', 'Collecting ' + c.label + '.');
-        if (result.command) { pilot.pendingLoot = { key: pilot.target.key, at: pilot.clock + .5 }; pilot.target = null; pilot.path = []; }
+        // A repeat attempt keeps the first deadline, so a container that cannot be emptied is set aside.
+        if (result.command) { if (!pilot.pendingLoot || pilot.pendingLoot.key !== pilot.target.key) pilot.pendingLoot = { key: pilot.target.key, at: pilot.clock + .5 }; pilot.target = null; pilot.path = []; }
         return result;
       }
     }
@@ -3455,9 +3475,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         for (const c of raw.containers) {
           const p = position(c, 'container'), id = text(c.id, 100, 'container identity');
           if (identities.has(id)) fail('duplicate entity'); identities.add(id);
-          if (!walkable(p)) fail('inaccessible container');
           const content = inventory(c.items);
           if (typeof c.looted !== 'boolean' || c.looted && Object.keys(content).length) fail('looted container content');
+          if (c._ground && c.looted) continue; // emptied piles from older saves hold nothing
+          if (!walkable(p)) fail('inaccessible container');
           const container = Object.assign({ id, label: text(c.label, 150, 'container label'), items: content, looted: c.looted }, p);
           if (c._ground) container._ground = true;
           saved.containers.push(container);
@@ -3517,6 +3538,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
   function biome(seed, cx, cy) { return cx === 0 && cy === 0 ? 'town' : ['suburban', 'farm', 'industrial', 'forest', 'river'][hash(seed, cx, cy) % 5]; }
   function key(cx, cy) { return cx + ',' + cy; }
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
+  // Ground piles keep their own label ("Felled timber", "... belongings"); older saves have none.
+  function groundLabel(label) { return typeof label === 'string' && label.length >= 1 && label.length <= 100 ? label : 'Dropped supplies'; }
   function rng(seed) { let n = seed || 0x6d2b79f5; return function () { n ^= n << 13; n ^= n >>> 17; n ^= n << 5; n >>>= 0; return n / 4294967296; }; }
   function loot(random, archetype, region) {
     const catalog = Sirens.Catalog, entries = catalog && catalog.loot && (catalog.loot[archetype] || catalog.loot[region] || catalog.loot.house);
@@ -3640,7 +3663,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     for (const c of s.containers) {
       const gx = c.x + originPX, gy = c.y + originPY, cx = Math.floor(gx / CHUNK_PIXELS), cy = Math.floor(gy / CHUNK_PIXELS), r = world.records[key(cx, cy)];
       if (!r) continue;
-      if (c._ground) { r.ground.push({ id: c.id, x: gx, y: gy, label: 'Dropped supplies', items: copy(c.items), looted: c.looted, _ground: true }); continue; }
+      if (c._ground) { if (!c.looted) r.ground.push({ id: c.id, x: gx, y: gy, label: groundLabel(c.label), items: copy(c.items), looted: c.looted, _ground: true }); continue; }
       const a = active.find(a => a.cx === cx && a.cy === cy), original = a && a.base.containers.find(b => b.id === c.id);
       if (!original || original.looted !== c.looted || JSON.stringify(original.items) !== JSON.stringify(c.items)) r.containers[c.id] = { items: copy(c.items), looted: c.looted };
     }
@@ -3751,13 +3774,26 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const vehicle = (s.vehicles || []).find(v => v.id === s.player.vehicleId);
     if (vehicle) { vehicle.x = s.player.x; vehicle.y = s.player.y; vehicle.speed = 0; }
   }
+  // Autosaves export every journaled sector. A sector's record changes only when snapshot() replaces its
+  // fields (active sectors) or appends to its arrays, so the field identities plus array lengths identify
+  // an unchanged record and its frozen export can be reused without regenerating the sector.
+  const RECORD_FIELDS = ['tiles', 'containers', 'doorHealth', 'terrainHealth', 'structures', 'ground', 'vehicles', 'humans', 'explored', 'zombies'];
+  const exportCache = new WeakMap();
+  function fingerprint(r) { const print = []; for (const f of RECORD_FIELDS) print.push(r[f], Array.isArray(r[f]) ? r[f].length : -1); return print; }
+  function deepFreeze(value) { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const v of Object.values(value)) deepFreeze(v); } return value; }
+  function exportRecord(w, k, r) {
+    const print = fingerprint(r), cached = exportCache.get(r);
+    if (cached && cached.print.length === print.length && cached.print.every((v, i) => v === print[i])) return cached.value;
+    const [cx, cy] = k.split(',').map(Number);
+    let meaningful = Object.keys(r.tiles).length || Object.keys(r.containers).length || Object.keys(r.doorHealth).length || Object.keys(r.terrainHealth || {}).length || r.structures.length || r.ground.length || r.explored.length;
+    if (!meaningful) { const base = generate(w.seed, w.difficulty, cx, cy); meaningful = JSON.stringify(r.zombies) !== JSON.stringify(base.zombies) || JSON.stringify(r.vehicles) !== JSON.stringify(base.vehicles) || JSON.stringify(r.humans) !== JSON.stringify(base.humans); }
+    const value = meaningful ? deepFreeze(copy(r)) : null;
+    exportCache.set(r, { print, value });
+    return value;
+  }
   function exportWorld(s) {
     snapshot(s); const w = s.world, records = {};
-    for (const k of Object.keys(w.records)) {
-      const [cx, cy] = k.split(',').map(Number), r = w.records[k], base = generate(w.seed, w.difficulty, cx, cy);
-      const meaningful = Object.keys(r.tiles).length || Object.keys(r.containers).length || Object.keys(r.doorHealth).length || Object.keys(r.terrainHealth || {}).length || r.structures.length || r.ground.length || r.explored.length || JSON.stringify(r.zombies) !== JSON.stringify(base.zombies) || JSON.stringify(r.vehicles) !== JSON.stringify(base.vehicles) || JSON.stringify(r.humans) !== JSON.stringify(base.humans);
-      if (meaningful) records[k] = copy(r);
-    }
+    for (const k of Object.keys(w.records)) { const value = exportRecord(w, k, w.records[k]); if (value) records[k] = value; }
     return { seed: w.seed, difficulty: w.difficulty, centerCX: w.centerCX, centerCY: w.centerCY, records, visited: Object.keys(w.visited) };
   }
   function validate(value, items) {
@@ -3805,7 +3841,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         object(c, 'ground container'); if (typeof c.id !== 'string' || !/^drop:\d{1,10}:\d{1,7}$/.test(c.id) || groundIds.has(c.id)) bad('ground container identity'); groundIds.add(c.id);
         const x = number(c.x, cx * CHUNK_PIXELS, (cx + 1) * CHUNK_PIXELS - 0.0001, 'ground.x'), y = number(c.y, cy * CHUNK_PIXELS, (cy + 1) * CHUNK_PIXELS - 0.0001, 'ground.y');
         const content = inventory(c.items); if (typeof c.looted !== 'boolean' || c.looted && Object.keys(content).length) bad('ground content');
-        r.ground.push({ id: c.id, x, y, label: 'Dropped supplies', items: content, looted: c.looted, _ground: true });
+        if (c.label !== undefined && (typeof c.label !== 'string' || c.label.length < 1 || c.label.length > 100)) bad('ground label');
+        // Emptied piles from older saves hold nothing; leaving them out keeps the sector's pile budget free.
+        if (!c.looted) r.ground.push({ id: c.id, x, y, label: groundLabel(c.label), items: content, looted: c.looted, _ground: true });
       }
       if (!Array.isArray(source.vehicles || []) || (source.vehicles || []).length > 50) bad('vehicles');
       for (const v of source.vehicles || []) {
@@ -3926,6 +3964,23 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       !isSolid(s, (x + r) / TILE, (y - r) / TILE) &&
       !isSolid(s, (x - r) / TILE, (y + r) / TILE) &&
       !isSolid(s, (x + r) / TILE, (y + r) / TILE);
+  }
+  // A square collision box of half-size r touches tile tx,ty, using the same floor() edges as clearCircle.
+  function touchesTile(x, y, r, tx, ty) { return x + r >= tx * TILE && x - r < (tx + 1) * TILE && y + r >= ty * TILE && y - r < (ty + 1) * TILE; }
+  // The survivor, living dead, living people and ground-floor pets that a newly solid tile would trap.
+  function actorOnTile(s, tx, ty) {
+    const pets = Sirens.Personal && !(s.stories && s.stories.floor > 0) ? Sirens.Personal.ensure(s).pets.map(pet => Sirens.Personal.local(s, pet)) : [];
+    return touchesTile(s.player.x, s.player.y, 10, tx, ty) || s.zombies.some(z => z.health > 0 && touchesTile(z.x, z.y, 10, tx, ty)) ||
+      (s.humans || []).some(h => h.health > 0 && touchesTile(h.x, h.y, 9, tx, ty)) || pets.some(pet => touchesTile(pet.x, pet.y, 5, tx, ty));
+  }
+  // Bounded search for the nearest tile centre where a survivor of radius r fits.
+  function clearSpot(s, x, y, r, reach) {
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE), spots = [];
+    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
+      const cx = (tx + dx + 0.5) * TILE, cy = (ty + dy + 0.5) * TILE;
+      if (clearCircle(s, cx, cy, r)) spots.push({ x: cx, y: cy, d: dist2(x, y, cx, cy) });
+    }
+    return spots.sort((a, b) => a.d - b.d || a.y - b.y || a.x - b.x)[0] || null;
   }
   function hasLOS(s, x1, y1, x2, y2) {
     if (![x1, y1, x2, y2].every(Number.isFinite)) return false;
@@ -4383,7 +4438,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     if (s.goal.active && !s.goal.complete) {
       s.goal.countdown = Math.max(0, s.goal.countdown - dt); s._waveClock = Math.min(35, s._waveClock + dt); s._radioNoiseClock += dt;
       const upstairs = s.stories && s.stories.floor > 0;
-      if (s._radioNoiseClock >= 4) { s._radioNoiseClock = 0; if (!upstairs) noise(s, s.goal.radioX, s.goal.radioY, 720, 3); }
+      // A distant radio outside the active window cannot be heard here and would leave an unsavable noise.
+      const radioLoaded = s.goal.radioX >= 0 && s.goal.radioY >= 0 && s.goal.radioX < s.width * TILE && s.goal.radioY < s.height * TILE;
+      if (s._radioNoiseClock >= 4) { s._radioNoiseClock = 0; if (!upstairs && radioLoaded) noise(s, s.goal.radioX, s.goal.radioY, 720, 3); }
       if (s._waveClock >= 35 && s.zombies.length < (s.world ? 168 : 76)) { s._waveClock = 0; if (!upstairs) spawnWave(s); }
       if (s.goal.countdown <= 0) {
         s.goal.complete = true; s.goal.active = false; s.ended = !s.world; s.won = !s.world;
@@ -4445,8 +4502,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const p = s.player;
     if (n.type === 'window') return !!(Sirens.Destruction && Sirens.Destruction.climb(s, n.tx, n.ty));
     if (n.type === 'door') {
-      if (s.tiles[n.value] === 7 && (dist2(p.x, p.y, n.x, n.y) < 27 ** 2 || s.zombies.some(z => dist2(z.x, z.y, n.x, n.y) < 26 ** 2))) {
+      const dx = n.value % s.width, dy = Math.floor(n.value / s.width);
+      if (s.tiles[n.value] === 7 && actorOnTile(s, dx, dy)) {
         log(s, 'The doorway is occupied. Step clear before closing it.', 'warn'); return false;
+      }
+      if (s.tiles[n.value] === 7 && s.containers.some(c => Math.floor(c.x / TILE) === dx && Math.floor(c.y / TILE) === dy)) {
+        log(s, 'Supplies are lying in the doorway. Collect them before closing it.', 'warn'); return false;
       }
       s.tiles[n.value] = s.tiles[n.value] === 6 ? 7 : 6; noise(s, n.x, n.y, 55, 0.5);
       if (Sirens.Effects) Sirens.Effects.emit(s, 'door');
@@ -4466,7 +4527,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       } else log(s, 'Installed ' + count + ' radio part' + (count === 1 ? '' : 's') + '. ' + s.goal.parts + '/5 ready.', 'good');
       return true;
     }
-    const c = n.value, took = [], skipped = [];
+    const c = n.value, took = [], skipped = [], stacked = [];
     // Parts and essential supplies take priority over heavy construction material.
     const priority = id => id === 'parts' ? -100 : ['bandage', 'water', 'food', 'ammo'].includes(id) ? ['bandage', 'water', 'food', 'ammo'].indexOf(id) : id === 'wood' ? 20 : id === 'scrap' ? 15 : 10;
     const ids = Object.keys(c.items).sort((a, b) => priority(a) - priority(b));
@@ -4476,12 +4537,17 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       // Reserve a little space for the remaining mission parts, so heavy loot cannot block the objective.
       const reserved = id === 'parts' ? 0 : Math.max(0, 5 - s.goal.parts - (p.inventory.parts || 0)) * items.parts.weight;
       const room = carryCapacity(s) - weight(p.inventory) - reserved;
-      const count = Math.min(available, Math.max(0, items[id].weight === 0 ? available : Math.floor((room + 0.00001) / items[id].weight)));
+      const fit = Math.max(0, items[id].weight === 0 ? available : Math.floor((room + 0.00001) / items[id].weight));
+      // Saves hold at most 1000 of one item, the same stack ceiling as crafting, trades and base storage.
+      const stack = Math.max(0, 1000 - (p.inventory[id] || 0)), count = Math.min(available, fit, stack);
       if (count) { p.inventory[id] = (p.inventory[id] || 0) + count; c.items[id] -= count; took.push(count + ' ' + items[id].name.toLowerCase()); }
-      if (!c.items[id]) delete c.items[id]; else skipped.push(items[id].name.toLowerCase());
+      if (!c.items[id]) delete c.items[id]; else (stack < fit ? stacked : skipped).push(items[id].name.toLowerCase());
     }
     c.looted = Object.keys(c.items).length === 0;
     if (took.length) { log(s, 'Collected ' + took.join(', ') + '.', 'good'); if (Sirens.Effects) Sirens.Effects.emit(s, 'loot'); if (Sirens.Progression) Sirens.Progression.loot(s, c); }
+    // An emptied ground pile has nothing left to find, so it no longer occupies the area's pile budget.
+    if (c._ground && c.looted && s.containers.includes(c)) s.containers.splice(s.containers.indexOf(c), 1);
+    if (stacked.length) log(s, 'You already carry 1000 ' + stacked.join(', ') + '. Left the rest here.', 'warn');
     if (skipped.length) log(s, 'Pack is nearly full (' + weight(p.inventory).toFixed(1) + '/' + carryCapacity(s) + '). Left ' + skipped.join(', ') + ' here. Room for mission parts stays reserved. Use, drop, craft, or build to make space.', 'warn');
     return took.length > 0;
   }
@@ -4644,6 +4710,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     }
     if (name === 'reload') {
       const id = weaponInfo(p.weapon).kind === 'firearm' ? p.weapon : 'pistol', w = weaponInfo(id), ammoId = w.ammoId || 'ammo';
+      // Rounds only go into a firearm the survivor actually carries, matching attack().
+      if (Sirens.Catalog && !(inv[id] > 0) && !(p.legacyGear && id === 'pistol')) { log(s, 'Carry the ' + (items[id] ? items[id].name.toLowerCase() : id) + ' before loading it.', 'warn'); return false; }
       p.magazines = p.magazines || { pistol: p.ammo };
       const loaded = p.ammo;
       if (loaded >= w.clipSize) { log(s, 'Magazine is full.', 'info'); return false; }
@@ -4723,9 +4791,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE, tile = s.tiles[ty * s.width + tx];
     if (s.buildings.some(b => b.stairs && b.stairs.x === tx && b.stairs.y === ty)) missing.push('Aim away from the stairs');
     if (Sirens.Settlement && Sirens.Settlement.occupies(s, tx, ty)) missing.push('Keep planted crops clear');
-    if (isSolid(s, tx, ty) || tile === 7 || structureAt(s, tx, ty) || dist2(p.x, p.y, x, y) < 25 ** 2 ||
+    // Collision boxes, not centre distance: a barricade touching any corner would trap that survivor, person or pet.
+    if (isSolid(s, tx, ty) || tile === 7 || structureAt(s, tx, ty) || actorOnTile(s, tx, ty) ||
       s.containers.some(c => !(c._ground && c.looted && !Object.values(c.items).some(n => n > 0)) && dist2(c.x, c.y, x, y) < 24 ** 2) || dist2(s.goal.radioX, s.goal.radioY, x, y) < 45 ** 2 ||
-      s.zombies.some(z => z.health > 0 && dist2(z.x, z.y, x, y) < 26 ** 2) || (s.humans || []).some(h => h.health > 0 && dist2(h.x, h.y, x, y) < 26 ** 2) ||
       (s.vehicles || []).some(v => dist2(v.x, v.y, x, y) < 45 ** 2)) missing.push('Aim toward a clear adjacent tile');
     return { can: !missing.length, missing, cost, x, y };
   }
@@ -4822,10 +4890,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
     for (const c of arr(source.containers, openworld ? 1000 : 160, 'containers')) {
       const p = point(c, 'container'), id = str(c.id, 60, 'container.id');
       if (containerIds.has(id)) fail('duplicate container'); containerIds.add(id);
-      const t = s.tiles[Math.floor(p.y / TILE) * W + Math.floor(p.x / TILE)];
-      if (![0, 1, 2, 7].includes(t)) fail('container is on an inaccessible tile');
       const content = inventory(c.items, 'container.items'), looted = bool(c.looted, 'container.looted');
       if (looted && Object.keys(content).length) fail('looted container still has items');
+      // Older builds kept emptied ground piles, even in doorways that were closed later. They hold nothing, so drop them.
+      if (c._ground === true && looted) continue;
+      const t = s.tiles[Math.floor(p.y / TILE) * W + Math.floor(p.x / TILE)];
+      if (![0, 1, 2, 7].includes(t)) fail('container is on an inaccessible tile');
       const cc = { id, x: p.x, y: p.y, label: str(c.label, 100, 'container.label'), items: content, looted };
       if (c._ground === true) cc._ground = true; s.containers.push(cc);
     }
@@ -4891,7 +4961,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
       invulnerable: optionalNumber(p, 'invulnerable', 0, 2, 0), resting: p.resting === undefined ? false : bool(p.resting, 'resting'),
       _sneaking: p._sneaking === undefined ? false : bool(p._sneaking, 'sneaking') };
     if (weight(s.player.inventory) > carryCapacity(s) + 0.0001) fail('inventory exceeds carrying capacity');
-    if (!(document.stories && document.stories.floor > 0) && !clearCircle(s, s.player.x, s.player.y, 9)) fail('player is inside a solid tile');
+    // A driver sits inside the car's own footprint. On foot, a survivor wedged against a wall is moved to the nearest
+    // clear tile within three tiles instead of losing the run; a position with no nearby space is still rejected.
+    if (!(document.stories && document.stories.floor > 0) && !s.player.vehicleId && !clearCircle(s, s.player.x, s.player.y, 9)) {
+      const spot = clearSpot(s, s.player.x, s.player.y, 10, 3); if (!spot) fail('player is inside a solid tile');
+      s.player.x = spot.x; s.player.y = spot.y;
+    }
     for (const n of arr(source.noises, 24, 'noises')) { const p = point(n, 'noise'); const noise = { x: p.x, y: p.y, radius: num(n.radius, 0, 1500, 'noise radius'), life: num(n.life, 0, 6, 'noise life') }; if (n.vehicle) noise.vehicle = true; s.noises.push(noise); }
     for (const entry of arr(source.logs, 60, 'logs')) {
       obj(entry, 'log'); if (!['info', 'good', 'warn', 'danger'].includes(entry.tone)) fail('log tone');
@@ -4950,10 +5025,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline: 2px sol
         const ox = s.world.originX * TILE, oy = s.world.originY * TILE;
         const pool = name === 'humans' ? s.humans.concat((s.world.dormantHumans || []).map(h => Object.assign({}, h, {
           x: h.x - ox, y: h.y - oy, _targetX: h._targetX - ox, _targetY: h._targetY - oy,
-          _step: h._step ? { x: h._step.x - ox, y: h._step.y - oy } : null }))) : s[name];
+          _step: h._step ? { x: h._step.x - ox, y: h._step.y - oy } : null }))) :
+          // A crowd larger than the active budget keeps its dormant remainder; restore exactly the saved active set.
+          s.zombies.concat((s.world.dormantZombies || []).map(z => Object.assign({}, z, { x: z.x - ox, y: z.y - oy, _targetX: z._targetX - ox, _targetY: z._targetY - oy,
+            _path: (z._path || []).map(p => ({ x: p.x - ox, y: p.y - oy })) })));
         const byId = new Map(pool.map(e => [e.id, e]));
-        if (name === 'zombies' && ids.length !== s[name].length || name === 'humans' && ids.length < Math.min(max, pool.filter(h => h.health > 0).length)) fail(name + ' order length');
+        if (name === 'humans' && ids.length < Math.min(max, pool.filter(h => h.health > 0).length)) fail(name + ' order length');
         s[name] = ids.map(id => { if (typeof id !== 'string' || !byId.has(id) || seen.has(id)) fail(name + ' order identity'); seen.add(id); return byId.get(id); });
+        if (name === 'zombies') s.world.dormantZombies = pool.filter(z => !seen.has(z.id)).map(z => Object.assign({}, z, { x: z.x + ox, y: z.y + oy,
+          _targetX: z._targetX + ox, _targetY: z._targetY + oy, _path: (z._path || []).map(p => ({ x: p.x + ox, y: p.y + oy })) }));
         if (name === 'humans') {
           if (ids.length < max && pool.some(h => h.health > 0 && !seen.has(h.id))) fail('human order omits a living resident');
           s.world.dormantHumans = pool.filter(h => !seen.has(h.id)).map(h => Object.assign({}, h, { x: h.x + ox, y: h.y + oy,

@@ -144,6 +144,19 @@ check('companion jobs require a living recruit, home and a stored pick, then gat
   assert.equal(b.stats.mined, 1); assert.equal(b.stock.stone, 3); assert.equal(b.stock.stone_pick, 1); assert.equal(b.stats.delivered, 3);
   h.following = false; failureAtomic(s, () => E.action(s, 'base:job:' + h.id + ':guard')); assert.equal(B.work(s, h, 1), false);
 });
+check('work and morale records drop dead or departed recruits, and a full record still makes room for a new companion', () => {
+  const s = fixture(), b = claim(s), keep = human(s, 'h:0,0:1'), gone = human(s, 'h:0,0:2'), dead = human(s, 'h:0,0:3'); s.humans = [keep, gone, dead];
+  for (const h of s.humans) assert(E.action(s, 'base:job:' + h.id + ':guard'));
+  gone.following = false; dead.health = 0; for (let i = 0; i < 60; i++) B.update(s, 1);
+  assert.deepEqual(Object.keys(b.jobs), [keep.id]); assert.deepEqual(Object.keys(b.moods), [keep.id]);
+  // Recruits lost far away (outside the loaded area) fill both tables; the next companion still gets work.
+  for (let i = 0; i < B.limits.records - 1; i++) { b.jobs['h:9,9:' + i] = { role: 'guard', timer: 0 }; b.moods['h:9,9:' + i] = 60; }
+  const fresh = human(s, 'h:0,0:4'); s.humans.push(fresh);
+  assert(B.quote(s, 'job:' + fresh.id + ':guard').can); assert(E.action(s, 'base:job:' + fresh.id + ':guard'));
+  assert.equal(b.jobs[fresh.id].role, 'guard'); assert.equal(b.moods[fresh.id], 60); assert.equal(b.jobs[keep.id].role, 'guard');
+  assert.equal(Object.keys(b.jobs).length, B.limits.records); assert.equal(Object.keys(b.moods).length, B.limits.records);
+  const loaded = E.deserialize(E.serialize(s)); assert.deepEqual(loaded.settlement.jobs, b.jobs);
+});
 check('farm jobs consume stored water and deliver the mature harvest into shared supplies', () => {
   const s = fixture(), { b, p } = garden(s), h = human(s); h.x = p.x; h.y = p.y; s.humans = [h]; b.stock = { dirty_water: 1, water: 1 };
   assert(E.action(s, 'base:job:' + h.id + ':farm')); for (let i = 0; i < 3; i++) B.work(s, h, 1);
