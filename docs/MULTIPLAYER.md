@@ -1,6 +1,6 @@
 # Host a world on your own computer
 
-The website and offline file are game clients. The included Node.js server runs and saves the world on the host's computer. Capacity is 20 connected survivors, with at most 64 durable survivor records per world file.
+The website and offline file are game clients. The included Node.js server runs and saves the world on the host's computer. Capacity is 20 connected survivors, with at most 64 durable survivor records per world file. When all 64 records are in use, a new survivor replaces the record that has been offline longest. Banned and connected survivors are never replaced.
 
 ## Private world
 
@@ -63,9 +63,11 @@ LAN guests connect to the host's LAN IP. Internet guests need port forwarding, a
 
 Use a secure proxy for internet play, keep the host running, and share its reachable endpoint. No NAT traversal, TURN relay, automatic router setup or commercial dedicated hosting is included. `SIRENS_ALLOWED_ORIGINS` optionally restricts browser origins as a comma-separated list.
 
+The host bounds connection churn per remote address. One address may hold at most 4 sockets that have not finished joining, and at most 24 such sockets are allowed in total. A socket that does not join within 2 seconds is closed. Each address may join about 30 times in a burst, refilling at one join per second. It may create 20 new survivors in a burst, refilling at one every 15 seconds. Saved survivors rejoin with their identity and do not use the new-survivor budget. Behind a reverse proxy or tunnel, every guest arrives from the proxy's address and shares these budgets.
+
 ## Text and proximity voice
 
-Press **T** or **Enter** during play. Choose **World** to message every connected survivor or **Nearby** to reach survivors within 640 pixels, or 20 tiles, on the same floor. Opening chat clears held movement and combat input. The host keeps the multiplayer world running. Text is limited to 280 characters, with six ordinary messages per ten seconds. Sender names, roles and scope are assigned by the server. World history holds up to 80 messages with at most 20 from one player; nearby text is not retained in that shared history. History is session-local and is cleared by a host restart.
+Press **T** or **Enter** during play. Choose **World** to message every connected survivor or **Nearby** to reach survivors within 640 pixels, or 20 tiles, on the same floor. Opening chat clears held movement and combat input. The host keeps the multiplayer world running. Text is limited to 280 characters, with six ordinary messages per ten seconds. Sender names, roles and scope are assigned by the server. Owner and Nearby labels appear as styled badges, not as part of the name. New survivor names cannot be World, Host or Console. They also cannot contain `[owner]`, `[nearby]` or bidirectional text controls. World history holds up to 80 messages with at most 20 from one player; nearby text is not retained in that shared history. History is session-local and is cleared by a host restart.
 
 Voice is **off on join**. Select **Enable proximity voice** in chat, grant microphone permission, and hold **N** or the talk button to transmit. Release to stop. Mute your microphone or deafen incoming voices independently; turn voice off to release the microphone. Blur, hidden tabs, paused controls and leaving the world stop transmission. Peers that leave the host-approved 20-tile range are disconnected. Received voices fade with distance.
 
@@ -89,7 +91,7 @@ Enter slash commands in chat. Names containing spaces need double quotes. Target
 | --- | --- |
 | `/help` | Lists commands available to your role. |
 | `/players` | Shows connected names, IDs and owner roles. |
-| `/where` | Shows your global tile coordinates; owners may select another target. |
+| `/where` | Shows your global tile coordinates. Owners may add a target, including an offline survivor; guests may target only themselves. |
 | `/items machete` | Searches original item IDs; omit the search to list a bounded first page. |
 | `/save` | Owner: saves the host's world and survivors. Singleplayer: saves in this browser. |
 | `/time 18` | Owner or singleplayer: sets the hour, from 0 up to but excluding 24. |
@@ -103,12 +105,13 @@ Enter slash commands in chat. Names containing spaces need double quotes. Target
 | `/ban "Alex Rivers" Griefing` | Owner: disconnects and persists a ban of that saved survivor identity. |
 | `/bans` | Owner: lists banned survivor IDs and reasons. |
 | `/unban ID` | Owner: removes one saved identity ban. |
+| `/forget TARGET` | Owner: permanently deletes an offline, unbanned survivor record with its pack, which frees a durable slot. That identity can no longer rejoin. |
 
 Guest chat cannot impersonate an owner or change supplies, weather or world state. Commands are ordered with gameplay, validated on the host and rate limited. Identity bans are not account or IP bans: a person with access to a public world can create a new identity after clearing browser storage. Private admission keys remain the stronger access boundary for a friends-only world.
 
 ## Saves and gameplay scope
 
-World files default to `server-data/world.save.json`; `--world path` selects a separate campaign. World changes and separate survivor packs are atomically saved every five seconds and on relevant joins, disconnects and shutdown. The shared simulation runs at 20 Hz, snapshots at 10 Hz, and stops without connected players. The host validates movement and actions; clients cannot send inventory edits. Stale input stops after 600 ms, duplicate command sequences are rejected and a car admits only one driver. Valid input has a separate 30-per-second token budget with room for a 120-packet backlog; only the newest queued controls affect the next fixed tick. Chat, actions and voice signaling retain separate limits.
+World files default to `server-data/world.save.json`; `--world path` selects a separate campaign. World changes and separate survivor packs are atomically saved every five seconds and on owner commands and shutdown. Joins and disconnects request a save, and at most one such save starts every two seconds. The shared simulation runs at 20 Hz and snapshots at 10 Hz. Actions, joins and leaves mark the world changed, and the next tick sends one snapshot, so snapshots never exceed one per tick however many packets arrive. The simulation stops without connected players. The host validates movement and actions; clients cannot send inventory edits. Stale input stops after 600 ms, duplicate command sequences are rejected and a car admits only one driver. Valid input has a separate 30-per-second token budget with room for a 120-packet backlog; only the newest queued controls affect the next fixed tick. Chat, actions and voice signaling retain separate limits.
 
 Players share a ground-floor loaded region. The anchor player's travel streams the region; a player outside it returns to a safe meeting point. Upper-floor transitions are blocked. NPC/zombie decisions primarily target the anchor; guest damage has separate host checks. Shared research, settlement supplies and factions are common campaign systems. Per-player inventory, health, equipment, positions, pets and appearance are separate. Player-versus-player attacks are not implemented yet.
 

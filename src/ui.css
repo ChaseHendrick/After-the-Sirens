@@ -438,3 +438,4 @@
   .as-ui h1{font-size:46px;margin:6px 0 10px}.as-title-copy{font-size:12px;margin:0}.as-title-rules{margin:10px 0}.as-start-note{font-size:10px;margin-top:8px!important}
   .as-ui button.as-primary{padding:11px 16px}.as-ui button.as-secondary{padding:9px}
 }
+.as-social-badge{display:inline-block;margin-left:2px;padding:0 5px;border-radius:3px;background:#dcc78d;color:#13201a;font-style:normal;font-size:8px;font-weight:800;letter-spacing:.08em;line-height:15px;text-transform:uppercase}.as-social-badge.as-social-nearby{background:#4f7462;color:#eef5e6}
