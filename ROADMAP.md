@@ -23,7 +23,7 @@ Version 0.4 connects the original playable foundation with practice skills, six 
 
 ## Larger work
 
-Independent multiplayer regions, upper floors, PvP and relay traversal, full NPC communities, a handcrafted regional map, mod loading and extensive simulation need separate architecture and substantial implementation. There is no claim of full Project Zomboid feature or item parity. No release date is promised for unfinished work.
+Independent multiplayer regions, upper floors, PvP and relay traversal, full NPC communities, a handcrafted regional map, mod loading and extensive simulation need separate architecture and substantial implementation. No release date is promised for unfinished work.
 
 ## Production quality target
 

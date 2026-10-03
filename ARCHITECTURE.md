@@ -8,7 +8,7 @@
 
 ## Context
 
-The first build used a 64x64 tile town and seven inventory item types. The user requested a full recreation with an open world and substantially more survival content, and approved an original catalogue while Project Zomboid item definitions are unavailable. A larger static array alone would increase memory and save size without providing a scalable persistent world.
+The first build used a 64x64 tile town and seven inventory item types. The user requested an open world with substantially more survival content and approved an original item catalogue. A larger static array alone would increase memory and save size without providing a scalable persistent world.
 
 ## Decision
 

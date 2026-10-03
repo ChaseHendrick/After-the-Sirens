@@ -8,7 +8,7 @@ An original open world zombie survival game. Leave the town of Morrow, follow ro
 
 ![Gameplay in Morrow](docs/gameplay.png)
 
-**Version 0.6 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. It is not a complete recreation of Project Zomboid and does not contain that game's code, maps, assets, or item definitions. The catalogue contains **3,455 original items and 4,457 crafting and salvage recipes** across 38 families, with actual acquisition paths and collectible limitations shown. Material and design choices change equipment handling, protection and carrying capacity; food preparations change their effects. See the [item guide](docs/ITEMS.md).
+**Version 0.6 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. The catalogue contains **3,455 original items and 4,457 crafting and salvage recipes** across 38 families, with actual acquisition paths and collectible limitations shown. Material and design choices change equipment handling, protection and carrying capacity; food preparations change their effects. See the [item guide](docs/ITEMS.md).
 
 ## Play
 
@@ -262,4 +262,4 @@ Each module registers once under `window.Sirens`. [Architecture](ARCHITECTURE.md
 
 ## License
 
-[MIT](LICENSE). Contributions must be original or have a compatible license. Project Zomboid belongs to its creators; this project is independent and unaffiliated.
+[MIT](LICENSE). Contributions must be original or have a compatible license.
