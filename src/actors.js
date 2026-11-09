@@ -132,6 +132,9 @@
   function update(s, dt) {
     if (s.stories && s.stories.floor > 0) return;
     const p = s.player;
+    // Zombies keep their positions throughout this loop. Health is read live in
+    // consider(), so a kill by an earlier human is still seen by every later one.
+    const zombieIndex = S.Spatial && s.zombies.length >= 32 && (s.humans || []).length >= 4 ? S.Spatial.build(s.zombies) : null;
     if (S.Warfare) for (const h of s.humans || []) S.Warfare.align(s, h);
     for (const h of s.humans || []) {
       if (h.health <= 0) { deathLoot(s, h); continue; }
@@ -142,7 +145,8 @@
       const gun = h.weapon === 'pistol', range = gun ? 280 : 64;
       let target = null, best = Infinity;
       const consider = (entity, radius) => { const d2 = (entity.x - h.x) ** 2 + (entity.y - h.y) ** 2; if (entity.health > 0 && d2 < radius * radius && d2 < best) { best = d2; target = entity; } };
-      for (const z of s.zombies) consider(z, 340);
+      for (const z of zombieIndex ? S.Spatial.query(zombieIndex, h.x, h.y, 340) : s.zombies) consider(z, 340);
+      // Humans move in source order; scanning them here preserves those live positions.
       for (const other of s.humans || []) if (other !== h && other.faction !== h.faction) consider(other, 340);
       if (h.faction === 'raider') consider(p, 440);
       const d = target ? Math.hypot(target.x - h.x, target.y - h.y) : Infinity;
@@ -184,11 +188,13 @@
         }
       }
     }
+    // All humans have finished moving. Bites change health, not positions.
+    const humanIndex = S.Spatial && (s.humans || []).length >= 16 && s.zombies.length >= 16 ? S.Spatial.build(s.humans) : null;
     for (const z of s.zombies) if (z.health > 0 && Math.hypot(z.x - p.x, z.y - p.y) < 1000) {
       z._humanBite = Math.max(0, (z._humanBite || 0) - dt);
       if (z._humanBite > 0) continue;
       let victim = null, best = 32 * 32;
-      for (const h of s.humans || []) { const d2 = (z.x - h.x) ** 2 + (z.y - h.y) ** 2;
+      for (const h of humanIndex ? S.Spatial.query(humanIndex, z.x, z.y, 32) : s.humans || []) { const d2 = (z.x - h.x) ** 2 + (z.y - h.y) ** 2;
         if (h.health > 0 && d2 < best && S.Engine.hasLOS(s, z.x, z.y, h.x, h.y)) { victim = h; best = d2; }
       }
       if (victim) { z._humanBite = 1.5; hit(s, victim, 12, false); }

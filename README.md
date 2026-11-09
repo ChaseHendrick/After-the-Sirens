@@ -8,11 +8,11 @@ An original open world zombie survival game. Leave the town of Morrow, follow ro
 
 ![Gameplay in Morrow](docs/gameplay.png)
 
-**Version 0.6 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. The catalogue contains **3,455 original items and 4,457 crafting and salvage recipes** across 38 families, with actual acquisition paths and collectible limitations shown. Material and design choices change equipment handling, protection and carrying capacity; food preparations change their effects. See the [item guide](docs/ITEMS.md).
+**Version 0.7 is an early playable game.** It is inspired by the survival genre and built from original code, procedural visuals, world layouts, and synthesized sounds. The catalogue contains **3,455 original items and 4,457 crafting and salvage recipes** across 38 families, with actual acquisition paths and collectible limitations shown. Material and design choices change equipment handling, protection and carrying capacity; food preparations change their effects. See the [item guide](docs/ITEMS.md).
 
 ## Play
 
-Open the demo above, or download `After-the-Sirens.html` from a release and open it in a desktop browser. The entire game is bundled in one file. Singleplayer needs no installation, account, server, external assets, or network connection. Multiplayer connects to a host running the included Node.js server on their own computer.
+Open the demo above, or download `After-the-Sirens.html` from a release and open it in a desktop browser. The entire game is bundled in one file. Singleplayer needs no installation, account, server, external assets, or network connection. Multiplayer connects to the included Node.js host running on a local computer or an internet server.
 
 Choose **Open world** to explore and survive freely. The optional radio mission continues into free survival after completion. Choose **Rescue mission** for the compact original town scenario: find five radio parts, repair the relay, and survive until rescue arrives.
 
@@ -22,9 +22,21 @@ Singleplayer autosaves every five seconds of play and on page exit. Continue res
 
 ![Searchable original item catalogue](docs/catalogue.png)
 
+## Smoother play and a safer return
+
+**Graphics → Auto** in the pause menu adjusts rendering resolution after sustained slow frames and restores detail slowly when performance improves. High, Balanced and Low overrides are remembered. Resolution changes preserve aiming, field of view, world simulation and difficulty. Nearby NPC queries use a spatial index with the same exact targeting rules; dense crowds still receive full checks.
+
+**Quick start** on the title and pause screens explains the first five minutes in English, Simplified Chinese, Traditional Chinese, Japanese, Korean, Indonesian, Spanish and Brazilian Portuguese. It follows browser language until you choose a preference. Only this guide is translated; menus, items and dialogue remain English. No language service or font download is required.
+
+Autosave retains a validated previous generation when storage permits. Continue can recover it if the primary save is damaged, with an explicit warning that recent progress may be missing. A valid finished run stays finished. Export is still the durable backup when browser storage is full or cleared.
+
+The standalone game does not load analytics or send analytics requests. HTTP hosts can observe a bounded set of local gameplay milestones through the optional host bridge. The Hendrick Research integration measures singleplayer starts, continued saves, 60 seconds and 5 minutes of visible manual play, endings, camera choice and selected guide language. It excludes hidden tabs, menus and AI-play time from engagement. It sends no save data, seeds, names, chat, invite keys or stable player IDs. Hosting-specific notices and analytics belong to the host. [Player experience and host bridge](docs/PLAYER-EXPERIENCE.md).
+
 ## Singleplayer, public worlds and private lobbies
 
-Choose **Singleplayer** for an offline run, or **Multiplayer** to join a world hosted locally by you or a friend. Up to **20 connected players** share one seeded world with separate inventories, equipment, health, positions and appearance. Loot, terrain, cars, settlement supplies, research and factions are shared. The host server validates commands and saves world changes and survivor records to its own disk.
+Choose **Singleplayer** for an offline run, or **Multiplayer** to join a reachable local or online world. Up to **20 connected players** share one seeded world with separate inventories, equipment, health, positions and appearance. Loot, terrain, cars, settlement supplies, research and factions are shared. The host server validates commands and saves world changes and survivor records to its own disk.
+
+For a no-token online setup, the [online hosting guide](docs/ONLINE-HOSTING.md) prepares two files to upload to a **Hugging Face Docker Space on CPU Basic (free)**. This is an online preview: free Spaces can sleep and their ephemeral disk can reset on restart or rebuild. An optional private owner secret enables moderation and bounded authenticated world-backup downloads. A Dockerfile for an existing host with a durable volume is also included. No live public server or paid hosting is provisioned by these files.
 
 ```sh
 npm ci
@@ -256,6 +268,8 @@ Then open `http://localhost:8000`. CI runs the build, simulation checks, save va
 | `server/index.cjs`, `server/directory.cjs` | Local authoritative world host and optional public directory |
 | `server/social.cjs` | Owner authorization, moderation, world commands and nearby voice signaling |
 | `src/touch.js` | Twin-stick touch input and touch action buttons, merged into ordinary input snapshots |
+| `src/performance.js`, `src/spatial.js` | Adaptive presentation budgets and stable-order nearby-actor broad phase |
+| `src/saves.js`, `src/guide.js`, `src/signals.js` | Validated save recovery, multilingual onboarding and optional local host milestones |
 | `src/main.js` | Input, fixed-step loop, presentation integration and browser storage |
 
 Each module registers once under `window.Sirens`. [Architecture](ARCHITECTURE.md), [validation](VALIDATION.md), [release notes](CHANGELOG.md), and [contribution instructions](CONTRIBUTING.md) describe the implementation and its limits.

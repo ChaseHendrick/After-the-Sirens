@@ -2,7 +2,9 @@
 // First-person view through real keyboard, mouse and Chrome touch input (DevTools Protocol touch points).
 // Labeled FIXTURES are limited to placing two zombies around a wall for the occlusion check and spawning a
 // crowd for the performance sample; both are removed afterwards. Other evaluations only read state, except
-// document.exitPointerLock(), which stands in for the browser ending pointer lock as it does on Escape.
+// document.exitPointerLock(), which stands in for the browser ending pointer lock as it does on Escape,
+// and explicit relative pointer events for locked motion. The absolute CDP mouse driver
+// is counteracted by Chromium's pointer recentering, so it cannot represent that motion.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -130,13 +132,34 @@ const wrap = (a) => { a %= TAU; return a > Math.PI ? a - TAU : a <= -Math.PI ? a
       // The click that captures the mouse only captures it; it must not swing at whoever is ahead.
       await page.mouse.move(720, 450); await page.mouse.down(); await page.waitForTimeout(90); await page.mouse.up(); await page.waitForTimeout(150);
       s = await inspect(page); assert.equal(s.cooldown, 0, 'the click that captures the mouse also attacked'); assert.equal(s.stamina >= before.stamina, true, 'the capturing click spent stamina');
-      await page.mouse.down(); await page.waitForTimeout(90); await page.mouse.up(); await page.waitForTimeout(120);
+      const swingsBeforeClick = await page.evaluate(() => Sirens.App.getAudioMetrics().played.swing || 0);
+      await page.mouse.down();
+      try {
+        if (s.locked) await page.evaluate(() => {
+          // Chromium may deliver this motion-only mask while the physical button
+          // is held under pointer lock. It must not cancel the real press above.
+          document.getElementById('world').dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', button: -1, buttons: 0 }));
+        });
+        await page.waitForFunction(before => (Sirens.App.getAudioMetrics().played.swing || 0) > before, swingsBeforeClick, { timeout: 2000 });
+      } finally { await page.mouse.up(); }
+      await page.waitForTimeout(120);
       s = await inspect(page); assert(s.cooldown > 0, 'a left click did not attack'); assert(Math.abs(wrap(s.angle - s.yaw)) < .02);
+      const releasedSwings = await page.evaluate(() => Sirens.App.getAudioMetrics().played.swing || 0);
+      await page.waitForTimeout(800);
+      assert.equal(await page.evaluate(() => Sirens.App.getAudioMetrics().played.swing || 0), releasedSwings, 'releasing the real mouse button left attack held');
       evidence.pointerLock = s.locked;
       if (s.locked) {
-        const yaw = s.yaw; await page.mouse.move(800, 450, { steps: 4 }); await page.waitForTimeout(120);
+        const yaw = s.yaw;
+        // Labeled relative-input fixture, after real pointer-lock acquisition. The
+        // CDP absolute mouse driver generates +x/-x recenter pairs under this lock.
+        await page.evaluate(() => {
+          const canvas = document.getElementById('world');
+          for (let i = 0; i < 4; i++) canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', button: -1, buttons: 0, movementX: 20, movementY: 0 }));
+        });
+        await page.waitForTimeout(120);
         const turned = wrap((await inspect(page)).yaw - yaw); assert(turned > .15 && turned < .5, 'mouse turn ' + turned.toFixed(3));
         evidence.mouseTurn = Number(turned.toFixed(3));
+        evidence.mouseTurnInput = 'four explicit relative PointerEvents of 20 pixels after real pointer lock';
         await page.evaluate(() => document.exitPointerLock()); await page.waitForTimeout(150);
         assert.equal((await inspect(page)).screen, 'paused', 'losing pointer lock mid-play should pause');
         await page.waitForTimeout(400); await page.keyboard.press('Escape'); await page.waitForTimeout(150);

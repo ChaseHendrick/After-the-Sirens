@@ -9,8 +9,9 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-MODULES = ["catalog.js", "effects.js", "progression.js", "settlement.js", "personal.js", "warfare.js", "vehicles.js", "actors.js", "neural.js", "autoplay.js", "destruction.js", "stories.js", "world.js", "engine.js", "commands.js", "multiplayer.js", "lobbies.js", "firstperson.js", "renderer.js", "journal.js", "ui.js", "network-ui.js", "social.js", "touch.js", "main.js"]
+MODULES = ["catalog.js", "effects.js", "progression.js", "settlement.js", "personal.js", "warfare.js", "vehicles.js", "spatial.js", "actors.js", "neural.js", "autoplay.js", "destruction.js", "stories.js", "world.js", "engine.js", "commands.js", "multiplayer.js", "lobbies.js", "performance.js", "firstperson.js", "renderer.js", "journal.js", "ui.js", "network-ui.js", "social.js", "touch.js", "saves.js", "signals.js", "guide.js", "main.js"]
 EXPORTS = {
+    "spatial.js": "Spatial", "performance.js": "Performance", "saves.js": "Saves", "signals.js": "Signals", "guide.js": "Guide",
     "catalog.js": "Catalog", "effects.js": "Effects", "progression.js": "Progression", "settlement.js": "Settlement", "personal.js": "Personal", "warfare.js": "Warfare",
     "vehicles.js": "Vehicles", "actors.js": "Actors", "autoplay.js": "Autoplay", "neural.js": "Neural", "destruction.js": "Destruction",
     "stories.js": "Stories", "world.js": "World", "engine.js": "Engine", "commands.js": "Commands", "social.js": "Social",

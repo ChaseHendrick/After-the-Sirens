@@ -430,12 +430,15 @@
       this.room = null; this.roomBox = { x0: 0, y0: 0, x1: 0, y1: 0 };
     }
 
-    ensureSize(cssWidth, cssHeight) {
+    ensureSize(cssWidth, cssHeight, qualityScale) {
       const width = Math.max(1, finite(cssWidth, 640)), height = Math.max(1, finite(cssHeight, 400));
       // About one buffer pixel per 2.5 CSS pixels keeps the chunky look and a bounded per-frame cost.
       let w = clamp(Math.round(width / 2.5), 240, 640), h = Math.round(w * height / width);
       // Very short or very tall views widen or narrow the buffer instead of stretching it, so the horizon and crosshair agree.
       if (h < 120) { h = 120; w = clamp(Math.round(h * width / height), 1, 1280); } else if (h > 720) { h = 720; w = clamp(Math.round(h * width / height), 1, 1280); }
+      // Scale the already bounded buffer, preserving the CSS aspect and field of view.
+      const scale = clamp(finite(qualityScale, 1), .6, 1);
+      w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
       if (w === this.w && h === this.h) return;
       this.w = w; this.h = h; this.canvas.width = w; this.canvas.height = h;
       this.image = this.ctx.createImageData(w, h); this.out = new Uint32Array(this.image.data.buffer);
@@ -508,7 +511,7 @@
 
     // Renders one frame into the low-resolution buffer canvas. o: { width, height, yaw, clock, delta, motion, themes, originX, originY, pose, look, items }.
     render(state, o) {
-      this.ensureSize(o.width, o.height);
+      this.ensureSize(o.width, o.height, o.qualityScale);
       const W = this.w, H = this.h, out = this.out, zpix = this.zpix, zcol = this.zcol, topRow = this.topRow, art = this.art;
       const tiles = state.tiles, tw = state.width | 0, th = state.height | 0, p = state.player;
       const px = clamp(finite(p.x, 0) / TILE, .01, tw - .01), py = clamp(finite(p.y, 0) / TILE, .01, th - .01), yaw = wrap(o.yaw);

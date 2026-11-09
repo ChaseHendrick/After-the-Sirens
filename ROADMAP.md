@@ -2,6 +2,12 @@
 
 Version 0.4 connects the original playable foundation with practice skills, six projects, fatigue/sleep, finite survivor requests and trust, seeded world events, surface mining, gardens, stockpiles, companion work, faction diplomacy, staged battles, appearance and pets. The journal explains these systems. Feature depth and balance still need sustained development.
 
+## Measure before the next expansion
+
+Version 0.7 adds adaptive graphics, validated save recovery and multilingual onboarding. Use hosted starts, 60-second/5-minute manual-play milestones, continued-save sessions and voluntary feature requests to choose the next deeper gameplay feature. Pageviews alone do not establish active players, retention or a country's preferences. Validate translations with native-speaking players before expanding full game localization.
+
+Compare learned AI steering with the rule planner on held-out seeded scenarios using survival time, damage, searched containers and time stuck. Teacher prediction error alone is not evidence of better survival. Explore versioned, bounded community scenario packs with strict JSON validation and saved content revisions; do not accept executable mods as data.
+
 ## Next improvements
 
 - Deeper building plans, interactive furniture and dedicated rooms; richer procedural towns and landmarks.

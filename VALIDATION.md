@@ -1,5 +1,27 @@
 # Validation
 
+## Version 0.7 validation additions
+
+The performance, spatial, saves, signals, guide and hosting suites exercise bounded
+quality control, complete simulation parity, recoverable browser storage,
+strict milestone schemas, eight-language onboarding and real HTTP/WebSocket
+hosting. Player-experience browser checks use actual settings controls and
+reloads to verify resolution, aiming, saved preferences and corrupted-save
+recovery. The nonroot Docker container has also been run with a real client,
+readiness and authenticated backup checks; this is local container validation,
+not a public internet load test.
+
+First-person tests acquire/release actual pointer lock and press/release mouse
+buttons. Relative mouse-look uses an explicitly labeled PointerEvent fixture:
+Chromium's absolute CDP movement can be canceled by its opposing pointer
+recentering. Numeric turning checks remain in place, but that fixture is not
+physical-mouse validation. A real held-click regression verifies that zero-button
+motion events cannot cancel attacks while the pointer is locked.
+
+Earlier measurements below describe their original releases and machines, not
+new benchmark claims for version 0.7.
+
+
 Validated October 1, 2026 for version 0.6. This is an original early playable browser game, not commercial-game parity.
 
 ## Version 0.6: touch play, first-person view and a reproduced-defect review
