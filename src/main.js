@@ -6,9 +6,10 @@
   const mapShell = document.getElementById('map-shell');
   const debug = document.getElementById('debug');
   const renderer = new S.Renderer(canvas, minimap);
-  const SAVE_KEY = 'after-the-sirens-save-v1';
+  const saves = S.Saves.create(function () { return localStorage; }, S.Engine.deserialize);
+  const signals = S.Signals.create(window);
   const OPTIONS_KEY = 'after-the-sirens-options-v1';
-  const preferences = { sound: true, volume: .7, music: true, musicVolume: .35, effects: true, effectsVolume: 1, ambience: true, ambienceVolume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false, view: 'top', lookSensitivity: 1 };
+  const preferences = { sound: true, volume: .7, music: true, musicVolume: .35, effects: true, effectsVolume: 1, ambience: true, ambienceVolume: .7, zoom: 1, motion: !window.matchMedia('(prefers-reduced-motion: reduce)').matches, details: false, view: 'top', lookSensitivity: 1, quality: 'auto' };
   try {
     const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null');
     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
@@ -16,11 +17,14 @@
       for (const key of ['volume', 'musicVolume', 'effectsVolume', 'ambienceVolume']) if (typeof saved[key] === 'number' && Number.isFinite(saved[key])) preferences[key] = Math.max(0, Math.min(1, saved[key]));
       if (typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)) preferences.zoom = Math.max(.7, Math.min(1.5, saved.zoom));
       if (saved.view === 'top' || saved.view === 'first') preferences.view = saved.view;
+      if (['auto', 'high', 'balanced', 'low'].includes(saved.quality)) preferences.quality = saved.quality;
       if (typeof saved.lookSensitivity === 'number' && Number.isFinite(saved.lookSensitivity)) preferences.lookSensitivity = Math.max(.3, Math.min(3, saved.lookSensitivity));
     }
   } catch (_) {}
   function rememberOptions() { try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(preferences)); } catch (_) {} }
   renderer.zoom = preferences.zoom; renderer.ambientMotion = preferences.motion; preferences.view = renderer.setView(preferences.view);
+  const quality = S.Performance.create(preferences.quality);
+  renderer.setQuality(S.Performance.status(quality).level);
   // First-person camera. The yaw lives here, not in saves; it only shapes input snapshots and the view.
   const TURN_SPEED = 2.6, MOUSE_TURN = .0025, TOUCH_TURN = .008;
   const view = { yaw: Math.PI / 2, mouse: 0, locked: false, lockFailed: false, releasing: false, lockPausedAt: -1e9 };
@@ -35,6 +39,7 @@
   let debugOn = false;
   let screen = 'title';
   let hasWarnedStorage = false;
+  let hasWarnedBackup = false;
   let lastFrame = performance.now();
   let accumulator = 0;
   let autoSaveTime = 0;
@@ -68,6 +73,7 @@
     const next = mode === 'first' && S.FirstPerson ? 'first' : 'top';
     if (next === renderer.viewMode && preferences.view === next) { ui.applyView(next); return; }
     preferences.view = renderer.setView(next);
+    S.Performance.reset(quality); signals.view(next);
     if (next === 'first') syncYaw();
     // Switching keeps the run going but drops held input, so nothing keeps moving in the new frame of reference.
     clearInput();
@@ -81,6 +87,9 @@
 
   function setScreen(name) {
     screen = name;
+    S.Performance.reset(quality);
+    if (name === 'title') signals.stop();
+    if (name === 'dead' || name === 'won') signals.end(state);
     if (name !== 'playing') S.Effects.audio.suspend();
     ui.showScreen(name);
     const mapWasHidden = mapShell.hidden;
@@ -93,15 +102,20 @@
 
   // A finished run (death or rescue) is kept for its record but is not offered as Continue.
   function hasSave() {
-    try { const data = localStorage.getItem(SAVE_KEY); if (!data) return false; const saved = JSON.parse(data); return !(saved && saved.state && saved.state.ended === true); } catch (_) { return false; }
+    return saves.read().canContinue;
   }
 
   function save(silent) {
     if (networkReady) { if (!silent) toast('The host server saves this shared world and your pack.'); return false; }
     if (!active && screen === 'title') return false;
     try {
-      localStorage.setItem(SAVE_KEY, S.Engine.serialize(state));
+      const result = saves.write(S.Engine.serialize(state), state);
+      if (!result.saved) throw result.error || new Error('Storage unavailable');
       if (!silent) toast('Run saved on this browser.', 'success');
+      if (result.backupError && !hasWarnedBackup) {
+        toast('Run saved, but the recovery copy could not be refreshed. Export a save to keep a separate copy.', 'warning');
+        hasWarnedBackup = true;
+      }
       return true;
     } catch (_) {
       if (!silent || !hasWarnedStorage) toast('Local save unavailable. Export your save from the pause menu.', 'warning');
@@ -122,6 +136,7 @@
     clearInput();
     unlockAudio();
     setScreen('playing');
+    signals.start(state, preferences.view, false);
     ui.update(state, frameInfo);
     S.Effects.emit(state, 'ready');
   }
@@ -130,17 +145,19 @@
     stopAutoplay();
     leaveNetwork(false);
     try {
-      const data = localStorage.getItem(SAVE_KEY);
-      if (!data) { toast('No local save found. Start a new run.', 'warning'); return; }
-      if (!hasSave()) { toast('That run has ended. Start a new run.', 'warning'); return; }
-      state = S.Engine.deserialize(data);
+      const loaded = saves.read();
+      if (loaded.error) throw loaded.error;
+      if (!loaded.state) { toast('No local save found. Start a new run.', 'warning'); return; }
+      if (!loaded.canContinue) { toast('That run has ended. Start a new run.', 'warning'); return; }
+      state = loaded.state;
       active = true; syncYaw();
       accumulator = 0;
       clearInput();
       unlockAudio();
       setScreen(state.ended ? (state.player.health > 0 && state.won ? 'won' : 'dead') : 'playing');
+      signals.start(state, preferences.view, true);
       ui.update(state, frameInfo);
-      toast('Run restored.', 'success');
+      toast(loaded.recovered ? 'Recovered the previous valid save. Recent progress may be missing; export a copy now.' : 'Run restored.', loaded.recovered ? 'warning' : 'success');
     } catch (error) { toast('Could not load that save: ' + error.message, 'warning'); }
   }
 
@@ -189,11 +206,13 @@
     try {
       if (file.size > 32 * 1024 * 1024) throw new Error('Save file is too large.');
       const loaded = S.Engine.deserialize(await file.text());
+      signals.stop();
       state = loaded;
       active = true; syncYaw();
       accumulator = 0;
       clearInput();
       setScreen(state.ended ? (state.player.health > 0 && state.won ? 'won' : 'dead') : 'playing');
+      if (!state.ended) signals.start(state, preferences.view, true);
       ui.update(state, frameInfo);
       save(true);
       unlockAudio();
@@ -232,6 +251,10 @@
     },
     setZoom: function (value) { preferences.zoom = Math.max(.7, Math.min(1.5, Number(value) || 1)); renderer.zoom = preferences.zoom; rememberOptions(); },
     setMotion: function (on) { preferences.motion = !!on; renderer.ambientMotion = preferences.motion; rememberOptions(); },
+    setQuality: function (mode) {
+      preferences.quality = ['auto', 'high', 'balanced', 'low'].includes(mode) ? mode : 'auto';
+      renderer.setQuality(S.Performance.setMode(quality, preferences.quality)); rememberOptions();
+    },
     setDetails: function (on) { preferences.details = !!on; rememberOptions(); },
     setView: function (mode) { setView(mode); },
     toggleView: function () { setView(firstPerson() ? 'top' : 'first'); },
@@ -244,6 +267,7 @@
     },
     setDebug: function (on) { debugOn = !!on; debug.hidden = !debugOn; }
   });
+  S.Guide.mount(document.getElementById('ui'), { onLanguageChange: signals.language });
   const autoPanel = document.createElement('div'); autoPanel.className = 'as-autoplay';
   autoPanel.innerHTML = '<button type="button" aria-pressed="false" data-autoplay-toggle>AI play: Off</button><span data-autoplay-status>You are in control.</span><details class="as-brain"><summary>Neural activity</summary><div data-brain-view>Enable AI play to train its local controller.</div></details>';
   document.querySelector('.as-objective').appendChild(autoPanel);
@@ -277,6 +301,7 @@
     if (showTitle) { stopAutoplay(); active = false; clearInput(); setScreen('title'); }
   }
   function joinNetwork(options) {
+    signals.stop();
     leaveNetwork(false);
     if (!S.Multiplayer) { networkUI.status('Multiplayer is unavailable in this build.', false); return; }
     let identityKey;
@@ -447,6 +472,10 @@
   // Browsers report a second mouse button pressed or released during a drag as pointermove,
   // so held attack state follows the buttons bitmask rather than only down/up events.
   function syncButtons(event) {
+    // Pointer-locked motion can carry an empty buttons mask even during a real
+    // held press. Only button transitions (button >= 0) change that state while
+    // locked; pointerup, cancel, blur and releasing the lock still clear input.
+    if (view.locked && event.type === 'pointermove' && event.button === -1) return;
     if (!(event.buttons & 1)) pointer.down = false;
     if (!(event.buttons & 2)) pointer.shoot = false;
     if ((pointer.down || pointer.shoot) && gameAcceptsInput()) {
@@ -520,6 +549,9 @@
       lastMetrics = now;
     }
     const elapsed = Math.min(0.1, duration / 1000);
+    const foregroundPlay = active && screen === 'playing' && !state.ended && !ui.isBlocking() && !(social && social.isBlocking()) && !document.hidden;
+    renderer.setQuality(S.Performance.sample(quality, duration, foregroundPlay));
+    signals.advance(duration / 1000, foregroundPlay && !(pilot && S.Autoplay.status(pilot).enabled));
     if (active && state.ended && screen === 'playing') {
       clearInput(); setScreen(state.player.health > 0 && state.won ? 'won' : 'dead'); save(true);
     }
@@ -574,13 +606,13 @@
   }
   function debugView() {
     const info = renderer.viewInfo(), fp = info.firstPerson;
-    return '\nView ' + (fp ? 'first person ' + fp.width + 'x' + fp.height + ' · ' + fp.visible.length + ' sprites' : 'top-down') + '  |  draw ' + info.draw.mean.toFixed(1) + ' ms avg, ' + info.draw.p95.toFixed(1) + ' ms p95';
+    return '\nView ' + (fp ? 'first person ' + fp.width + 'x' + fp.height + ' · ' + fp.visible.length + ' sprites' : 'top-down') + '  |  draw ' + info.draw.mean.toFixed(1) + ' ms avg, ' + info.draw.p95.toFixed(1) + ' ms p95' + '\nGraphics ' + preferences.quality + ' → ' + S.Performance.status(quality).level;
   }
   renderer.resize();
   requestAnimationFrame(frame);
 
   // Diagnostics surface for reproducible local playtesting.
-  S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); },
+  S.App = { getState: function () { return state; }, getMetrics: function () { return Object.assign({}, frameInfo); }, getQuality: function () { return S.Performance.status(quality); },
     getSocialStatus: function () { return social.getStatus(); }, getVoiceStats: function () { return social.getVoiceStats(); },
     getScreen: function () { return screen; }, getAutoplayStatus: function () { return pilot ? S.Autoplay.status(pilot) : { enabled: false, text: 'Unavailable' }; }, getNetworkStatus: function () { return network ? network.getStatus() : { connected: false }; }, getPreferences: function () { return Object.assign({}, preferences); }, getView: function () { const info = renderer.viewInfo(); return { zoom: renderer.zoom, ambientMotion: renderer.ambientMotion, mode: info.mode, yaw: view.yaw, lookSensitivity: preferences.lookSensitivity, pointerLocked: view.locked, draw: info.draw, firstPerson: info.firstPerson }; }, getAudioMetrics: S.Effects.audio.metrics,
     getTouchStatus: function () { return touch ? touch.status() : { enabled: false }; } };

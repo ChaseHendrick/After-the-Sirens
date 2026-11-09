@@ -149,6 +149,7 @@
             <div class="as-menu-actions"><button class="as-primary" data-command="start">ENTER THE TOWN <span>→</span></button><button class="as-secondary" data-command="continue">CONTINUE SAVED RUN</button></div>
             <p class="as-start-note" data-ui="start-note">Your safe cabin has supplies. Roads connect the regions.<br>I opens your pack, item catalogue, and crafting.</p>
             <div class="as-prototype">Original early build · Open world and rescue modes · Procedural artwork</div>
+            <p class="as-start-note"><a href="https://github.com/ChaseHendrick/After-the-Sirens/issues/new?template=feature_request.md" target="_blank" rel="noopener noreferrer">What should we build next? Suggest a feature ↗</a></p>
           </section>
           <aside class="as-title-scene" aria-hidden="true"><div class="as-scene-coordinate">SECTOR 07 / RELAY 04</div><div class="as-scene-line"></div><p>KEEP THE LIGHT ON.<br>KEEP THE NOISE DOWN.</p><span class="as-scene-status">SIGNAL LOST</span></aside>
         </div>
@@ -158,9 +159,10 @@
             <div class="as-kicker">TAKE A BREATH</div><h2 id="as-pause-title">Run paused</h2><p class="as-muted">The town waits while you plan your next move.</p>
             <div class="as-pause-actions"><button class="as-primary" data-command="resume">BACK TO THE TOWN <span>→</span></button><button class="as-secondary" data-command="save">SAVE RUN</button></div>
             <div class="as-save-actions"><button data-command="exportSave">Export save</button><label class="as-file-label">Import save<input type="file" data-ui="import" accept=".json,application/json"></label><button data-command="restart">New run</button></div>
-            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Game audio</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><label class="as-view-setting">View <select data-setting="view" aria-label="Camera view"><option value="top">Top-down</option><option value="first">First person</option></select></label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Overall volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label><label for="as-look">Look sensitivity <output data-ui="look-value" for="as-look">100%</output><input id="as-look" type="range" data-setting="lookSensitivity" min="30" max="300" step="10" value="100"></label></div><div class="as-audio-channels"><div class="as-section-heading">SOUND AND MUSIC</div>${this.audioPreferencesMarkup()}</div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
+            <fieldset class="as-preferences"><legend>Game feel</legend><div class="as-setting-row"><label><input type="checkbox" data-setting="sound" checked> Game audio</label><label><input type="checkbox" data-setting="motion" checked> Ambient motion</label><label class="as-view-setting">View <select data-setting="view" aria-label="Camera view"><option value="top">Top-down</option><option value="first">First person</option></select></label><label>Graphics <select data-setting="quality" aria-label="Graphics quality"><option value="auto">Auto (recommended)</option><option value="high">High</option><option value="balanced">Balanced</option><option value="low">Low</option></select></label><button data-command="fullscreen" class="as-fullscreen-button">Toggle fullscreen</button></div><div class="as-slider-settings"><label for="as-volume">Overall volume <output data-ui="volume-value" for="as-volume">70%</output><input id="as-volume" type="range" data-setting="volume" min="0" max="100" step="5" value="70"></label><label for="as-zoom">Camera zoom <output data-ui="zoom-value" for="as-zoom">100%</output><input id="as-zoom" type="range" data-setting="zoom" min="70" max="150" step="10" value="100"></label><label for="as-look">Look sensitivity <output data-ui="look-value" for="as-look">100%</output><input id="as-look" type="range" data-setting="lookSensitivity" min="30" max="300" step="10" value="100"></label></div><div class="as-audio-channels"><div class="as-section-heading">SOUND AND MUSIC</div>${this.audioPreferencesMarkup()}</div></fieldset><div class="as-setting-row as-debug-setting"><label><input type="checkbox" data-setting="debug"> Performance overlay</label></div>
             ${this.controlsMarkup()}
             <p class="as-save-note">Saves stay in this browser. Export a file to keep a copy.</p>
+            <p class="as-save-note"><a href="https://github.com/ChaseHendrick/After-the-Sirens/issues/new?template=feature_request.md" target="_blank" rel="noopener noreferrer">Suggest a feature ↗</a> · Opens GitHub; nothing is submitted automatically.</p>
           </section>
         </div>
 
@@ -335,6 +337,7 @@
       const target = event.target;
       if (target.dataset.setting === 'sound') { this.sound = target.checked; this.invoke('setSound', this.sound); }
       if (target.dataset.setting === 'debug') { this.debug = target.checked; this.invoke('setDebug', this.debug); }
+      if (target.dataset.setting === 'quality') this.invoke('setQuality', target.value);
       if (target.dataset.setting === 'motion') this.invoke('setMotion', target.checked);
       if (target.dataset.setting === 'view') this.invoke('setView', target.value === 'first' ? 'first' : 'top');
       if (['music', 'effects', 'ambience'].includes(target.dataset.setting)) this.invoke('setAudioPreference', target.dataset.setting, target.checked);
@@ -392,6 +395,7 @@
       // The slider moves in steps of ten, so the label shows the same rounded value the slider can hold.
       const look = Math.round(clamp(p.lookSensitivity === undefined ? 1 : p.lookSensitivity, .3, 3) * 10) * 10;
       this.root.querySelector('[data-setting="lookSensitivity"]').value = look; this.nodes['look-value'].textContent = look + '%';
+      this.root.querySelector('[data-setting="quality"]').value = ['auto', 'high', 'balanced', 'low'].includes(p.quality) ? p.quality : 'auto';
       this.applyView(p.view);
     }
 
@@ -409,7 +413,7 @@
       if (event.key !== 'Tab' || !this.isBlocking()) return;
       const panel = this.state && this.state.conversation && this.screen === 'playing' ? this.nodes['conversation-overlay'] : this.journal && this.journal.open ? this.journal.overlay : this.inventoryOpen ? this.nodes['inventory-overlay'] : this.root.querySelector(`[data-screen="${this.screen}"]`);
       if (!panel || panel.hidden) return;
-      const focusable = Array.from(panel.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])')).filter((el) => !el.disabled && !el.hidden && el.getClientRects().length > 0);
+      const focusable = Array.from(panel.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])')).filter((el) => !el.disabled && !el.hidden && el.getClientRects().length > 0);
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];

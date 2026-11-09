@@ -15,6 +15,18 @@ const { pathToFileURL } = require('node:url');
     target.on('request', request => { if (/^https?:/.test(request.url())) requests.push(request.url()); });
   }
   observe(page);
+  // A test-only tap finds the real effects input bus; production routing is unchanged.
+  // The first analyser is the master, followed by effects, ambience and music.
+  await page.addInitScript(() => {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    const createAnalyser = Audio.prototype.createAnalyser, connect = AudioNode.prototype.connect;
+    const analysers = [];
+    Audio.prototype.createAnalyser = function () { const node = createAnalyser.call(this); analysers.push(node); return node; };
+    AudioNode.prototype.connect = function (destination, ...args) {
+      if (destination === analysers[1] && this instanceof GainNode) window.__effectsTestBus = this;
+      return connect.call(this, destination, ...args);
+    };
+  });
   const url = pathToFileURL(path.resolve(__dirname, '../index.html')).href;
   const until = (fn, arg) => page.waitForFunction(fn, arg, { polling: 'raf', timeout: 15000 });
   const audio = () => page.evaluate(() => Sirens.App.getAudioMetrics());
@@ -124,11 +136,31 @@ const { pathToFileURL } = require('node:url');
 
     await check('effect and environmental volume controls reduce their real output independently', async () => {
       await configure({ music: false, effects: true, ambience: false, effectsVolume: 100 });
-      const loudEffects = await swingSample(1000);
-      await configure({ effectsVolume: 25 });
-      const quietEffects = await swingSample(1000);
+      await until(() => Sirens.App.getAudioMetrics().voices === 0);
+      // Labeled waveform fixture: a steady 440 Hz sine through the real effects
+      // gain. Every 256-sample analyser window contains more than two cycles.
+      // Swing envelopes peak after 6 ms; polling 5.8 ms windows every 25 ms can
+      // miss the loud peak and catch the quiet one. Real swings are tested above.
+      await page.evaluate(() => {
+        const bus = window.__effectsTestBus;
+        if (!bus || !(bus instanceof GainNode)) throw new Error('Could not find the live effects input bus');
+        const oscillator = bus.context.createOscillator(), amplitude = bus.context.createGain();
+        oscillator.type = 'sine'; oscillator.frequency.value = 440; amplitude.gain.value = .1;
+        oscillator.connect(amplitude); amplitude.connect(bus); oscillator.start();
+        window.__stopEffectsTestTone = () => { oscillator.stop(); oscillator.disconnect(); amplitude.disconnect(); };
+      });
+      let loudEffects, quietEffects;
+      try {
+        loudEffects = await sample(1000);
+        await configure({ effectsVolume: 25 });
+        // The production bus uses a 10 ms gain time constant; measure the settled
+        // UI setting, not its intentional click-free transition from the old one.
+        await page.waitForTimeout(100);
+        quietEffects = await sample(1000);
+      } finally { await page.evaluate(() => { window.__stopEffectsTestTone(); delete window.__stopEffectsTestTone; }); }
+      assert(loudEffects.peaks.effects > .09 && loudEffects.peaks.effects < .11, 'The steady effects fixture did not reach its real bus');
       assert(quietEffects.peaks.effects > .0001);
-      assert(quietEffects.peaks.effects < loudEffects.peaks.effects * .45, 'Effects slider did not reduce waveform amplitude');
+      assert(quietEffects.peaks.effects < loudEffects.peaks.effects * .45, 'Effects slider did not reduce waveform amplitude: ' + JSON.stringify({ loud: loudEffects.peaks.effects, quiet: quietEffects.peaks.effects, volume: quietEffects.metrics.channels.effects.volume }));
       assert.equal(quietEffects.metrics.channels.music.volume, 1); assert.equal(quietEffects.metrics.channels.ambience.volume, 1);
       await configure({ effects: false, ambience: true, ambienceVolume: 100 });
       await until(() => Sirens.App.getAudioMetrics().voices === 0);
@@ -137,7 +169,7 @@ const { pathToFileURL } = require('node:url');
       const quietAmbience = await sample(800);
       assert(quietAmbience.peaks.ambience > 0);
       assert(quietAmbience.peaks.ambience < loudAmbience.peaks.ambience * .5, 'Ambience slider did not reduce waveform amplitude');
-      evidence.sliderEffects = { loudEffects, quietEffects, loudAmbience, quietAmbience };
+      evidence.sliderEffects = { fixture: 'steady 440 Hz sine at gain 0.1 through the live effects input bus; sliders use ordinary keyboard controls', loudEffects, quietEffects, loudAmbience, quietAmbience };
     });
 
     await check('music volume reduces score amplitude and zero stops score voices without muting other buses', async () => {
@@ -283,7 +315,7 @@ const { pathToFileURL } = require('node:url');
       const value = await audio(); assert(Number.isFinite(value.peak)); assert(value.peak <= 1);
       for (const channel of Object.values(value.channels)) assert(Number.isFinite(channel.peak) && Number.isFinite(channel.volume));
     });
-    const report = { passed, evidence, pageErrors: errors, externalRequests: requests, browser: await browser.version(), note: 'Actual Chrome Web Audio channel analyser waveforms with ordinary options controls, keyboard attacks, reload and Continue. Declared fixtures isolate terrain, adaptive score themes, event crowding, hidden-document state and end-of-run cleanup. No recorded music, physical microphone capture or external audio service.' };
+    const report = { passed, evidence, pageErrors: errors, externalRequests: requests, browser: await browser.version(), note: 'Actual Chrome Web Audio channel analyser waveforms with ordinary options controls, keyboard attacks, reload and Continue. The effects volume ratio uses a labeled steady 440 Hz tone injected before the real channel gain; separate checks verify actual attack sounds. Other declared fixtures isolate terrain, adaptive score themes, event crowding, hidden-document state and end-of-run cleanup. No recorded music, physical microphone capture or external audio service.' };
     fs.writeFileSync('.test-results/audio-settings-browser-report.json', JSON.stringify(report, null, 2));
     console.log(passed.length + ' audio settings browser checks passed.');
   } finally { await browser.close(); }

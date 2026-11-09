@@ -448,3 +448,21 @@
 .as-stick-aim.as-stick-look{height:60px;margin-top:-30px;border-radius:30px}.as-stick-look>span{background:#cfd8b8c0;border-color:#eef2dc}
 .as-status-top>button{flex-shrink:0;white-space:nowrap}
 @media(max-width:650px),(max-height:520px){.as-status-top .as-kicker{font-size:9px;letter-spacing:.08em}.as-ui .as-status-top .as-small-button{width:22px;height:22px}.as-ui .as-details-button{font-size:9px;padding:3px 5px;margin-right:2px}.as-ui .as-view-button{margin-right:2px}.as-view-button svg{width:13px;height:13px}}
+
+/* A locally bundled quick-start guide. Each guide marks its own language; the game stays English. */
+.as-guide{margin:14px 0 10px;max-width:100%;min-width:0;border:1px solid #82976d66;border-radius:6px;background:#15271d91;text-align:left;overflow-wrap:anywhere}
+.as-guide>summary{padding:12px 14px;cursor:pointer;color:#e0e6c7;font-size:12px;line-height:1.6;font-weight:650;min-height:44px}
+.as-guide>summary small{margin-left:9px;color:#a9b99d;font-size:10px;font-weight:400;white-space:nowrap}
+.as-guide>summary:focus-visible,.as-guide select:focus-visible{outline:3px solid #e4c786;outline-offset:2px}
+.as-guide-body{padding:0 14px 15px;min-width:0}
+.as-guide-language{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:7px;font-size:11px;color:#bfceb0}
+.as-ui .as-guide-language select{font:inherit;font-size:13px;line-height:1.5;min-height:44px;max-width:100%;min-width:0;padding:8px 10px;color:#edf0dc;background:#17251c;border:1px solid #81926c;border-radius:4px}
+.as-guide-scope{font-size:11px!important;line-height:1.65!important;color:#d7c795!important;margin:12px 0!important}
+.as-guide-steps{padding:0 0 0 22px;margin:15px 0;color:#d9c98e;display:grid;gap:13px;font-size:12px}
+.as-guide-steps li{padding-left:3px;min-width:0}
+.as-guide-steps strong{color:#e0e7cf;font-size:12px;font-weight:650;line-height:1.6}
+.as-guide p{font-size:12px;line-height:1.75;color:#c2d0b6;margin:4px 0 0}
+.as-guide-controls{border-top:1px solid #879c6f40;margin-top:16px;padding-top:14px;display:grid;gap:14px}
+.as-guide-controls h3{font-size:12px;line-height:1.6;color:#dfd4a5;margin:0;font-weight:650}
+@media(max-width:650px){.as-guide>summary{padding:11px;font-size:12px}.as-guide-body{padding:0 11px 13px}.as-guide-language{align-items:stretch;flex-direction:column}.as-guide-language select{width:100%}.as-guide p{font-size:12px}}
+@media(max-height:520px) and (min-width:651px){.as-title-card>.as-guide{grid-column:1/-1;grid-row:8;margin-top:12px}}

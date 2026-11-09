@@ -1,0 +1,9 @@
+*
+!package.json
+!package-lock.json
+!LICENSE
+!index.html
+!src/
+!src/**
+!server/
+!server/**

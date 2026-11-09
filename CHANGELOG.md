@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0
+
+- Fix a held first-person attack being cleared by pointer-lock motion events with an empty button mask. Real button release, cancellation, blur and unlocking still release controls.
+
+- Add Auto, High, Balanced and Low graphics modes. Auto uses sustained frame-time samples and hysteresis; rendering quality never changes simulation, world RNG, targeting or field of view.
+- Use a stable-order spatial broad phase for NPC zombie targeting and zombie-to-human bites. Exact health, distance and sight checks remain authoritative; deterministic simulation parity is checked against the original scans.
+- Retain a validated previous browser save where storage allows. Continue recovers corrupt primaries with a warning, while finished runs remain finished. Storage failures explain when to export.
+- Add a compact first-five-minutes guide in English, Simplified/Traditional Chinese, Japanese, Korean, Indonesian, Spanish and Brazilian Portuguese, with local language detection and a remembered manual choice. Game content remains English.
+- Add a bounded local host milestone bridge for singleplayer starts, continues, visible manual engagement, endings, view and guide language. The standalone build contains no analytics client or network request. Host integrations must validate origin, source and exact event schema.
+- Add optional links to the existing feature-request form so players can explain what they want next.
+- Add nonroot Docker hosting and a token-free two-file Hugging Face CPU Basic upload bundle pinned to a public source commit. Free hosting is explicitly an ephemeral online preview, with no always-on or durable-storage claim.
+- Add portable host environment settings, exact browser-origin validation, write-checked readiness, suppressed hosted secret logging and owner-authenticated world-backup downloads with bounded size and rate. Existing shared-region multiplayer limits remain unchanged.
+
 ## 0.6.0
 
 - Add a first-person view beside the top-down one: press P, use the eye button next to Pause, or pick it under Game feel. A raycast pixel-art scene draws the same themed walls, doors, windows, trees, survivors, zombies, cars and supplies, with ceilings indoors, a sky that follows the hour and weather, walls that hide what is behind them, a weapon or dashboard in view and a view cone on the minimap. W/S walk along the view, A/D strafe, the arrows or a captured mouse turn (with a Look sensitivity setting), and touch players drag the right side to look and tap to strike; the engine still receives ordinary aim points, so saves, combat and multiplayer are unchanged.

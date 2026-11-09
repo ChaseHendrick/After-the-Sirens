@@ -63,6 +63,7 @@
       this.minimap = minimapCanvas || null;
       this.miniCtx = this.minimap ? this.minimap.getContext('2d', { alpha: false }) : null;
       this.width = 1; this.height = 1; this.dpr = 1;
+      this.quality = 'high'; this.qualityScale = 1;
       this.camera = { x: 0, y: 0, ready: false };
       this.zoom = 1; this.ambientMotion = true;
       // 'top' is the original camera; 'first' delegates to the raycast view. main.js owns the yaw.
@@ -141,7 +142,9 @@
       const rect = this.canvas.getBoundingClientRect();
       this.width = Math.max(1, Math.round(rect.width || window.innerWidth));
       this.height = Math.max(1, Math.round(rect.height || window.innerHeight));
-      this.dpr = Math.min(2, window.devicePixelRatio || 1);
+      // CSS dimensions and camera coordinates stay fixed when the backing store changes.
+      const deviceRatio = Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+      this.dpr = Math.max(.5, Math.min(2, deviceRatio) * this.qualityScale);
       this.canvas.width = Math.round(this.width * this.dpr);
       this.canvas.height = Math.round(this.height * this.dpr);
       this.ctx.imageSmoothingEnabled = false;
@@ -220,12 +223,21 @@
       return this.viewMode;
     }
 
+    setQuality(level) {
+      const next = ['high', 'balanced', 'low'].includes(level) ? level : 'high';
+      if (next === this.quality) return this.quality;
+      this.quality = next;
+      this.qualityScale = Sirens.Performance ? Sirens.Performance.profile(next).scale : 1;
+      this.resize();
+      return this.quality;
+    }
+
     // Read-only view diagnostics: draw-time statistics for the current mode and, in first person,
     // the buffer size and the sprites the last frame actually drew.
     viewInfo() {
       const times = Array.from(this.drawTimes.subarray(0, Math.min(this.drawCount, this.drawTimes.length))).sort((a, b) => a - b);
       const mean = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0, round = (n) => Math.round(n * 100) / 100;
-      return { mode: this.viewMode, draw: { mean: round(mean), p95: round(times.length ? times[Math.floor((times.length - 1) * .95)] : 0), max: round(times.length ? times[times.length - 1] : 0), samples: times.length },
+      return { mode: this.viewMode, quality: this.quality, scale: this.qualityScale, draw: { mean: round(mean), p95: round(times.length ? times[Math.floor((times.length - 1) * .95)] : 0), max: round(times.length ? times[times.length - 1] : 0), samples: times.length },
         firstPerson: this.viewMode === 'first' && this.firstPerson ? this.firstPerson.describe(this.width) : null };
     }
 
@@ -322,7 +334,7 @@
       this.left = Math.floor(p.x - viewWidth / 2); this.top = Math.floor(p.y - viewHeight / 2); this.right = this.left + viewWidth; this.bottom = this.top + viewHeight;
       this.prepareBuildings(state);
       const fp = this.firstPerson || (this.firstPerson = new Sirens.FirstPerson.View());
-      fp.render(state, { width: this.width, height: this.height, yaw: this.viewYaw, clock: this.clock, delta, motion: this.ambientMotion, themes: this.themes,
+      fp.render(state, { width: this.width, height: this.height, qualityScale: this.qualityScale, yaw: this.viewYaw, clock: this.clock, delta, motion: this.ambientMotion, themes: this.themes,
         originX: this.lastOriginX, originY: this.lastOriginY, pose: Sirens.Effects ? Sirens.Effects.pose(state) : null, look: Sirens.Personal ? Sirens.Personal.look(state) : null, items: Sirens.Engine && Sirens.Engine.items || {} });
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.imageSmoothingEnabled = false;
       ctx.drawImage(fp.canvas, 0, 0, this.width, this.height);
